@@ -1,5 +1,4 @@
-import { Router } from "express";
-import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
+import { Router, Request } from "express";
 
 const DEALS_API_BASE =
   "https://us-central1-embarckstravel.cloudfunctions.net/api";
@@ -9,8 +8,7 @@ export const dealRoutes = Router();
 
 dealRoutes.get(
   "/deals/:airportCode",
-  authenticate,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: Request, res) => {
     try {
       const { airportCode } = req.params;
       const limit = req.query.limit || "500";
@@ -33,8 +31,7 @@ dealRoutes.get(
 
 dealRoutes.get(
   "/premium-deals/:airportCode",
-  authenticate,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: Request, res) => {
     try {
       const { airportCode } = req.params;
       const response = await fetch(
@@ -58,8 +55,7 @@ dealRoutes.get(
 
 dealRoutes.get(
   "/deal/:dealId",
-  authenticate,
-  async (req: AuthenticatedRequest, res) => {
+  async (req: Request, res) => {
     try {
       const { dealId } = req.params;
       const response = await fetch(`${DEALS_API_BASE}/deal2/${dealId}`, {

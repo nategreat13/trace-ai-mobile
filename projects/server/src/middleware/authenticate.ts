@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { auth } from "../firebase";
+import { getAuth } from "../firebase";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -20,7 +20,7 @@ export async function authenticate(
   }
 
   try {
-    const decoded = await auth.verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
     req.user = { uid: decoded.uid, email: decoded.email };
     next();
   } catch {

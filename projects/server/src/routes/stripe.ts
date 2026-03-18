@@ -1,7 +1,7 @@
 import { Router } from "express";
 import Stripe from "stripe";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
-import { db } from "../firebase";
+import { getDb } from "../firebase";
 
 let _stripe: Stripe;
 function getStripe() {
@@ -142,7 +142,7 @@ stripeRoutes.post(
       }
 
       // Find user profile by email
-      const profilesRef = db.collection("userProfiles");
+      const profilesRef = getDb().collection("userProfiles");
       const snapshot = await profilesRef
         .where("email", "==", email)
         .limit(1)

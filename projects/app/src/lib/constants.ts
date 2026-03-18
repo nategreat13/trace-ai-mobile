@@ -2,9 +2,10 @@ export const MAX_DAILY_SWIPES = 8;
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 
-export const DEALS_API_BASE =
-  "https://us-central1-embarckstravel.cloudfunctions.net/api";
-export const DEALS_API_KEY = "web-api-key";
+// @ts-ignore: __DEV__ is defined by React Native at runtime
+export const API_BASE_URL = __DEV__
+  ? "http://localhost:3001"
+  : "https://us-central1-YOUR-PROJECT.cloudfunctions.net/api"; // TODO: replace with deployed URL
 
 export const DEAL_TYPES = [
   { value: "family", icon: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}", label: "Family-Friendly", sub: "Kid-approved fun" },

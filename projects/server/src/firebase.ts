@@ -1,8 +1,16 @@
 import * as admin from "firebase-admin";
 
-if (!admin.apps.length) {
-  admin.initializeApp();
+function getApp() {
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
+  return admin.app();
 }
 
-export const auth = admin.auth();
-export const db = admin.firestore();
+export function getAuth() {
+  return getApp().auth();
+}
+
+export function getDb() {
+  return getApp().firestore();
+}

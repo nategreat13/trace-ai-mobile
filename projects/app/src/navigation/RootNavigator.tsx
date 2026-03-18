@@ -36,10 +36,6 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />
           <Stack.Screen
-            name="Onboarding"
-            component={OnboardingScreen}
-          />
-          <Stack.Screen
             name="TrialSignup"
             component={TrialSignupScreen}
             options={{ presentation: "modal" }}
