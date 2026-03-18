@@ -25,6 +25,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-image",
+      ["@stripe/stripe-react-native", { "merchantIdentifier": "merchant.com.trace-ai", "enableGooglePay": true }],
+      "expo-font"
+    ]
   }
 }
