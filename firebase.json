@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "source": "projects/server",
+    "runtime": "nodejs20",
+    "predeploy": [
+      "rm -rf projects/server/shared && cp -r projects/shared projects/server/shared",
+      "yarn --cwd projects/server build"
+    ]
+  }
+}
