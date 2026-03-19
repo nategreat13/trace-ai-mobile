@@ -26,10 +26,29 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab"
+    },
     "plugins": [
       "expo-image",
-      ["@stripe/stripe-react-native", { "merchantIdentifier": "merchant.com.trace-ai", "enableGooglePay": true }],
-      "expo-font"
-    ]
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.trace-ai",
+          "enableGooglePay": true
+        }
+      ],
+      "expo-font",
+      "expo-updates"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "81b0afdc-7042-45ee-a0fb-bedfa70007ab"
+      }
+    },
+    "owner": "nategreat13"
   }
 }
