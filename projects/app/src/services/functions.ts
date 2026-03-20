@@ -1,7 +1,7 @@
 // Firebase Functions client for Stripe and other server-side operations
 // These will call the Firebase Functions HTTP endpoints
 
-const FUNCTIONS_BASE = "https://us-central1-YOUR_PROJECT.cloudfunctions.net";
+const FUNCTIONS_BASE = "https://api-7l7vojyykq-uc.a.run.app";
 
 export async function createPaymentIntent(params: {
   plan: string;

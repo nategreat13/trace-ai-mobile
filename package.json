@@ -6,6 +6,8 @@
     "dev1": "yarn workspace @trace/shared build && rm -rf projects/server/shared && cp -r projects/shared projects/server/shared && concurrently \"yarn workspace @trace/server tsc --watch --noEmit --preserveWatchOutput\" \"yarn workspace @trace/server tsx watch src/dev.ts\"",
     "dev2": "yarn workspace @trace/app start",
     "deploy:api": "yarn workspace @trace/shared build && rm -rf projects/server/shared && cp -r projects/shared projects/server/shared && yarn workspace @trace/server build && firebase deploy --only functions",
+    "build:ios": "cd projects/app && npx eas-cli build --platform ios --profile production",
+    "submit:ios": "cd projects/app && npx eas-cli submit --platform ios --profile production",
     "postinstall": "yarn workspace @trace/shared build"
   },
   "devDependencies": {
