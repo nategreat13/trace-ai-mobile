@@ -578,6 +578,7 @@ export default function ProfileScreen() {
             <Trash2 color="#ef4444" size={20} />
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#ef4444" }}>Delete Account</Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
 
