@@ -40,6 +40,7 @@ import { logout } from "../services/auth";
 import { deleteUserProfile } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
   const [tempFirstName, setTempFirstName] = useState("");
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -367,13 +369,7 @@ export default function ProfileScreen() {
               <Crown color={colors.brand.rose500} size={20} />
             </View>
             <TouchableOpacity
-              onPress={() => {
-                if (profile?.subscriptionStatus === "free") {
-                  navigation.navigate("TrialSignup", { plan: "premium" });
-                } else {
-                  navigation.navigate("SubscriptionPlan");
-                }
-              }}
+              onPress={() => setShowDisclosure(true)}
               style={{
                 backgroundColor: colors.brand.traceRed,
                 borderRadius: 12,
@@ -383,10 +379,10 @@ export default function ProfileScreen() {
             >
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
                 {profile?.subscriptionStatus === "free"
-                  ? "Upgrade Plan"
+                  ? "View Plans"
                   : profile?.subscriptionStatus === "premium" || profile?.subscriptionStatus === "business"
-                  ? "Change Plan"
-                  : "Manage Subscription"}
+                  ? "Manage Plan"
+                  : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -650,6 +646,11 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+      />
 
       {/* Delete modal */}
       <Modal visible={showDeleteModal} transparent animationType="fade">

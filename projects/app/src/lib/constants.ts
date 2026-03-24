@@ -1,4 +1,5 @@
 export const MAX_DAILY_SWIPES = 8;
+export const SUBSCRIBE_URL = "https://tracetravel.co/subscribe";
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 

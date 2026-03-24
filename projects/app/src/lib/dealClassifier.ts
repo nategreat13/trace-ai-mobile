@@ -86,7 +86,7 @@ export function classifyDeal(deal: {
   destination?: string;
   price?: number;
   discount_pct?: number;
-  deal_type?: string;
+  deal_type?: string | null;
 }): string[] {
   const types = new Set<string>();
   const dest = (deal.destination || "").toLowerCase();
@@ -115,7 +115,7 @@ export function classifyDeal(deal: {
 }
 
 export function dealMatchesType(
-  deal: { destination?: string; price?: number; discount_pct?: number; deal_type?: string },
+  deal: { destination?: string; price?: number; discount_pct?: number; deal_type?: string | null },
   type: string
 ): boolean {
   return classifyDeal(deal).includes(type);

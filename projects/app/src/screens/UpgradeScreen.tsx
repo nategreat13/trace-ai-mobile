@@ -23,6 +23,7 @@ import Animated, {
 import { Check, ArrowRight, Zap, TrendingDown, Clock, Users } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -63,6 +64,7 @@ export default function UpgradeScreen() {
   const { profile } = useAuth();
   const [dealIdx, setDealIdx] = useState(0);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   // Shimmer animation
   const shimmerTranslate = useSharedValue(-SCREEN_WIDTH);
@@ -162,21 +164,15 @@ export default function UpgradeScreen() {
             <Text style={{ fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.9)", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>
               Business Class
             </Text>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
-              <View>
-                <Text style={{ fontSize: 48, fontWeight: "900", color: "#fff" }}>$11.58</Text>
-                <Text style={{ fontSize: 14, color: "rgba(255,255,255,0.9)" }}>/month</Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4, marginBottom: 4 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Save 53%</Text>
-                </View>
-                <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}>Billed $139/yr</Text>
-              </View>
-            </View>
+            <Text style={{ fontSize: 28, fontWeight: "900", color: "#fff", marginBottom: 8 }}>
+              Unlock All Features
+            </Text>
+            <Text style={{ fontSize: 14, color: "rgba(255,255,255,0.9)", marginBottom: 16 }}>
+              See plans on our website
+            </Text>
             <View style={{ height: 1, backgroundColor: "rgba(255,255,255,0.2)", marginBottom: 16 }} />
             <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.9)" }}>
-              ✓ 3-day free trial · ✓ Full access · ✓ Cancel anytime
+              ✓ Full access · ✓ Cancel anytime
             </Text>
           </LinearGradient>
         </View>
@@ -366,7 +362,7 @@ export default function UpgradeScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            onPress={() => navigation.navigate("TrialSignup", { plan: "business" })}
+            onPress={() => setShowDisclosure(true)}
             activeOpacity={0.85}
             style={{ borderRadius: 16, overflow: "hidden" }}
           >
@@ -403,15 +399,21 @@ export default function UpgradeScreen() {
                   style={{ flex: 1 }}
                 />
               </Animated.View>
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>Start Free Trial</Text>
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>View Plans</Text>
               <ArrowRight color="#fff" size={20} />
             </LinearGradient>
           </TouchableOpacity>
         )}
         <Text style={{ textAlign: "center", fontSize: 10, color: theme.mutedForeground, marginTop: 8 }}>
-          No charge today · Cancel anytime
+          View pricing on our website
         </Text>
       </View>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+        plan="business"
+      />
     </SafeAreaView>
   );
 }

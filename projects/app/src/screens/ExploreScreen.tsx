@@ -23,6 +23,7 @@ import { createSwipeAction, saveDeal, getSwipeActions } from "../services/firest
 import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -42,6 +43,7 @@ export default function ExploreScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
@@ -195,7 +197,7 @@ export default function ExploreScreen() {
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
-      navigation.navigate("TrialSignup", { plan: "premium" });
+      setShowDisclosure(true);
       return;
     }
     await saveDeal({
@@ -681,13 +683,13 @@ export default function ExploreScreen() {
                 style={{ borderRadius: 12, width: "100%" }}
               >
                 <TouchableOpacity
-                  onPress={() => navigation.navigate("TrialSignup", { plan: "premium" })}
+                  onPress={() => setShowDisclosure(true)}
                   style={{
                     paddingVertical: 14,
                     alignItems: "center",
                   }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Start Free Trial</Text>
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
                 </TouchableOpacity>
               </LinearGradient>
             </View>
@@ -727,6 +729,12 @@ export default function ExploreScreen() {
           }}
         />
       )}
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+        plan="premium"
+      />
     </SafeAreaView>
   );
 }

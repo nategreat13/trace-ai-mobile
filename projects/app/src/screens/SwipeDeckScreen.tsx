@@ -37,6 +37,7 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 
@@ -59,6 +60,7 @@ export default function SwipeDeckScreen() {
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -703,7 +705,7 @@ export default function SwipeDeckScreen() {
               <TouchableOpacity
                 onPress={() => {
                   setShowUpgradePopup(false);
-                  navigation.navigate("TrialSignup", { plan: "premium" });
+                  setShowDisclosure(true);
                 }}
                 style={{
                   width: "100%",
@@ -714,7 +716,7 @@ export default function SwipeDeckScreen() {
                 }}
               >
                 <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-                  Start Free Trial
+                  View Plans
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowUpgradePopup(false)}>
@@ -724,6 +726,12 @@ export default function SwipeDeckScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+        plan="premium"
+      />
     </SafeAreaView>
   );
 }

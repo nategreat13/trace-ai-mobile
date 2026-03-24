@@ -396,7 +396,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backdropFilter: "blur(8px)",
   },
   originText: {
     fontSize: 12,

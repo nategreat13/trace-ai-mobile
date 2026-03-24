@@ -6,6 +6,10 @@ const devApiUrl = isCodespaces
 
 module.exports = ({ config }) => ({
   ...config,
+  plugins: [
+    ...(config.plugins || []),
+    "expo-web-browser",
+  ],
   extra: {
     ...config.extra,
     devApiUrl,
