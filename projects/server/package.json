@@ -1,14 +1,14 @@
 {
   "name": "@trace/server",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/dev.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@trace/shared": "file:./shared",
+    "@trace/shared": "file:../shared",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.4.0",

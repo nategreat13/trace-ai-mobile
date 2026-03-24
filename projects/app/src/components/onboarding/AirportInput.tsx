@@ -2,25 +2,42 @@ import React from "react";
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   ScrollView,
 } from "react-native";
 import { colors } from "../../theme/colors";
 
-const POPULAR_AIRPORTS = [
-  "LAX",
-  "JFK",
-  "SFO",
-  "ORD",
-  "MIA",
+const COLUMNS = 4;
+const GAP = 10;
+const PARENT_HORIZONTAL_PADDING = 24;
+
+const AIRPORTS = [
   "ATL",
-  "DFW",
-  "SEA",
-  "DEN",
+  "AUS",
   "BOS",
+  "CLT",
+  "DEN",
+  "DFW",
+  "DTW",
+  "EWR",
+  "FLL",
+  "IAH",
+  "JFK",
+  "LAS",
+  "LAX",
+  "MCO",
+  "MIA",
+  "MSP",
+  "ORD",
+  "PHL",
+  "PHX",
+  "SAN",
+  "SEA",
+  "SFO",
+  "SLC",
 ];
 
 interface AirportInputProps {
@@ -31,42 +48,21 @@ interface AirportInputProps {
 export default function AirportInput({ value, onChange }: AirportInputProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-
-  const handleChangeText = (text: string) => {
-    const upper = text.toUpperCase().replace(/[^A-Z]/g, "");
-    if (upper.length <= 3) {
-      onChange(upper);
-    }
-  };
+  const { width: screenWidth } = useWindowDimensions();
+  const containerWidth = screenWidth - PARENT_HORIZONTAL_PADDING * 2;
+  const chipWidth = (containerWidth - GAP * (COLUMNS - 1)) / COLUMNS;
 
   return (
     <View style={styles.container}>
-      <TextInput
-        value={value}
-        onChangeText={handleChangeText}
-        placeholder="Enter airport code (e.g. LAX)"
-        placeholderTextColor={theme.mutedForeground}
-        maxLength={3}
-        autoCapitalize="characters"
-        style={[
-          styles.input,
-          {
-            backgroundColor: theme.muted,
-            color: theme.foreground,
-            borderColor: value.length === 3 ? colors.brand.traceRed : theme.border,
-          },
-        ]}
-      />
-
       <Text style={[styles.sectionLabel, { color: theme.mutedForeground }]}>
-        Popular airports
+        Select your airport
       </Text>
 
       <ScrollView
         contentContainerStyle={styles.chipsContainer}
         showsVerticalScrollIndicator={false}
       >
-        {POPULAR_AIRPORTS.map((code) => {
+        {AIRPORTS.map((code) => {
           const isSelected = value === code;
           return (
             <TouchableOpacity
@@ -75,6 +71,7 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
               style={[
                 styles.chip,
                 {
+                  width: chipWidth,
                   backgroundColor: isSelected
                     ? colors.brand.traceRed
                     : theme.muted,
@@ -107,21 +104,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  input: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    fontSize: 20,
-    fontWeight: "700",
-    textAlign: "center",
-    letterSpacing: 4,
-  },
   sectionLabel: {
     fontSize: 13,
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: 24,
     marginBottom: 12,
   },
   chipsContainer: {
@@ -133,7 +120,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 18,
+    alignItems: "center",
   },
   chipText: {
     fontSize: 15,

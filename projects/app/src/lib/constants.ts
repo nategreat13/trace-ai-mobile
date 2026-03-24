@@ -1,11 +1,14 @@
 export const MAX_DAILY_SWIPES = 8;
+export const SUBSCRIBE_URL = "https://tracetravel.co/subscribe";
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 
+import Constants from "expo-constants";
+
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const API_BASE_URL = __DEV__
-  ? "https://legendary-xylophone-7rww6rxp5w3wqv7-3001.app.github.dev"
-  : "https://us-central1-YOUR-PROJECT.cloudfunctions.net/api"; // TODO: replace with deployed URL
+  ? (Constants.expoConfig?.extra?.devApiUrl ?? "http://localhost:3001")
+  : "https://api-7l7vojyykq-uc.a.run.app";
 
 export const DEAL_TYPES = [
   { value: "family", icon: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}", label: "Family-Friendly", sub: "Kid-approved fun" },

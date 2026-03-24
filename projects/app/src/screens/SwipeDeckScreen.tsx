@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ActivityIndicator,
   useColorScheme,
@@ -36,6 +37,7 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 
@@ -58,6 +60,7 @@ export default function SwipeDeckScreen() {
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -291,6 +294,7 @@ export default function SwipeDeckScreen() {
   };
 
   if (loading) {
+    const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
     return (
       <SafeAreaView
         style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
@@ -298,7 +302,7 @@ export default function SwipeDeckScreen() {
       >
         <ActivityIndicator size="large" color={colors.brand.traceRed} />
         <Text style={{ marginTop: 12, color: theme.mutedForeground, fontSize: 14 }}>
-          Finding your best deals...
+          Finding the best deals for {today}
         </Text>
       </SafeAreaView>
     );
@@ -323,7 +327,7 @@ export default function SwipeDeckScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ fontSize: 20 }}>✈️</Text>
+          <Image source={require("../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />
           <Text style={{ fontWeight: "800", fontSize: 16, color: theme.foreground }}>
             Trace Flights
           </Text>
@@ -428,7 +432,7 @@ export default function SwipeDeckScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16 }}>
+        <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8, position: "relative" }}>
           {/* Card stack */}
           <View style={{ flex: 1, position: "relative" }}>
             {deckMode === "business" && (
@@ -466,6 +470,23 @@ export default function SwipeDeckScreen() {
                   isSwipeDisabled={!isPremium && swipesLeft <= 0}
                 />
               ))}
+          </View>
+
+          {/* Undo button — just below the card */}
+          <View style={{ height: 32, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8, marginTop: 6 }}>
+            {lastSwipedDeal && (
+              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                <TouchableOpacity
+                  onPress={handleUndo}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}
+                >
+                  <Undo2 color={theme.mutedForeground} size={16} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
+                    Undo
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
           </View>
 
           {/* Swipes left indicator */}
@@ -545,7 +566,7 @@ export default function SwipeDeckScreen() {
                 elevation: 8,
               }}
             >
-              <Text style={{ fontSize: 36 }}>✈️</Text>
+              <Image source={require("../../assets/Bluelogo.png")} style={{ width: 40, height: 40, resizeMode: "contain" }} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -574,30 +595,6 @@ export default function SwipeDeckScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Undo button */}
-          {lastSwipedDeal && (
-            <Animated.View
-              entering={FadeIn.duration(200)}
-              exiting={FadeOut.duration(200)}
-              style={{ alignItems: "center", paddingBottom: 8 }}
-            >
-              <TouchableOpacity
-                onPress={handleUndo}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
-              >
-                <Undo2 color={theme.mutedForeground} size={16} />
-                <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
-                  Undo
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
         </View>
       )}
 
@@ -708,7 +705,7 @@ export default function SwipeDeckScreen() {
               <TouchableOpacity
                 onPress={() => {
                   setShowUpgradePopup(false);
-                  navigation.navigate("TrialSignup", { plan: "premium" });
+                  setShowDisclosure(true);
                 }}
                 style={{
                   width: "100%",
@@ -719,7 +716,7 @@ export default function SwipeDeckScreen() {
                 }}
               >
                 <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-                  Start Free Trial
+                  View Plans
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setShowUpgradePopup(false)}>
@@ -729,6 +726,12 @@ export default function SwipeDeckScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+        plan="premium"
+      />
     </SafeAreaView>
   );
 }

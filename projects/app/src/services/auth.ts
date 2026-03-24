@@ -2,6 +2,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  deleteUser,
   updateProfile,
   User,
 } from "firebase/auth";
@@ -30,6 +31,12 @@ export async function logout(): Promise<void> {
 
 export function getCurrentUser(): User | null {
   return auth.currentUser;
+}
+
+export async function deleteAuthUser(): Promise<void> {
+  if (auth.currentUser) {
+    await deleteUser(auth.currentUser);
+  }
 }
 
 export async function updateUserProfile(updates: {

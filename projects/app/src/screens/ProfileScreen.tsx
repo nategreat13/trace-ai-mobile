@@ -36,10 +36,11 @@ import {
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
-import { logout } from "../services/auth";
-import { deleteUserProfile } from "../services/firestore";
+import { logout, deleteAuthUser } from "../services/auth";
+import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
   const [tempFirstName, setTempFirstName] = useState("");
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -99,9 +101,10 @@ export default function ProfileScreen() {
         await updateProfile({ profilePictureUrl: downloadURL });
         setUploadingPhoto(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Photo upload failed:", error);
       setUploadingPhoto(false);
+      Alert.alert("Upload failed", error?.message || "Could not save photo. Check Firebase Storage rules.");
     }
   };
 
@@ -136,12 +139,15 @@ export default function ProfileScreen() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteText !== "DELETE") return;
+    if (deleteText !== "DELETE" || !user) return;
     try {
-      if (profile?.id) await deleteUserProfile(profile.id);
-      await logout();
+      // Delete all Firestore data (profile, swipes, saved deals, alerts)
+      await deleteAllUserData(user.uid, profile?.id);
+      // Delete the Firebase Auth user
+      await deleteAuthUser();
     } catch (error) {
       console.error("Error deleting account:", error);
+      Alert.alert("Error", "Failed to delete account. Please try again.");
     }
   };
 
@@ -366,13 +372,7 @@ export default function ProfileScreen() {
               <Crown color={colors.brand.rose500} size={20} />
             </View>
             <TouchableOpacity
-              onPress={() => {
-                if (profile?.subscriptionStatus === "free") {
-                  navigation.navigate("TrialSignup", { plan: "premium" });
-                } else {
-                  navigation.navigate("SubscriptionPlan");
-                }
-              }}
+              onPress={() => setShowDisclosure(true)}
               style={{
                 backgroundColor: colors.brand.traceRed,
                 borderRadius: 12,
@@ -382,10 +382,10 @@ export default function ProfileScreen() {
             >
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
                 {profile?.subscriptionStatus === "free"
-                  ? "Upgrade Plan"
+                  ? "View Plans"
                   : profile?.subscriptionStatus === "premium" || profile?.subscriptionStatus === "business"
-                  ? "Change Plan"
-                  : "Manage Subscription"}
+                  ? "Manage Plan"
+                  : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -649,6 +649,11 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+      />
 
       {/* Delete modal */}
       <Modal visible={showDeleteModal} transparent animationType="fade">

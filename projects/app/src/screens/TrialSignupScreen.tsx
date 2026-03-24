@@ -92,26 +92,8 @@ export default function TrialSignupScreen() {
             {isPremiumPlan ? "Premium" : "Business Class"}
           </Text>
           <Text style={{ fontSize: 14, color: theme.mutedForeground, marginTop: 4, textAlign: "center" }}>
-            3-day free trial · Cancel anytime
+            Free trial · No payment required
           </Text>
-        </View>
-
-        {/* Price */}
-        <View
-          style={{
-            backgroundColor: theme.card,
-            borderRadius: 20,
-            padding: 24,
-            borderWidth: 1,
-            borderColor: theme.border,
-            alignItems: "center",
-            marginBottom: 24,
-          }}
-        >
-          <Text style={{ fontSize: 40, fontWeight: "900", color: theme.foreground }}>
-            {isPremiumPlan ? "$49" : "$139"}
-          </Text>
-          <Text style={{ fontSize: 14, color: theme.mutedForeground }}>/year</Text>
         </View>
 
         {/* Features */}
@@ -158,7 +140,7 @@ export default function TrialSignupScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 16 }}>
           <Shield color={theme.mutedForeground} size={14} />
           <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-            Cancel anytime · No charge today
+            No payment required
           </Text>
         </View>
       </View>

@@ -45,6 +45,32 @@ export async function deleteUserProfile(docId: string): Promise<void> {
   await deleteDoc(doc(db, "userProfiles", docId));
 }
 
+/** Delete all Firestore data for a user (profile, swipes, saved deals, alerts). */
+export async function deleteAllUserData(userId: string, profileDocId?: string): Promise<void> {
+  // Delete user profile
+  if (profileDocId) {
+    await deleteDoc(doc(db, "userProfiles", profileDocId));
+  }
+
+  // Delete swipe actions
+  const swipeSnap = await getDocs(
+    query(collection(db, "swipeActions"), where("userId", "==", userId))
+  );
+  await Promise.all(swipeSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  // Delete saved flight deals
+  const dealsSnap = await getDocs(
+    query(collection(db, "flightDeals"), where("userId", "==", userId))
+  );
+  await Promise.all(dealsSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  // Delete deal alerts
+  const alertsSnap = await getDocs(
+    query(collection(db, "dealAlerts"), where("userId", "==", userId))
+  );
+  await Promise.all(alertsSnap.docs.map((d) => deleteDoc(d.ref)));
+}
+
 export function subscribeToProfile(
   userId: string,
   callback: (profile: (UserProfile & { id: string }) | null) => void

@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { X, Check } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -15,18 +16,20 @@ export default function SubscriptionPlanScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile } = useAuth();
+  const [showDisclosure, setShowDisclosure] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string>("premium");
 
   const plans = [
     {
       name: "Premium",
-      price: "$49/year",
+      description: "Unlock all features",
       color: colors.brand.traceRed,
       features: ["Unlimited swipes", "Unlimited saves", "Full Explore", "Deal alerts"],
       current: profile?.subscriptionStatus === "premium",
     },
     {
       name: "Business",
-      price: "$139/year",
+      description: "The ultimate experience",
       color: colors.brand.amber500,
       features: ["Everything in Premium", "Business class deals", "48h early access", "VIP support"],
       current: profile?.subscriptionStatus === "business",
@@ -60,7 +63,7 @@ export default function SubscriptionPlanScreen() {
               </View>
             )}
             <Text style={{ fontSize: 24, fontWeight: "900", color: theme.foreground, marginBottom: 4 }}>{plan.name}</Text>
-            <Text style={{ fontSize: 16, color: theme.mutedForeground, marginBottom: 16 }}>{plan.price}</Text>
+            <Text style={{ fontSize: 16, color: theme.mutedForeground, marginBottom: 16 }}>{plan.description}</Text>
             {plan.features.map((f, i) => (
               <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Check color={plan.color} size={16} />
@@ -69,7 +72,10 @@ export default function SubscriptionPlanScreen() {
             ))}
             {!plan.current && (
               <TouchableOpacity
-                onPress={() => navigation.navigate("TrialSignup", { plan: plan.name.toLowerCase() })}
+                onPress={() => {
+                  setSelectedPlan(plan.name.toLowerCase());
+                  setShowDisclosure(true);
+                }}
                 style={{
                   marginTop: 16,
                   paddingVertical: 14,
@@ -79,13 +85,19 @@ export default function SubscriptionPlanScreen() {
                 }}
               >
                 <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>
-                  {profile?.subscriptionStatus === "free" ? "Start Trial" : "Upgrade"}
+                  View Plans
                 </Text>
               </TouchableOpacity>
             )}
           </View>
         ))}
       </ScrollView>
+
+      <ExternalLinkDisclosure
+        visible={showDisclosure}
+        onClose={() => setShowDisclosure(false)}
+        plan={selectedPlan}
+      />
     </SafeAreaView>
   );
 }
