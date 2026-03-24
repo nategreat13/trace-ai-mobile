@@ -313,7 +313,7 @@ export default function SwipeCard({
         <View style={styles.content}>
           {/* Destination + price */}
           <View style={styles.headerRow}>
-            <Text style={styles.destination} numberOfLines={1}>
+            <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
               {deal.destination}
             </Text>
             <View style={styles.pricePill}>
