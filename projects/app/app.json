@@ -38,7 +38,6 @@
       "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab"
     },
     "plugins": [
-      "expo-image",
       [
         "@stripe/stripe-react-native",
         {
