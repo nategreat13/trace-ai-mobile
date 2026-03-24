@@ -36,8 +36,8 @@ import {
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
-import { logout } from "../services/auth";
-import { deleteUserProfile } from "../services/firestore";
+import { logout, deleteAuthUser } from "../services/auth";
+import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
@@ -139,12 +139,15 @@ export default function ProfileScreen() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteText !== "DELETE") return;
+    if (deleteText !== "DELETE" || !user) return;
     try {
-      if (profile?.id) await deleteUserProfile(profile.id);
-      await logout();
+      // Delete all Firestore data (profile, swipes, saved deals, alerts)
+      await deleteAllUserData(user.uid, profile?.id);
+      // Delete the Firebase Auth user
+      await deleteAuthUser();
     } catch (error) {
       console.error("Error deleting account:", error);
+      Alert.alert("Error", "Failed to delete account. Please try again.");
     }
   };
 
