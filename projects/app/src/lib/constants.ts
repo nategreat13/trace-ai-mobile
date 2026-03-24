@@ -2,9 +2,11 @@ export const MAX_DAILY_SWIPES = 8;
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 
+import Constants from "expo-constants";
+
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const API_BASE_URL = __DEV__
-  ? "http://localhost:3001"
+  ? (Constants.expoConfig?.extra?.devApiUrl ?? "http://localhost:3001")
   : "https://api-7l7vojyykq-uc.a.run.app";
 
 export const DEAL_TYPES = [

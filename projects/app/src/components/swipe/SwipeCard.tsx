@@ -5,13 +5,11 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { X, Heart } from "lucide-react-native";
 import { Deal, SwipeAction } from "@trace/shared";
 import { colors } from "../../theme/colors";
 
@@ -126,8 +124,8 @@ export default function SwipeCard({
         ) {
           runOnJS(handleSwipe)("super");
         }
-        translateX.value = withSpring(0);
-        translateY.value = withSpring(0);
+        translateX.value = withTiming(0, { duration: 200 });
+        translateY.value = withTiming(0, { duration: 200 });
         return;
       }
 
@@ -177,8 +175,8 @@ export default function SwipeCard({
       }
 
       // ── Snap back ──────────────────────────────────────────────
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
+      translateX.value = withTiming(0, { duration: 200 });
+      translateY.value = withTiming(0, { duration: 200 });
     });
 
   const tapGesture = Gesture.Tap().onEnd(() => {
@@ -261,58 +259,69 @@ export default function SwipeCard({
           transition={200}
         />
 
-        {/* Gradient overlay */}
+        {/* Gradient overlay — heavy at bottom like Tinder */}
         <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.2)", "rgba(0,0,0,0.8)"]}
-          locations={[0, 0.5, 1]}
+          colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.0)", "rgba(0,0,0,0.55)", "rgba(0,0,0,0.92)"]}
+          locations={[0, 0.45, 0.72, 1]}
           style={styles.gradient}
         />
 
-        {/* ── Swipe indicators ─────────────────────────────────────── */}
+        {/* ── Top row: origin pill + discount badge ────────────────── */}
+        <View style={styles.topRow}>
+          {deal.origin && (
+            <View style={styles.originPill}>
+              <Text style={styles.originText}>✈️  {deal.origin} → {deal.destination_code || deal.destination}</Text>
+            </View>
+          )}
+          {deal.discount_pct > 0 && (
+            <LinearGradient
+              colors={["#00D665", "#00B84D"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.discountPill}
+            >
+              <Text style={styles.discountPillText}>{deal.discount_pct}% OFF</Text>
+            </LinearGradient>
+          )}
+        </View>
 
-        {/* Left indicator (NOPE) */}
+        {/* ── Swipe indicators — Tinder stamp style ────────────────── */}
+
+        {/* Left swipe → NOPE stamp (top-right, tilted) */}
         <Animated.View style={[styles.indicatorLeft, leftIndicatorStyle]}>
-          <View style={styles.indicatorBox}>
-            <X size={56} color={colors.brand.traceRed} strokeWidth={3} />
+          <View style={styles.nopeStamp}>
+            <Text style={styles.nopeText}>NOPE</Text>
           </View>
         </Animated.View>
 
-        {/* Right indicator (LIKE) */}
+        {/* Right swipe → LIKE stamp (top-left, tilted) */}
         <Animated.View style={[styles.indicatorRight, rightIndicatorStyle]}>
-          <View style={styles.indicatorBox}>
-            <Heart
-              size={56}
-              color={colors.brand.traceGreen}
-              fill={colors.brand.traceGreen}
-              strokeWidth={3}
-            />
+          <View style={styles.likeStamp}>
+            <Text style={styles.likeText}>LIKE</Text>
           </View>
         </Animated.View>
 
-        {/* Up indicator (SAVE / Super) */}
+        {/* Up swipe → SAVE stamp */}
         <Animated.View style={[styles.indicatorUp, upIndicatorStyle]}>
-          <View style={styles.superBadge}>
-            <Text style={styles.superText}>SAVE</Text>
+          <View style={styles.saveStamp}>
+            <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain", marginBottom: 4 }} />
+            <Text style={styles.saveText}>SAVE</Text>
           </View>
         </Animated.View>
 
         {/* ── Bottom content ───────────────────────────────────────── */}
         <View style={styles.content}>
-          {/* Header row: destination + price */}
+          {/* Destination + price */}
           <View style={styles.headerRow}>
             <Text style={styles.destination} numberOfLines={1}>
               {deal.destination}
             </Text>
-            <View style={styles.priceContainer}>
+            <View style={styles.pricePill}>
               {deal.original_price > deal.price && (
-                <Text style={styles.originalPrice}>
-                  ${deal.original_price}
-                </Text>
+                <Text style={styles.originalPrice}>${deal.original_price}</Text>
               )}
               <Text style={styles.price}>{formattedPrice}</Text>
-              <Text style={[styles.trendArrow, { color: trendColor }]}>
-                {trendArrow}
-              </Text>
+              <Text style={[styles.trendArrow, { color: trendColor }]}>{trendArrow}</Text>
             </View>
           </View>
 
@@ -321,28 +330,21 @@ export default function SwipeCard({
             {deal.vibe_description}
           </Text>
 
-          {/* Badges row */}
-          <View style={styles.badges}>
-            {deal.discount_pct > 0 && (
-              <LinearGradient
-                colors={["#00D665", "#00B84D"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.badge, styles.discountBadge]}
-              >
-                <Text style={styles.discountBadgeText}>
-                  {deal.discount_pct}% off
-                </Text>
-              </LinearGradient>
+          {/* Info chips */}
+          <View style={styles.chips}>
+            {!!deal.airlines && (
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>{deal.airlines}</Text>
+              </View>
             )}
             {!!deal.duration && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{deal.duration}</Text>
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>⏱ {deal.duration}</Text>
               </View>
             )}
             {!!deal.travel_window && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{deal.travel_window}</Text>
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>📅 {deal.travel_window}</Text>
               </View>
             )}
           </View>
@@ -357,75 +359,127 @@ const styles = StyleSheet.create({
   card: {
     position: "absolute",
     top: 0,
-    left: 0,
-    right: 0,
+    left: 4,
+    right: 4,
     bottom: 0,
-    borderRadius: 24,
+    borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#1a1a1a",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
   },
   image: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: 20,
   },
   gradient: {
     ...StyleSheet.absoluteFillObject,
-    borderRadius: 24,
+    borderRadius: 20,
   },
 
-  // ── Swipe indicators ───────────────────────────────────────────────
+  // ── Top row ────────────────────────────────────────────────────────
+  topRow: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  originPill: {
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backdropFilter: "blur(8px)",
+  },
+  originText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+    letterSpacing: 0.3,
+  },
+  discountPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  discountPillText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#fff",
+  },
+
+  // ── Swipe stamp indicators ─────────────────────────────────────────
   indicatorLeft: {
     position: "absolute",
-    top: "40%",
-    right: 32,
+    top: 52,
+    right: 24,
     zIndex: 10,
+    transform: [{ rotate: "15deg" }],
   },
   indicatorRight: {
     position: "absolute",
-    top: "40%",
-    left: 32,
+    top: 52,
+    left: 24,
     zIndex: 10,
+    transform: [{ rotate: "-15deg" }],
   },
   indicatorUp: {
     position: "absolute",
-    top: "30%",
-    alignSelf: "center",
+    top: "28%",
     left: 0,
     right: 0,
     alignItems: "center",
     zIndex: 10,
   },
-  indicatorBox: {
-    width: 96,
-    height: 96,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    borderWidth: 5,
-    borderColor: "rgba(255,255,255,0.95)",
-    justifyContent: "center",
+  nopeStamp: {
+    borderWidth: 4,
+    borderColor: colors.brand.traceRed,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  nopeText: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: colors.brand.traceRed,
+    letterSpacing: 3,
+  },
+  likeStamp: {
+    borderWidth: 4,
+    borderColor: colors.brand.traceGreen,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "rgba(0,0,0,0.15)",
+  },
+  likeText: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: colors.brand.traceGreen,
+    letterSpacing: 3,
+  },
+  saveStamp: {
+    borderWidth: 4,
+    borderColor: colors.brand.amber500,
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "rgba(0,0,0,0.15)",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
   },
-  superBadge: {
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: "rgba(255,255,255,0.95)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  superText: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: colors.dark.primary,
-    letterSpacing: 4,
+  saveText: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: colors.brand.amber500,
+    letterSpacing: 3,
   },
 
   // ── Bottom content ─────────────────────────────────────────────────
@@ -435,8 +489,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 24,
-    paddingTop: 12,
+    paddingBottom: 26,
+    paddingTop: 16,
   },
   headerRow: {
     flexDirection: "row",
@@ -446,67 +500,61 @@ const styles = StyleSheet.create({
   },
   destination: {
     flex: 1,
-    fontSize: 28,
-    fontWeight: "800",
+    fontSize: 32,
+    fontWeight: "900",
     color: "#ffffff",
     marginRight: 12,
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
-  priceContainer: {
+  pricePill: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 4,
+    gap: 3,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   originalPrice: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "500",
     color: "rgba(255,255,255,0.5)",
     textDecorationLine: "line-through",
   },
   price: {
-    fontSize: 26,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "900",
     color: "#ffffff",
-    textShadowColor: "rgba(0,0,0,0.8)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
   },
   trendArrow: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    marginLeft: 2,
   },
   vibe: {
     fontSize: 14,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.8)",
+    color: "rgba(255,255,255,0.82)",
     marginBottom: 12,
     lineHeight: 20,
   },
-  badges: {
+  chips: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 7,
   },
-  badge: {
+  chip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
-  badgeText: {
-    fontSize: 12,
+  chipText: {
+    fontSize: 11,
     fontWeight: "600",
     color: "rgba(255,255,255,0.9)",
-  },
-  discountBadge: {
-    backgroundColor: undefined,
-  },
-  discountBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#ffffff",
   },
 });

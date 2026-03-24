@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
-import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, ChevronRight } from "lucide-react-native";
+import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
@@ -42,6 +42,7 @@ export default function ExploreScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
     months: [],
@@ -103,7 +104,7 @@ export default function ExploreScreen() {
     loadDeals();
   }, [profile?.id]);
 
-  const filteredDeals = useMemo(() => {
+  const { filteredDeals, dealVariants } = useMemo(() => {
     let result = deals;
 
     // Search filter
@@ -151,15 +152,29 @@ export default function ExploreScreen() {
       );
     }
 
-    // Dedupe by destination, keeping cheapest
-    const destMap = new Map<string, Deal>();
+    // Group by destination, keeping all month variants, sorted by soonest month first
+    const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    const nowMonth = new Date().getMonth(); // 0-11
+    const monthSortKey = (deal: Deal): number => {
+      const tw = (deal.travel_window || deal.dateString || "").toLowerCase();
+      const idx = MONTHS.findIndex((m) => tw.includes(m));
+      if (idx === -1) return 99;
+      // Distance from now, wrapping year so soonest = smallest value
+      return (idx - nowMonth + 12) % 12;
+    };
+
+    const variantsMap = new Map<string, Deal[]>();
     result.forEach((deal) => {
       const key = deal.destination;
-      if (!destMap.has(key) || deal.price < destMap.get(key)!.price) {
-        destMap.set(key, deal);
-      }
+      if (!variantsMap.has(key)) variantsMap.set(key, []);
+      variantsMap.get(key)!.push(deal);
     });
-    const deduped = Array.from(destMap.values());
+    variantsMap.forEach((variants, key) => {
+      variantsMap.set(key, variants.sort((a, b) => monthSortKey(a) - monthSortKey(b)));
+    });
+
+    // One entry per destination (cheapest deal as the representative)
+    const deduped = Array.from(variantsMap.values()).map((variants) => variants[0]);
 
     // Sort
     if (filters.sort === "price") {
@@ -174,7 +189,7 @@ export default function ExploreScreen() {
       });
     }
 
-    return deduped;
+    return { filteredDeals: deduped, dealVariants: variantsMap };
   }, [deals, searchTerm, filters]);
 
   const handleSave = async (deal: Deal) => {
@@ -260,7 +275,11 @@ export default function ExploreScreen() {
   const displayDeals = isPremium ? filteredDeals : filteredDeals.slice(0, 7);
   const freeVisibleCount = 4;
 
-  const renderDeal = ({ item: deal, index }: { item: Deal; index: number }) => {
+  const renderDeal = ({ item: baseDeal, index }: { item: Deal; index: number }) => {
+    const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
+    const cheapestIdx = variants.reduce((best, v, i) => (v.price || 0) < (variants[best].price || 0) ? i : best, 0);
+    const selectedIdx = selectedMonthIndex[baseDeal.destination] ?? cheapestIdx;
+    const deal = variants[selectedIdx] ?? baseDeal;
     const isSaved = savedDealIds.has(deal.id);
     const isBlurred = !isPremium && index >= freeVisibleCount;
 
@@ -278,116 +297,136 @@ export default function ExploreScreen() {
           opacity: isBlurred ? 0.3 : 1,
         }}
       >
-        <View style={{ position: "relative" }}>
+        <View style={{ position: "relative", height: 200 }}>
           <Image
             source={{ uri: deal.image_url }}
-            style={{ width: "100%", height: 160 }}
+            style={{ width: "100%", height: 200 }}
             contentFit="cover"
           />
+          {/* Rich multi-stop gradient for depth */}
+          <LinearGradient
+            colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.15)", "rgba(0,0,0,0.55)", "rgba(0,0,0,0.92)"]}
+            locations={[0, 0.35, 0.65, 1]}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "100%" }}
+          />
           {deal.discount_pct > 0 && (
-            <View
+            <LinearGradient
+              colors={["#00D665", "#00B84D"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={{
                 position: "absolute",
-                top: 8,
-                left: 8,
-                backgroundColor: colors.brand.traceGreen,
-                borderRadius: 6,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
+                top: 10,
+                left: 10,
+                borderRadius: 8,
+                paddingHorizontal: 9,
+                paddingVertical: 4,
               }}
             >
-              <Text style={{ color: "#000", fontSize: 12, fontWeight: "700" }}>
+              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "800" }}>
                 {deal.discount_pct}% OFF
               </Text>
-            </View>
+            </LinearGradient>
           )}
           {!isBlurred && (
             <TouchableOpacity
               onPress={() => handleSave(deal)}
               style={{
                 position: "absolute",
-                top: 8,
-                right: 8,
-                backgroundColor: "rgba(0,0,0,0.5)",
+                top: 10,
+                right: 10,
+                backgroundColor: isSaved ? "#fff" : "rgba(0,0,0,0.45)",
                 borderRadius: 999,
                 padding: 8,
               }}
             >
               {isSaved ? (
-                <BookmarkCheck color="#fff" size={18} fill="#fff" />
+                <BookmarkCheck color={colors.brand.traceRed} size={18} fill={colors.brand.traceRed} />
               ) : (
                 <Bookmark color="#fff" size={18} />
               )}
             </TouchableOpacity>
           )}
-        </View>
-        <View style={{ padding: 12 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" }}>
-            <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>
-              {deal.destination}
-            </Text>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>
-                ${deal.price}
+          {/* Destination & price overlaid on image */}
+          <View style={{ position: "absolute", bottom: 12, left: 14, right: 14 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+              <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff", flex: 1, textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }} numberOfLines={1}>
+                {deal.destination}
               </Text>
-              {deal.original_price > 0 && (
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: theme.mutedForeground,
-                    textDecorationLine: "line-through",
-                  }}
-                >
-                  ${deal.original_price}
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ fontSize: 22, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
+                  ${deal.price}
                 </Text>
-              )}
+                {deal.original_price > 0 && (
+                  <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", textDecorationLine: "line-through" }}>
+                    ${deal.original_price}
+                  </Text>
+                )}
+              </View>
             </View>
+            {deal.vibe_description && (
+              <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 }} numberOfLines={1}>
+                {deal.vibe_description}
+              </Text>
+            )}
           </View>
-          {deal.vibe_description && (
-            <Text
-              style={{ color: theme.mutedForeground, fontSize: 12, marginTop: 4 }}
-              numberOfLines={1}
-            >
-              {deal.vibe_description}
+        </View>
+        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
+          {deal.duration && (
+            <Text style={{ fontSize: 11, color: theme.mutedForeground, marginBottom: 8 }}>
+              ✈️ {deal.duration}
             </Text>
           )}
-          <View style={{ flexDirection: "row", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-            {deal.duration && (
-              <View
-                style={{
-                  backgroundColor: theme.muted,
-                  borderRadius: 6,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: "600", color: theme.mutedForeground }}>
-                  ✈️ {deal.duration}
-                </Text>
-              </View>
-            )}
-            {deal.travel_window && (
-              <View
-                style={{
-                  backgroundColor: theme.muted,
-                  borderRadius: 6,
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                }}
-              >
-                <Text style={{ fontSize: 11, fontWeight: "600", color: theme.mutedForeground }}>
-                  {deal.travel_window}
-                </Text>
-              </View>
-            )}
-          </View>
-          {/* View Details button */}
-          {!isBlurred && (
-            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10 }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: colors.brand.traceRed }}>
-                View Details
-              </Text>
-              <ChevronRight size={14} color={colors.brand.traceRed} />
+          {/* Month selector pills */}
+          {variants.length > 0 && (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+              {variants.map((v, i) => {
+                const isSelected = i === selectedIdx;
+                return isSelected ? (
+                  <LinearGradient
+                    key={v.id}
+                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ borderRadius: 999 }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => !isBlurred && setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
+                      style={{ paddingHorizontal: 12, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 5 }}
+                    >
+                      <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>
+                        {v.travel_window || `Option ${i + 1}`}
+                      </Text>
+                      <View style={{ width: 1, height: 12, backgroundColor: "rgba(255,255,255,0.4)" }} />
+                      <Text style={{ fontSize: 12, fontWeight: "900", color: "#fff" }}>
+                        ${v.price}
+                      </Text>
+                    </TouchableOpacity>
+                  </LinearGradient>
+                ) : (
+                  <TouchableOpacity
+                    key={v.id}
+                    onPress={() => !isBlurred && setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 999,
+                      backgroundColor: theme.muted,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: theme.mutedForeground }}>
+                      {v.travel_window || `Option ${i + 1}`}
+                    </Text>
+                    <View style={{ width: 1, height: 12, backgroundColor: theme.border }} />
+                    <Text style={{ fontSize: 12, fontWeight: "800", color: theme.foreground }}>
+                      ${v.price}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
         </View>
