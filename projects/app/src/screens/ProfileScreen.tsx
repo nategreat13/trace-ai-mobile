@@ -653,6 +653,7 @@ export default function ProfileScreen() {
       <ExternalLinkDisclosure
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
+        email={user?.email || undefined}
       />
 
       {/* Delete modal */}

@@ -61,7 +61,7 @@ export default function UpgradeScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [dealIdx, setDealIdx] = useState(0);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [showDisclosure, setShowDisclosure] = useState(false);
@@ -413,6 +413,7 @@ export default function UpgradeScreen() {
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
         plan="business"
+        email={user?.email || undefined}
       />
     </SafeAreaView>
   );

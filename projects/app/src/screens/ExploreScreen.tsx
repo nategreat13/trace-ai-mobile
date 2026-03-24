@@ -734,6 +734,7 @@ export default function ExploreScreen() {
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
         plan="premium"
+        email={user?.email || undefined}
       />
     </SafeAreaView>
   );

@@ -15,7 +15,7 @@ export default function SubscriptionPlanScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [showDisclosure, setShowDisclosure] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>("premium");
 
@@ -97,6 +97,7 @@ export default function SubscriptionPlanScreen() {
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
         plan={selectedPlan}
+        email={user?.email || undefined}
       />
     </SafeAreaView>
   );

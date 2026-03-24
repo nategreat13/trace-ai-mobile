@@ -16,19 +16,21 @@ interface ExternalLinkDisclosureProps {
   visible: boolean;
   onClose: () => void;
   plan?: string;
+  email?: string;
 }
 
 export default function ExternalLinkDisclosure({
   visible,
   onClose,
   plan,
+  email,
 }: ExternalLinkDisclosureProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
   const handleContinue = async () => {
     onClose();
-    await openSubscribeUrl(plan);
+    await openSubscribeUrl(plan, email);
   };
 
   return (
