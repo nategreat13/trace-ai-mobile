@@ -5,9 +5,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
+  useWindowDimensions,
   ScrollView,
 } from "react-native";
 import { colors } from "../../theme/colors";
+
+const COLUMNS = 4;
+const GAP = 10;
+const PARENT_HORIZONTAL_PADDING = 24;
 
 const AIRPORTS = [
   "ATL",
@@ -43,6 +48,9 @@ interface AirportInputProps {
 export default function AirportInput({ value, onChange }: AirportInputProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+  const { width: screenWidth } = useWindowDimensions();
+  const containerWidth = screenWidth - PARENT_HORIZONTAL_PADDING * 2;
+  const chipWidth = (containerWidth - GAP * (COLUMNS - 1)) / COLUMNS;
 
   return (
     <View style={styles.container}>
@@ -63,6 +71,7 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
               style={[
                 styles.chip,
                 {
+                  width: chipWidth,
                   backgroundColor: isSelected
                     ? colors.brand.traceRed
                     : theme.muted,
@@ -111,8 +120,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     paddingVertical: 10,
-    paddingHorizontal: 18,
-    minWidth: 72,
     alignItems: "center",
   },
   chipText: {
