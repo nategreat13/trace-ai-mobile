@@ -4,7 +4,7 @@ export const UNLIMITED_SWIPES = 999999;
 
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const API_BASE_URL = __DEV__
-  ? "http://localhost:3001"
+  ? "https://opulent-space-train-pjxwjr9qpvqv26xpx-3001.app.github.dev"
   : "https://us-central1-YOUR-PROJECT.cloudfunctions.net/api"; // TODO: replace with deployed URL
 
 export const DEAL_TYPES = [

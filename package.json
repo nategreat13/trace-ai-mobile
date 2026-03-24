@@ -3,9 +3,9 @@
   "private": true,
   "workspaces": ["projects/*"],
   "scripts": {
-    "dev1": "yarn workspace @trace/shared build && rm -rf projects/server/shared && cp -r projects/shared projects/server/shared && concurrently \"yarn workspace @trace/server tsc --watch --noEmit --preserveWatchOutput\" \"yarn workspace @trace/server tsx watch src/dev.ts\"",
+    "dev1": "yarn workspace @trace/shared build && concurrently \"yarn workspace @trace/server tsc --watch --noEmit --preserveWatchOutput\" \"yarn workspace @trace/server tsx watch src/dev.ts\"",
     "dev2": "yarn workspace @trace/app start",
-    "deploy:api": "yarn workspace @trace/shared build && rm -rf projects/server/shared && cp -r projects/shared projects/server/shared && yarn workspace @trace/server build && firebase deploy --only functions",
+    "deploy:api": "yarn workspace @trace/shared build && yarn workspace @trace/server build && firebase deploy --only functions",
     "postinstall": "yarn workspace @trace/shared build"
   },
   "devDependencies": {

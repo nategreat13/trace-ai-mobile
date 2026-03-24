@@ -99,9 +99,10 @@ export default function ProfileScreen() {
         await updateProfile({ profilePictureUrl: downloadURL });
         setUploadingPhoto(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Photo upload failed:", error);
       setUploadingPhoto(false);
+      Alert.alert("Upload failed", error?.message || "Could not save photo. Check Firebase Storage rules.");
     }
   };
 
@@ -578,6 +579,7 @@ export default function ProfileScreen() {
             <Trash2 color="#ef4444" size={20} />
             <Text style={{ fontSize: 14, fontWeight: "600", color: "#ef4444" }}>Delete Account</Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
 
