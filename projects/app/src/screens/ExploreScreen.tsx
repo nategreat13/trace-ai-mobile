@@ -152,7 +152,17 @@ export default function ExploreScreen() {
       );
     }
 
-    // Group by destination, keeping all month variants, sorted cheapest first
+    // Group by destination, keeping all month variants, sorted by soonest month first
+    const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    const nowMonth = new Date().getMonth(); // 0-11
+    const monthSortKey = (deal: Deal): number => {
+      const tw = (deal.travel_window || deal.dateString || "").toLowerCase();
+      const idx = MONTHS.findIndex((m) => tw.includes(m));
+      if (idx === -1) return 99;
+      // Distance from now, wrapping year so soonest = smallest value
+      return (idx - nowMonth + 12) % 12;
+    };
+
     const variantsMap = new Map<string, Deal[]>();
     result.forEach((deal) => {
       const key = deal.destination;
@@ -160,7 +170,7 @@ export default function ExploreScreen() {
       variantsMap.get(key)!.push(deal);
     });
     variantsMap.forEach((variants, key) => {
-      variantsMap.set(key, variants.sort((a, b) => (a.price || 0) - (b.price || 0)));
+      variantsMap.set(key, variants.sort((a, b) => monthSortKey(a) - monthSortKey(b)));
     });
 
     // One entry per destination (cheapest deal as the representative)
@@ -267,7 +277,8 @@ export default function ExploreScreen() {
 
   const renderDeal = ({ item: baseDeal, index }: { item: Deal; index: number }) => {
     const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
-    const selectedIdx = selectedMonthIndex[baseDeal.destination] ?? 0;
+    const cheapestIdx = variants.reduce((best, v, i) => (v.price || 0) < (variants[best].price || 0) ? i : best, 0);
+    const selectedIdx = selectedMonthIndex[baseDeal.destination] ?? cheapestIdx;
     const deal = variants[selectedIdx] ?? baseDeal;
     const isSaved = savedDealIds.has(deal.id);
     const isBlurred = !isPremium && index >= freeVisibleCount;

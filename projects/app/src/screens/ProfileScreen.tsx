@@ -99,9 +99,10 @@ export default function ProfileScreen() {
         await updateProfile({ profilePictureUrl: downloadURL });
         setUploadingPhoto(false);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Photo upload failed:", error);
       setUploadingPhoto(false);
+      Alert.alert("Upload failed", error?.message || "Could not save photo. Check Firebase Storage rules.");
     }
   };
 

@@ -222,18 +222,46 @@ export default function DashboardScreen() {
                   borderColor: theme.border,
                   padding: 16,
                   marginBottom: 12,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
                 }}
               >
-                <Text style={{ fontSize: 32 }}>{personality.emoji || "🌍"}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground }}>{personality.title}</Text>
-                  <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>
-                    {personality.description}
-                  </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 32 }}>{personality.emoji || "🌍"}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground }}>{personality.title}</Text>
+                    <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>
+                      {personality.description}
+                    </Text>
+                  </View>
                 </View>
+                {/* Level progress bar */}
+                {(() => {
+                  const level = profile?.dealHunterLevel || 1;
+                  const swipes = profile?.swipeCount || 0;
+                  const progressInLevel = (swipes % 25) / 25;
+                  const swipesToNext = 25 - (swipes % 25);
+                  return (
+                    <View>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.mutedForeground }}>
+                          ⚡ Deal Hunter — Level {level}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
+                          {swipesToNext} swipes to Lv {level + 1}
+                        </Text>
+                      </View>
+                      <View style={{ height: 6, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
+                        <View
+                          style={{
+                            height: "100%",
+                            borderRadius: 999,
+                            backgroundColor: colors.brand.traceRed,
+                            width: `${Math.round(progressInLevel * 100)}%`,
+                          }}
+                        />
+                      </View>
+                    </View>
+                  );
+                })()}
               </View>
             )}
 
@@ -253,35 +281,48 @@ export default function DashboardScreen() {
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
+                  alignItems: "center",
                   paddingHorizontal: 16,
-                  paddingVertical: 12,
+                  paddingVertical: 14,
                 }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>Stats & Badges</Text>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>Stats & Badges</Text>
                 <Text style={{ fontSize: 12, color: theme.mutedForeground }}>{showStats ? "Hide ▴" : "Show ▾"}</Text>
               </View>
               {showStats && (
-                <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={{ paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
-                  {/* Stats */}
-                  <View style={{ flexDirection: "row", justifyContent: "space-around", marginBottom: 16 }}>
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>{profile?.swipeCount || 0}</Text>
-                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>Swipes</Text>
+                <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={{ paddingHorizontal: 12, paddingBottom: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+
+                  {/* Stats 2x2 grid */}
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                    <View style={{ flex: 1, backgroundColor: "#fff3e0", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Text style={{ fontSize: 22 }}>👆</Text>
+                      <Text style={{ fontSize: 26, fontWeight: "900", color: "#e65100", marginTop: 4 }}>{profile?.swipeCount || 0}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#bf360c", marginTop: 2 }}>Total Swipes</Text>
                     </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>{profile?.streakDays || 0}</Text>
-                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>Streak</Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>Lv{profile?.dealHunterLevel || 1}</Text>
-                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>Level</Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>{deals.length}</Text>
-                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>Saved</Text>
+                    <View style={{ flex: 1, backgroundColor: "#fff8e1", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Text style={{ fontSize: 22 }}>🔥</Text>
+                      <Text style={{ fontSize: 26, fontWeight: "900", color: "#f57f17", marginTop: 4 }}>{profile?.streakDays || 0}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#e65100", marginTop: 2 }}>Day Streak</Text>
                     </View>
                   </View>
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                    <View style={{ flex: 1, backgroundColor: "#f3e5f5", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Text style={{ fontSize: 22 }}>⚡</Text>
+                      <Text style={{ fontSize: 26, fontWeight: "900", color: "#6a1b9a", marginTop: 4 }}>Lv {profile?.dealHunterLevel || 1}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#7b1fa2", marginTop: 2 }}>Deal Hunter</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "#fce4ec", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Text style={{ fontSize: 22 }}>❤️</Text>
+                      <Text style={{ fontSize: 26, fontWeight: "900", color: colors.brand.traceRed, marginTop: 4 }}>{deals.length}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: "#c62828", marginTop: 2 }}>Saved Deals</Text>
+                    </View>
+                  </View>
+
                   {/* Badges */}
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground }}>Badges</Text>
+                    <Text style={{ fontSize: 12, color: theme.mutedForeground }}>{earnedBadges.length} / {ALL_BADGES.length} earned</Text>
+                  </View>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                     {ALL_BADGES.map((badge) => {
                       const earned = earnedBadges.some((b) => b.id === badge.id);
@@ -290,17 +331,23 @@ export default function DashboardScreen() {
                           key={badge.id}
                           style={{
                             alignItems: "center",
-                            padding: 8,
-                            borderRadius: 12,
-                            backgroundColor: earned ? theme.muted : "transparent",
-                            opacity: earned ? 1 : 0.3,
-                            width: 72,
+                            paddingVertical: 10,
+                            paddingHorizontal: 6,
+                            borderRadius: 14,
+                            backgroundColor: earned ? theme.muted : theme.background,
+                            borderWidth: 1,
+                            borderColor: earned ? colors.brand.traceRed + "40" : theme.border,
+                            opacity: earned ? 1 : 0.4,
+                            width: "22%",
                           }}
                         >
-                          <Text style={{ fontSize: 24 }}>{badge.emoji}</Text>
-                          <Text style={{ fontSize: 10, fontWeight: "600", color: theme.foreground, textAlign: "center", marginTop: 4 }}>
+                          <Text style={{ fontSize: 26 }}>{badge.emoji}</Text>
+                          <Text style={{ fontSize: 9, fontWeight: "700", color: earned ? theme.foreground : theme.mutedForeground, textAlign: "center", marginTop: 5 }}>
                             {badge.name}
                           </Text>
+                          {earned && (
+                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand.traceRed, marginTop: 4 }} />
+                          )}
                         </View>
                       );
                     })}

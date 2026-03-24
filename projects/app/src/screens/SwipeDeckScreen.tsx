@@ -429,7 +429,7 @@ export default function SwipeDeckScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16, position: "relative" }}>
+        <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8, position: "relative" }}>
           {/* Card stack */}
           <View style={{ flex: 1, position: "relative" }}>
             {deckMode === "business" && (
@@ -467,6 +467,23 @@ export default function SwipeDeckScreen() {
                   isSwipeDisabled={!isPremium && swipesLeft <= 0}
                 />
               ))}
+          </View>
+
+          {/* Undo button — just below the card */}
+          <View style={{ height: 32, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8, marginTop: 6 }}>
+            {lastSwipedDeal && (
+              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                <TouchableOpacity
+                  onPress={handleUndo}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}
+                >
+                  <Undo2 color={theme.mutedForeground} size={16} />
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
+                    Undo
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
           </View>
 
           {/* Swipes left indicator */}
@@ -575,22 +592,6 @@ export default function SwipeDeckScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Reserved strip below card for undo — always same height so buttons never shift */}
-          <View style={{ height: 36, justifyContent: "center", alignItems: "flex-end" }}>
-            {lastSwipedDeal && (
-              <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
-                <TouchableOpacity
-                  onPress={handleUndo}
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 }}
-                >
-                  <Undo2 color={theme.mutedForeground} size={16} />
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
-                    Undo
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-          </View>
         </View>
       )}
 
