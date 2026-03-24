@@ -287,8 +287,8 @@ export default function ExploreScreen() {
 
     return (
       <TouchableOpacity
-        activeOpacity={isBlurred ? 1 : 0.85}
-        onPress={() => !isBlurred && setExpandedDeal(deal)}
+        activeOpacity={0.85}
+        onPress={() => isBlurred ? setShowDisclosure(true) : setExpandedDeal(deal)}
         style={{
           backgroundColor: theme.card,
           borderRadius: 16,
