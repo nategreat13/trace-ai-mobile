@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   ActivityIndicator,
   useColorScheme,
@@ -324,7 +325,7 @@ export default function SwipeDeckScreen() {
         }}
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={{ fontSize: 20 }}>✈️</Text>
+          <Image source={require("../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />
           <Text style={{ fontWeight: "800", fontSize: 16, color: theme.foreground }}>
             Trace Flights
           </Text>
@@ -563,7 +564,7 @@ export default function SwipeDeckScreen() {
                 elevation: 8,
               }}
             >
-              <Text style={{ fontSize: 36 }}>✈️</Text>
+              <Image source={require("../../assets/Bluelogo.png")} style={{ width: 40, height: 40, resizeMode: "contain" }} />
             </TouchableOpacity>
 
             <TouchableOpacity

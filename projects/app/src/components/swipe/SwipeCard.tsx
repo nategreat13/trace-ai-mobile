@@ -304,7 +304,8 @@ export default function SwipeCard({
         {/* Up swipe → SAVE stamp */}
         <Animated.View style={[styles.indicatorUp, upIndicatorStyle]}>
           <View style={styles.saveStamp}>
-            <Text style={styles.saveText}>✈️  SAVE</Text>
+            <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain", marginBottom: 4 }} />
+            <Text style={styles.saveText}>SAVE</Text>
           </View>
         </Animated.View>
 
@@ -472,6 +473,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     backgroundColor: "rgba(0,0,0,0.15)",
+    alignItems: "center",
   },
   saveText: {
     fontSize: 26,
