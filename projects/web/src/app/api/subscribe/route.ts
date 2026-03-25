@@ -20,10 +20,7 @@ export async function POST(req: NextRequest) {
 
     const priceId = PRICE_IDS[plan];
     if (!priceId) {
-      return NextResponse.json(
-        { error: "Invalid plan" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
     const stripe = getStripe();
