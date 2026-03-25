@@ -3,8 +3,8 @@ import { getStripe } from "@/lib/stripe";
 import { getDb } from "@/lib/firebase-admin";
 
 const PRICE_IDS: Record<string, string> = {
-  premium: "price_1SqPVwCn0fbGrA2SXHg4miAV",
-  business: "price_1TEvltCn0fbGrA2SH3vhzfXi",
+  premium: "price_1TEy9QCn0fbGrA2SEgEcCSGc",
+  business: "price_1TEy9cCn0fbGrA2ShzSH4WMR",
 };
 
 export async function POST(req: NextRequest) {
