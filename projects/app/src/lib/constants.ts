@@ -1,12 +1,12 @@
+import Constants from "expo-constants";
+
 export const MAX_DAILY_SWIPES = 8;
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const SUBSCRIBE_URL = __DEV__
-  ? "http://localhost:3000/subscribe"
+  ? (Constants.expoConfig?.extra?.devSubscribeUrl ?? "http://localhost:3000/subscribe")
   : "https://subscribe.tracetravel.co";
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
-
-import Constants from "expo-constants";
 
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const API_BASE_URL = __DEV__
