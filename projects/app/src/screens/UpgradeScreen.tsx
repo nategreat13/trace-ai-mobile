@@ -23,6 +23,7 @@ import Animated, {
 import { Check, ArrowRight, Zap, TrendingDown, Clock, Users } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -65,6 +66,7 @@ export default function UpgradeScreen() {
   const [dealIdx, setDealIdx] = useState(0);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
   const [showDisclosure, setShowDisclosure] = useState(false);
+  const { captureStatus, onReturn } = useUpgradeDetection();
 
   // Shimmer animation
   const shimmerTranslate = useSharedValue(-SCREEN_WIDTH);
@@ -362,7 +364,7 @@ export default function UpgradeScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            onPress={() => setShowDisclosure(true)}
+            onPress={() => { captureStatus(); setShowDisclosure(true); }}
             activeOpacity={0.85}
             style={{ borderRadius: 16, overflow: "hidden" }}
           >
@@ -414,6 +416,7 @@ export default function UpgradeScreen() {
         onClose={() => setShowDisclosure(false)}
         plan="business"
         email={user?.email || undefined}
+        onReturn={onReturn}
       />
     </SafeAreaView>
   );

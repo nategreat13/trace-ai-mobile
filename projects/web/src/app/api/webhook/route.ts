@@ -119,6 +119,11 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
 
   await profileDoc.ref.update({
     subscriptionStatus,
+    stripeSubscriptionId: subscription.id,
+    stripeSubscriptionStatus: subscription.status,
+    stripeCurrentPeriodEnd: subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : null,
     ...(subscription.trial_end
       ? { trialEndDate: new Date(subscription.trial_end * 1000) }
       : {}),
@@ -138,6 +143,11 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   await profileDoc.ref.update({
     subscriptionStatus: "free",
     trialEndDate: null,
+    stripeSubscriptionId: subscription.id,
+    stripeSubscriptionStatus: subscription.status,
+    stripeCurrentPeriodEnd: subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : null,
   });
 }
 

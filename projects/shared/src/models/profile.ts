@@ -23,4 +23,9 @@ export interface UserProfile {
   aiLearningShown: boolean;
   profilePictureUrl: string | null;
   createdAt: Date;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripeSubscriptionStatus?: string;
+  stripePriceId?: string;
+  stripeCurrentPeriodEnd?: Date | null;
 }

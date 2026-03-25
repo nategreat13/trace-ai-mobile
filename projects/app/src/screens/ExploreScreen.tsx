@@ -24,6 +24,7 @@ import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
+import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -44,6 +45,7 @@ export default function ExploreScreen() {
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
+  const { captureStatus, onReturn } = useUpgradeDetection();
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
@@ -197,7 +199,7 @@ export default function ExploreScreen() {
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
-      setShowDisclosure(true);
+      captureStatus(); setShowDisclosure(true);
       return;
     }
     await saveDeal({
@@ -288,7 +290,7 @@ export default function ExploreScreen() {
     return (
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => isBlurred ? setShowDisclosure(true) : setExpandedDeal(deal)}
+        onPress={() => { if (isBlurred) { captureStatus(); setShowDisclosure(true); } else { setExpandedDeal(deal); } }}
         style={{
           backgroundColor: theme.card,
           borderRadius: 16,
@@ -683,7 +685,7 @@ export default function ExploreScreen() {
                 style={{ borderRadius: 12, width: "100%" }}
               >
                 <TouchableOpacity
-                  onPress={() => setShowDisclosure(true)}
+                  onPress={() => { captureStatus(); setShowDisclosure(true); }}
                   style={{
                     paddingVertical: 14,
                     alignItems: "center",
@@ -735,6 +737,7 @@ export default function ExploreScreen() {
         onClose={() => setShowDisclosure(false)}
         plan="premium"
         email={user?.email || undefined}
+        onReturn={onReturn}
       />
     </SafeAreaView>
   );

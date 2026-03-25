@@ -3,16 +3,15 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") || "premium";
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
-      <div className="max-w-md w-full text-center">
-        <div className="bg-white rounded-3xl p-10 border border-gray-100 shadow-sm">
+    <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
+      <div className="max-w-[430px] w-full text-center">
+        <div className="rounded-3xl border border-[#2a2a2a] bg-[#141414] p-10">
           <Image
             src="/Bluelogo.png"
             alt="Trace"
@@ -20,41 +19,36 @@ function SuccessContent() {
             height={64}
             className="mx-auto mb-6"
           />
-          <h1 className="text-3xl font-black mb-3">You&apos;re all set!</h1>
-          <p className="text-gray-500 mb-2">
-            Your <strong className="capitalize">{plan}</strong> plan is active
-            with a 3-day free trial.
+          <h1 className="text-3xl font-black text-white mb-3">
+            You&apos;re all set!
+          </h1>
+          <p className="text-gray-400 mb-2">
+            Your <strong className="capitalize text-white">{plan}</strong> plan
+            is active with a 3-day free trial.
           </p>
-          <p className="text-gray-400 text-sm mb-8">
-            Open the Trace app to start exploring deals.
+          <p className="text-gray-500 text-sm mb-8">
+            Close this page to return to Trace.
           </p>
 
-          <div className="bg-gray-50 rounded-2xl p-6 mb-8 text-left">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">
+          <div className="rounded-2xl bg-[#1c1c1e] p-6 mb-6 text-left">
+            <h3 className="text-sm font-bold text-gray-300 mb-3">
               What&apos;s next?
             </h3>
-            <ul className="space-y-2 text-sm text-gray-500">
+            <ul className="space-y-2 text-sm text-gray-400">
               <li className="flex items-start gap-2">
-                <span className="text-trace-green mt-0.5">&#10003;</span>
-                Open the Trace app on your phone
+                <span className="text-green-400 mt-0.5">&#10003;</span>
+                Close this page to return to the app
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-trace-green mt-0.5">&#10003;</span>
+                <span className="text-green-400 mt-0.5">&#10003;</span>
                 Your premium features are already unlocked
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-trace-green mt-0.5">&#10003;</span>
+                <span className="text-green-400 mt-0.5">&#10003;</span>
                 Start swiping through unlimited deals
               </li>
             </ul>
           </div>
-
-          <Link
-            href="/"
-            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            Back to tracetravel.co
-          </Link>
         </div>
       </div>
     </main>

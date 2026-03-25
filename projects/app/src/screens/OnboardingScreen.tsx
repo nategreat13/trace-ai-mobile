@@ -5,7 +5,11 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
-import { createUserProfile, updateUserProfile, getUserProfile } from "../services/firestore";
+import {
+  createUserProfile,
+  updateUserProfile,
+  getUserProfile,
+} from "../services/firestore";
 import { updateUserProfile as updateAuthProfile } from "../services/auth";
 import { DEAL_TYPES, TIMEFRAMES, DEST_OPTIONS } from "../lib/constants";
 import OnboardingStep from "../components/onboarding/OnboardingStep";
@@ -25,7 +29,9 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
-  const [existingProfileId, setExistingProfileId] = useState<string | null>(null);
+  const [existingProfileId, setExistingProfileId] = useState<string | null>(
+    null,
+  );
 
   const [data, setData] = useState({
     firstName: "",
@@ -99,8 +105,12 @@ export default function OnboardingScreen() {
     if (!user) return;
 
     try {
-      const firstName = data.firstName.trim() ? capitalizeName(data.firstName) : "";
-      const lastName = data.lastName.trim() ? capitalizeName(data.lastName) : "";
+      const firstName = data.firstName.trim()
+        ? capitalizeName(data.firstName)
+        : "";
+      const lastName = data.lastName.trim()
+        ? capitalizeName(data.lastName)
+        : "";
       const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
       if (!existingProfileId && fullName) {
@@ -159,7 +169,8 @@ export default function OnboardingScreen() {
     {
       title: "What's your name?",
       subtitle: "We'd love to know you",
-      canProceed: data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
+      canProceed:
+        data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
       content: (
         <View style={{ gap: 12 }}>
           <TextInput
@@ -215,7 +226,13 @@ export default function OnboardingScreen() {
           options={[...DEST_OPTIONS]}
           selected={data.destinationPreference}
           onSelect={(val) =>
-            setData({ ...data, destinationPreference: val as "domestic" | "international" | "both" })
+            setData({
+              ...data,
+              destinationPreference: val as
+                | "domestic"
+                | "international"
+                | "both",
+            })
           }
         />
       ),
@@ -241,7 +258,9 @@ export default function OnboardingScreen() {
         <OptionGrid
           options={[...TIMEFRAMES]}
           selected={data.travelTimeframe}
-          onSelect={(val) => setData({ ...data, travelTimeframe: val as string[] })}
+          onSelect={(val) =>
+            setData({ ...data, travelTimeframe: val as string[] })
+          }
           multi
         />
       ),
@@ -250,12 +269,17 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}>
+      <View style={{ flex: 1, justifyContent: "center" }}>
         {step === 0 && !existingProfileId && (
           <View style={{ alignItems: "center", marginBottom: 24 }}>
             <Text style={{ fontSize: 40, marginBottom: 8 }}>✈️</Text>
             <Text
-              style={{ fontSize: 24, fontWeight: "800", color: theme.foreground, marginBottom: 4 }}
+              style={{
+                fontSize: 24,
+                fontWeight: "800",
+                color: theme.foreground,
+                marginBottom: 4,
+              }}
             >
               Trace AI
             </Text>

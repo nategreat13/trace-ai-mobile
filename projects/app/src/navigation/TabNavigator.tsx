@@ -70,7 +70,7 @@ export default function TabNavigator() {
           name="Upgrade"
           component={UpgradeScreen}
           options={{
-            tabBarLabel: "Upgrade",
+            tabBarLabel: "Business",
             tabBarIcon: ({ color, size }) => <Briefcase color={color} size={size} />,
           }}
         />

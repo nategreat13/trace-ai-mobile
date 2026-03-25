@@ -38,6 +38,7 @@ import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
+import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 
@@ -61,6 +62,7 @@ export default function SwipeDeckScreen() {
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
+  const { captureStatus, onReturn } = useUpgradeDetection();
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -705,6 +707,7 @@ export default function SwipeDeckScreen() {
               <TouchableOpacity
                 onPress={() => {
                   setShowUpgradePopup(false);
+                  captureStatus();
                   setShowDisclosure(true);
                 }}
                 style={{
@@ -732,6 +735,7 @@ export default function SwipeDeckScreen() {
         onClose={() => setShowDisclosure(false)}
         plan="premium"
         email={user?.email || undefined}
+        onReturn={onReturn}
       />
     </SafeAreaView>
   );

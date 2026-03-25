@@ -17,6 +17,7 @@ interface ExternalLinkDisclosureProps {
   onClose: () => void;
   plan?: string;
   email?: string;
+  onReturn?: () => void;
 }
 
 export default function ExternalLinkDisclosure({
@@ -24,13 +25,15 @@ export default function ExternalLinkDisclosure({
   onClose,
   plan,
   email,
+  onReturn,
 }: ExternalLinkDisclosureProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
   const handleContinue = async () => {
-    onClose();
     await openSubscribeUrl(plan, email);
+    onClose();
+    onReturn?.();
   };
 
   return (
@@ -60,8 +63,7 @@ export default function ExternalLinkDisclosure({
             </Text>
             <Text style={[styles.body, { color: theme.mutedForeground }]}>
               You'll be taken to our website to view subscription plans and
-              complete your purchase. Subscriptions are managed by the developer,
-              not Apple.
+              complete your purchase.
             </Text>
 
             <TouchableOpacity
