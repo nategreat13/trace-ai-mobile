@@ -6,6 +6,7 @@ import { X, Check } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
+import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -15,8 +16,9 @@ export default function SubscriptionPlanScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [showDisclosure, setShowDisclosure] = useState(false);
+  const { captureStatus, onReturn } = useUpgradeDetection();
   const [selectedPlan, setSelectedPlan] = useState<string>("premium");
 
   const plans = [
@@ -74,6 +76,7 @@ export default function SubscriptionPlanScreen() {
               <TouchableOpacity
                 onPress={() => {
                   setSelectedPlan(plan.name.toLowerCase());
+                  captureStatus();
                   setShowDisclosure(true);
                 }}
                 style={{
@@ -97,6 +100,8 @@ export default function SubscriptionPlanScreen() {
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
         plan={selectedPlan}
+        email={user?.email || undefined}
+        onReturn={onReturn}
       />
     </SafeAreaView>
   );

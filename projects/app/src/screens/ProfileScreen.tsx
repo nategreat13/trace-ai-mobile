@@ -41,6 +41,7 @@ import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
+import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -53,8 +54,12 @@ export default function ProfileScreen() {
   const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
 
+  console.log(profile?.subscriptionStatus, "LW5RoDkKHB");
+
   const [promoCode, setPromoCode] = useState("");
-  const [promoStatus, setPromoStatus] = useState<null | "success" | "error">(null);
+  const [promoStatus, setPromoStatus] = useState<null | "success" | "error">(
+    null,
+  );
   const [promoLoading, setPromoLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteText, setDeleteText] = useState("");
@@ -63,13 +68,17 @@ export default function ProfileScreen() {
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
+  const { captureStatus, onReturn } = useUpgradeDetection();
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
     if (first) {
       const last = tempLastName.trim();
-      const capitalizeName = (n: string) => n.replace(/\b\w/g, (c) => c.toUpperCase());
-      const fullName = [capitalizeName(first), last ? capitalizeName(last) : ""].filter(Boolean).join(" ");
+      const capitalizeName = (n: string) =>
+        n.replace(/\b\w/g, (c) => c.toUpperCase());
+      const fullName = [capitalizeName(first), last ? capitalizeName(last) : ""]
+        .filter(Boolean)
+        .join(" ");
       await updateProfile({ displayName: fullName });
     }
     setEditingName(false);
@@ -77,9 +86,13 @@ export default function ProfileScreen() {
 
   const handlePickPhoto = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission needed", "Please allow access to your photo library.");
+        Alert.alert(
+          "Permission needed",
+          "Please allow access to your photo library.",
+        );
         return;
       }
 
@@ -104,7 +117,10 @@ export default function ProfileScreen() {
     } catch (error: any) {
       console.error("Photo upload failed:", error);
       setUploadingPhoto(false);
-      Alert.alert("Upload failed", error?.message || "Could not save photo. Check Firebase Storage rules.");
+      Alert.alert(
+        "Upload failed",
+        error?.message || "Could not save photo. Check Firebase Storage rules.",
+      );
     }
   };
 
@@ -161,20 +177,24 @@ export default function ProfileScreen() {
   };
 
   const handleResetPreferences = () => {
-    Alert.alert("Reset Preferences", "This will take you through onboarding again.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Reset",
-        onPress: async () => {
-          await updateProfile({
-            destinationPreference: "both",
-            travelTimeframe: [],
-            dealTypes: [],
-            onboardingComplete: false,
-          });
+    Alert.alert(
+      "Reset Preferences",
+      "This will take you through onboarding again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          onPress: async () => {
+            await updateProfile({
+              destinationPreference: "both",
+              travelTimeframe: [],
+              dealTypes: [],
+              onboardingComplete: false,
+            });
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const settings = [
@@ -194,21 +214,24 @@ export default function ProfileScreen() {
       value:
         profile?.travelTimeframe
           ?.map((t) =>
-            t
-              .replace(/_/g, " ")
-              .replace(/\b\w/g, (l) => l.toUpperCase())
+            t.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
           )
           .join(", ") || "No preference",
     },
     {
       icon: Heart,
       label: "Deal Types",
-      value: profile?.dealTypes?.map((t) => DEAL_TYPE_LABELS[t] || t).join(", ") || "All",
+      value:
+        profile?.dealTypes?.map((t) => DEAL_TYPE_LABELS[t] || t).join(", ") ||
+        "All",
     },
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.muted }} edges={["top", "left", "right"]}>
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.muted }}
+      edges={["top", "left", "right"]}
+    >
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
         {/* Header */}
         <View
@@ -221,7 +244,11 @@ export default function ProfileScreen() {
             borderBottomColor: theme.border,
           }}
         >
-          <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>Profile</Text>
+          <Text
+            style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}
+          >
+            Profile
+          </Text>
         </View>
 
         <View style={{ padding: 16, gap: 12 }}>
@@ -235,9 +262,19 @@ export default function ProfileScreen() {
               borderColor: theme.border,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 24 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 16,
+                marginBottom: 24,
+              }}
+            >
               {/* Avatar with camera overlay */}
-              <TouchableOpacity onPress={handlePickPhoto} disabled={uploadingPhoto}>
+              <TouchableOpacity
+                onPress={handlePickPhoto}
+                disabled={uploadingPhoto}
+              >
                 <View
                   style={{
                     width: 56,
@@ -279,13 +316,24 @@ export default function ProfileScreen() {
                 </View>
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>
-                    {profile?.displayName || user?.displayName || "Travel Explorer"}
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "800",
+                      color: theme.foreground,
+                    }}
+                  >
+                    {profile?.displayName ||
+                      user?.displayName ||
+                      "Travel Explorer"}
                   </Text>
                   <TouchableOpacity
                     onPress={() => {
-                      const name = profile?.displayName || user?.displayName || "";
+                      const name =
+                        profile?.displayName || user?.displayName || "";
                       const parts = name.split(" ");
                       setTempFirstName(parts[0] || "");
                       setTempLastName(parts.slice(1).join(" ") || "");
@@ -295,7 +343,9 @@ export default function ProfileScreen() {
                     <Pencil color={theme.mutedForeground} size={14} />
                   </TouchableOpacity>
                 </View>
-                <Text style={{ fontSize: 14, color: theme.mutedForeground }}>{user?.email}</Text>
+                <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
+                  {user?.email}
+                </Text>
               </View>
             </View>
             {/* Stats grid */}
@@ -309,29 +359,57 @@ export default function ProfileScreen() {
               }}
             >
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "800",
+                    color: theme.foreground,
+                  }}
+                >
                   {profile?.swipeCount || 0}
                 </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>Swipes</Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                  Swipes
+                </Text>
               </View>
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "800",
+                    color: theme.foreground,
+                  }}
+                >
                   {profile?.streakDays || 0}
                 </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>Streak</Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                  Streak
+                </Text>
               </View>
               <View style={{ alignItems: "center" }}>
-                <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground }}>
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "800",
+                    color: theme.foreground,
+                  }}
+                >
                   {profile?.dealHunterLevel || 1}
                 </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>Level</Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                  Level
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Subscription with gradient background */}
           <LinearGradient
-            colors={scheme === "dark" ? ["#1c1917", "#1a1a1a"] : ["#fff1f2", "#fff7ed"]}
+            colors={
+              scheme === "dark"
+                ? ["#1c1917", "#1a1a1a"]
+                : ["#fff1f2", "#fff7ed"]
+            }
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{
@@ -341,7 +419,14 @@ export default function ProfileScreen() {
               borderColor: theme.border,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, marginBottom: 16 }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: theme.foreground,
+                marginBottom: 16,
+              }}
+            >
               Subscription
             </Text>
             <View
@@ -350,29 +435,47 @@ export default function ProfileScreen() {
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: 16,
-                backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.7)",
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(255,255,255,0.05)"
+                    : "rgba(255,255,255,0.7)",
                 borderRadius: 12,
                 marginBottom: 16,
               }}
             >
               <View>
                 <Text
-                  style={{ fontWeight: "600", color: theme.foreground, textTransform: "capitalize" }}
+                  style={{
+                    fontWeight: "600",
+                    color: theme.foreground,
+                    textTransform: "capitalize",
+                  }}
                 >
                   {profile?.subscriptionStatus || "free"}
                 </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4 }}>
-                  {profile?.subscriptionStatus === "trial" && profile?.trialEndDate
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: theme.mutedForeground,
+                    marginTop: 4,
+                  }}
+                >
+                  {profile?.subscriptionStatus === "trial" &&
+                  profile?.trialEndDate
                     ? `Trial ends ${new Date(profile.trialEndDate).toLocaleDateString()}`
-                    : profile?.subscriptionStatus === "premium" || profile?.subscriptionStatus === "business"
-                    ? "Active subscription"
-                    : "Upgrade to unlock premium features"}
+                    : profile?.subscriptionStatus === "premium" ||
+                        profile?.subscriptionStatus === "business"
+                      ? "Active subscription"
+                      : "Upgrade to unlock premium features"}
                 </Text>
               </View>
               <Crown color={colors.brand.rose500} size={20} />
             </View>
             <TouchableOpacity
-              onPress={() => setShowDisclosure(true)}
+              onPress={() => {
+                captureStatus();
+                setShowDisclosure(true);
+              }}
               style={{
                 backgroundColor: colors.brand.traceRed,
                 borderRadius: 12,
@@ -383,9 +486,10 @@ export default function ProfileScreen() {
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
                 {profile?.subscriptionStatus === "free"
                   ? "View Plans"
-                  : profile?.subscriptionStatus === "premium" || profile?.subscriptionStatus === "business"
-                  ? "Manage Plan"
-                  : "View Plans"}
+                  : profile?.subscriptionStatus === "premium" ||
+                      profile?.subscriptionStatus === "business"
+                    ? "Manage Plan"
+                    : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -408,7 +512,13 @@ export default function ProfileScreen() {
                 marginBottom: 16,
               }}
             >
-              <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground }}>
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "700",
+                  color: theme.foreground,
+                }}
+              >
                 Travel Preferences
               </Text>
               <TouchableOpacity
@@ -424,22 +534,49 @@ export default function ProfileScreen() {
                 }}
               >
                 <RefreshCw color={theme.foreground} size={14} />
-                <Text style={{ fontSize: 12, fontWeight: "600", color: theme.foreground }}>Reset</Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: "600",
+                    color: theme.foreground,
+                  }}
+                >
+                  Reset
+                </Text>
               </TouchableOpacity>
             </View>
             {settings.map((s, i) => (
-              <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}>
+              <View
+                key={i}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  paddingVertical: 8,
+                }}
+              >
                 <s.icon color={theme.mutedForeground} size={20} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 14, fontWeight: "500", color: theme.foreground }}>{s.label}</Text>
-                  <Text style={{ fontSize: 12, color: theme.mutedForeground }}>{s.value}</Text>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "500",
+                      color: theme.foreground,
+                    }}
+                  >
+                    {s.label}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                    {s.value}
+                  </Text>
                 </View>
               </View>
             ))}
           </View>
 
           {/* Promo Code */}
-          {(profile?.subscriptionStatus === "free" || profile?.subscriptionStatus === "trial") && (
+          {(profile?.subscriptionStatus === "free" ||
+            profile?.subscriptionStatus === "trial") && (
             <View
               style={{
                 backgroundColor: theme.card,
@@ -449,9 +586,24 @@ export default function ProfileScreen() {
                 borderColor: theme.border,
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
                 <Tag color={theme.foreground} size={16} />
-                <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground }}>Promo Code</Text>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: theme.foreground,
+                  }}
+                >
+                  Promo Code
+                </Text>
               </View>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <TextInput
@@ -486,21 +638,45 @@ export default function ProfileScreen() {
                     opacity: promoLoading || !promoCode ? 0.5 : 1,
                   }}
                 >
-                  <Text style={{ color: theme.background, fontSize: 14, fontWeight: "600" }}>
+                  <Text
+                    style={{
+                      color: theme.background,
+                      fontSize: 14,
+                      fontWeight: "600",
+                    }}
+                  >
                     {promoLoading ? "..." : "Apply"}
                   </Text>
                 </TouchableOpacity>
               </View>
               {promoStatus === "success" && (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    marginTop: 8,
+                  }}
+                >
                   <CheckCircle color="#16a34a" size={16} />
-                  <Text style={{ color: "#16a34a", fontSize: 14 }}>Premium activated!</Text>
+                  <Text style={{ color: "#16a34a", fontSize: 14 }}>
+                    Premium activated!
+                  </Text>
                 </View>
               )}
               {promoStatus === "error" && (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    marginTop: 8,
+                  }}
+                >
                   <AlertCircle color="#ef4444" size={16} />
-                  <Text style={{ color: "#ef4444", fontSize: 14 }}>Invalid promo code.</Text>
+                  <Text style={{ color: "#ef4444", fontSize: 14 }}>
+                    Invalid promo code.
+                  </Text>
                 </View>
               )}
             </View>
@@ -516,10 +692,23 @@ export default function ProfileScreen() {
               borderColor: theme.border,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, marginBottom: 4 }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: theme.foreground,
+                marginBottom: 4,
+              }}
+            >
               Share Trace
             </Text>
-            <Text style={{ fontSize: 12, color: theme.mutedForeground, marginBottom: 16 }}>
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.mutedForeground,
+                marginBottom: 16,
+              }}
+            >
               Invite friends to find flight deals with AI
             </Text>
             <TouchableOpacity onPress={handleShare} activeOpacity={0.85}>
@@ -537,7 +726,11 @@ export default function ProfileScreen() {
                 }}
               >
                 <Share2 color="#fff" size={16} />
-                <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>Share with Friends</Text>
+                <Text
+                  style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}
+                >
+                  Share with Friends
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -558,7 +751,15 @@ export default function ProfileScreen() {
             }}
           >
             <LogOut color={theme.foreground} size={20} />
-            <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground }}>Sign Out</Text>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: theme.foreground,
+              }}
+            >
+              Sign Out
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -576,9 +777,10 @@ export default function ProfileScreen() {
             }}
           >
             <Trash2 color="#ef4444" size={20} />
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#ef4444" }}>Delete Account</Text>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: "#ef4444" }}>
+              Delete Account
+            </Text>
           </TouchableOpacity>
-
         </View>
       </ScrollView>
 
@@ -587,7 +789,12 @@ export default function ProfileScreen() {
         <TouchableOpacity
           activeOpacity={1}
           onPress={() => setEditingName(false)}
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", paddingHorizontal: 16 }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            paddingHorizontal: 16,
+          }}
         >
           <View
             style={{
@@ -598,7 +805,14 @@ export default function ProfileScreen() {
               borderColor: theme.border,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, marginBottom: 16 }}>
+            <Text
+              style={{
+                fontSize: 16,
+                fontWeight: "700",
+                color: theme.foreground,
+                marginBottom: 16,
+              }}
+            >
               Edit Name
             </Text>
             <TextInput
@@ -635,15 +849,40 @@ export default function ProfileScreen() {
             <View style={{ flexDirection: "row", gap: 8 }}>
               <TouchableOpacity
                 onPress={() => setEditingName(false)}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, alignItems: "center" }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  alignItems: "center",
+                }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground }}>Cancel</Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color: theme.foreground,
+                  }}
+                >
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleSaveName}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: colors.brand.traceRed, alignItems: "center" }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  backgroundColor: colors.brand.traceRed,
+                  alignItems: "center",
+                }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: "#fff" }}>Save</Text>
+                <Text
+                  style={{ fontSize: 14, fontWeight: "600", color: "#fff" }}
+                >
+                  Save
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -653,6 +892,8 @@ export default function ProfileScreen() {
       <ExternalLinkDisclosure
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
+        email={user?.email || undefined}
+        onReturn={onReturn}
       />
 
       {/* Delete modal */}
@@ -660,17 +901,53 @@ export default function ProfileScreen() {
         <TouchableOpacity
           activeOpacity={1}
           onPress={() => setShowDeleteModal(false)}
-          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", paddingHorizontal: 16 }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            paddingHorizontal: 16,
+          }}
         >
-          <View style={{ backgroundColor: theme.card, borderRadius: 20, padding: 24, borderWidth: 1, borderColor: theme.border }}>
-            <Text style={{ fontSize: 18, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 20,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: theme.foreground,
+                marginBottom: 8,
+              }}
+            >
               Delete Account
             </Text>
-            <Text style={{ fontSize: 14, color: theme.mutedForeground, marginBottom: 16 }}>
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                marginBottom: 16,
+              }}
+            >
               This will permanently delete your profile and all your data.
             </Text>
-            <Text style={{ fontSize: 14, color: theme.mutedForeground, marginBottom: 8 }}>
-              Type <Text style={{ fontWeight: "700", color: theme.foreground }}>DELETE</Text> to confirm:
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                marginBottom: 8,
+              }}
+            >
+              Type{" "}
+              <Text style={{ fontWeight: "700", color: theme.foreground }}>
+                DELETE
+              </Text>{" "}
+              to confirm:
             </Text>
             <TextInput
               value={deleteText}
@@ -689,10 +966,28 @@ export default function ProfileScreen() {
             />
             <View style={{ flexDirection: "row", gap: 8 }}>
               <TouchableOpacity
-                onPress={() => { setShowDeleteModal(false); setDeleteText(""); }}
-                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, borderWidth: 1, borderColor: theme.border, alignItems: "center" }}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setDeleteText("");
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  alignItems: "center",
+                }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground }}>Cancel</Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color: theme.foreground,
+                  }}
+                >
+                  Cancel
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleDeleteAccount}
@@ -701,11 +996,19 @@ export default function ProfileScreen() {
                   flex: 1,
                   paddingVertical: 12,
                   borderRadius: 8,
-                  backgroundColor: deleteText === "DELETE" ? "#ef4444" : theme.muted,
+                  backgroundColor:
+                    deleteText === "DELETE" ? "#ef4444" : theme.muted,
                   alignItems: "center",
                 }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "600", color: deleteText === "DELETE" ? "#fff" : theme.mutedForeground }}>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color:
+                      deleteText === "DELETE" ? "#fff" : theme.mutedForeground,
+                  }}
+                >
                   Delete
                 </Text>
               </TouchableOpacity>

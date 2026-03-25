@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-trace-red: #FF655B;
+  --color-trace-pink: #FF8A80;
+  --color-trace-amber: #F59E0B;
+  --color-trace-amber-dark: #D97706;
+  --color-trace-green: #00D665;
+}
