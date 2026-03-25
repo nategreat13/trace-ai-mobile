@@ -9,7 +9,7 @@ const PRICE_IDS: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
-    const { paymentMethodId, email, plan } = await req.json();
+    const { paymentMethodId, email, name, plan } = await req.json();
 
     if (!paymentMethodId || !email || !plan) {
       return NextResponse.json(
@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
     // 1. Create a Stripe Customer
     const customer = await stripe.customers.create({
       email,
+      name: name || undefined,
       payment_method: paymentMethodId,
       invoice_settings: { default_payment_method: paymentMethodId },
     });

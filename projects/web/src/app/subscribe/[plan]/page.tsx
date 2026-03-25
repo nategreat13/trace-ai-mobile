@@ -119,6 +119,7 @@ function CheckoutForm({ planId }: { planId: string }) {
         body: JSON.stringify({
           paymentMethodId: paymentMethod.id,
           email,
+          name,
           plan: planId,
         }),
       });
