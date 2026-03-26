@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ──── User Profiles ────
+    match /userProfiles/{docId} {
+
+      // Users can read their own profile
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
+      // Users can create a profile for themselves (subscription defaults to "free")
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.subscriptionStatus == "free";
+
+      // Users can update their own profile but NOT subscription/Stripe fields
+      // (those are written by the server via Admin SDK which bypasses rules)
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
+                    && request.resource.data.trialEndDate == resource.data.trialEndDate
+                    && unchangedStripeFields();
+
+      // Users can delete their own profile (account deletion)
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+
+      function unchangedStripeFields() {
+        // If a Stripe field doesn't exist yet on the doc, it also shouldn't appear in the update.
+        // Using the "field exists ? must match : must not be added" pattern.
+        let after = request.resource.data;
+        let before = resource.data;
+        return (!("stripeCustomerId" in after) || after.stripeCustomerId == before.stripeCustomerId)
+            && (!("stripeSubscriptionId" in after) || after.stripeSubscriptionId == before.stripeSubscriptionId)
+            && (!("stripeSubscriptionStatus" in after) || after.stripeSubscriptionStatus == before.stripeSubscriptionStatus)
+            && (!("stripePriceId" in after) || after.stripePriceId == before.stripePriceId)
+            && (!("stripeCurrentPeriodEnd" in after) || after.stripeCurrentPeriodEnd == before.stripeCurrentPeriodEnd);
+      }
+    }
+
+    // ──── Swipe Actions ────
+    match /swipeActions/{docId} {
+
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+
+      // Swipes are immutable — no updates allowed
+    }
+
+    // ──── Saved Flight Deals ────
+    match /flightDeals/{docId} {
+
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+
+      // Saved deals are immutable — no updates allowed
+    }
+
+    // ──── Deal Alerts ────
+    match /dealAlerts/{docId} {
+
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own alerts (e.g. status change to "matched")
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == resource.data.userId;
+
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    // ──── Deny everything else ────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
