@@ -31,9 +31,12 @@ export default function ExternalLinkDisclosure({
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
   const handleContinue = async () => {
-    await openSubscribeUrl(plan, email);
-    onClose();
-    onReturn?.();
+    try {
+      await openSubscribeUrl(plan, email);
+    } finally {
+      onClose();
+      onReturn?.();
+    }
   };
 
   return (

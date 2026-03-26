@@ -47,10 +47,11 @@ export async function deleteUserProfile(docId: string): Promise<void> {
 
 /** Delete all Firestore data for a user (profile, swipes, saved deals, alerts). */
 export async function deleteAllUserData(userId: string, profileDocId?: string): Promise<void> {
-  // Delete user profile
-  if (profileDocId) {
-    await deleteDoc(doc(db, "userProfiles", profileDocId));
-  }
+  // Delete all user profile documents (handles duplicates)
+  const profileSnap = await getDocs(
+    query(collection(db, "userProfiles"), where("userId", "==", userId))
+  );
+  await Promise.all(profileSnap.docs.map((d) => deleteDoc(d.ref)));
 
   // Delete swipe actions
   const swipeSnap = await getDocs(

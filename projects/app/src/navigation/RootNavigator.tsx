@@ -60,6 +60,11 @@ export default function RootNavigator() {
             component={UpgradeWelcomeScreen}
             options={{ presentation: "fullScreenModal" }}
           />
+          <Stack.Screen
+            name="EditPreferences"
+            component={OnboardingScreen}
+            options={{ presentation: "fullScreenModal" }}
+          />
         </>
       )}
     </Stack.Navigator>

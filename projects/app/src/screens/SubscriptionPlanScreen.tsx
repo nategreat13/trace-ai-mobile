@@ -24,6 +24,7 @@ export default function SubscriptionPlanScreen() {
   const plans = [
     {
       name: "Premium",
+      id: "premium",
       description: "Unlock all features",
       color: colors.brand.traceRed,
       features: ["Unlimited swipes", "Unlimited saves", "Full Explore", "Deal alerts"],
@@ -31,6 +32,7 @@ export default function SubscriptionPlanScreen() {
     },
     {
       name: "Business",
+      id: "business",
       description: "The ultimate experience",
       color: colors.brand.amber500,
       features: ["Everything in Premium", "Business class deals", "48h early access", "VIP support"],
@@ -41,7 +43,7 @@ export default function SubscriptionPlanScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 }}>
-        <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>Manage Plan</Text>
+        <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>Choose a Plan</Text>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <X color={theme.foreground} size={24} />
         </TouchableOpacity>
@@ -75,7 +77,7 @@ export default function SubscriptionPlanScreen() {
             {!plan.current && (
               <TouchableOpacity
                 onPress={() => {
-                  setSelectedPlan(plan.name.toLowerCase());
+                  setSelectedPlan(plan.id);
                   captureStatus();
                   setShowDisclosure(true);
                 }}
@@ -88,7 +90,7 @@ export default function SubscriptionPlanScreen() {
                 }}
               >
                 <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>
-                  View Plans
+                  Get Started
                 </Text>
               </TouchableOpacity>
             )}

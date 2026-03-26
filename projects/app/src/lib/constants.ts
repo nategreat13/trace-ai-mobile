@@ -4,7 +4,7 @@ export const MAX_DAILY_SWIPES = 8;
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const SUBSCRIBE_URL = __DEV__
   ? (Constants.expoConfig?.extra?.devSubscribeUrl ?? "http://localhost:3000/subscribe")
-  : "https://subscribe.tracetravel.co";
+  : "https://subscribe.tracetravel.co/subscribe";
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 

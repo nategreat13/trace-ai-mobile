@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TextInput, Alert, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -22,6 +22,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function OnboardingScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute();
+  const isEditing = route.name === "EditPreferences";
   const { user, profile, setProfile } = useAuth();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -113,12 +115,9 @@ export default function OnboardingScreen() {
         : "";
       const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
-      if (!existingProfileId && fullName) {
-        await updateAuthProfile({ displayName: fullName });
-      }
-
-      if (existingProfileId) {
-        await updateUserProfile(existingProfileId, {
+      if (profile?.id) {
+        // Existing profile — update preferences
+        const updates = {
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -126,10 +125,15 @@ export default function OnboardingScreen() {
           travelPersonality: generatedPersonality,
           onboardingComplete: true,
           howToSwipeShown: true,
-        });
-        const updated = await getUserProfile(user.uid);
-        if (updated) setProfile(updated);
+        };
+        await updateUserProfile(profile.id, updates);
+        setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
       } else {
+        // Brand new user — create profile
+        if (fullName) {
+          await updateAuthProfile({ displayName: fullName });
+        }
+
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
@@ -156,6 +160,10 @@ export default function OnboardingScreen() {
         });
         const newProfile = await getUserProfile(user.uid);
         if (newProfile) setProfile(newProfile);
+      }
+
+      if (isEditing) {
+        navigation.goBack();
       }
     } catch (error) {
       console.error("Failed to save profile:", error);

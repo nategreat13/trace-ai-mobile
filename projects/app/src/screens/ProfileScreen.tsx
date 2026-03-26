@@ -39,9 +39,12 @@ import { useProfile } from "../hooks/useProfile";
 import { logout, deleteAuthUser } from "../services/auth";
 import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
-import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
+import { DEAL_TYPE_LABELS, DEST_LABELS, SUBSCRIBE_URL } from "../lib/constants";
+import * as WebBrowser from "expo-web-browser";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
 import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
+
+const MANAGE_URL = SUBSCRIBE_URL.replace(/\/subscribe$/, "/manage");
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -184,13 +187,8 @@ export default function ProfileScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: "Reset",
-          onPress: async () => {
-            await updateProfile({
-              destinationPreference: "both",
-              travelTimeframe: [],
-              dealTypes: [],
-              onboardingComplete: false,
-            });
+          onPress: () => {
+            navigation.navigate("EditPreferences");
           },
         },
       ],
@@ -473,8 +471,19 @@ export default function ProfileScreen() {
             </View>
             <TouchableOpacity
               onPress={() => {
-                captureStatus();
-                setShowDisclosure(true);
+                if (
+                  profile?.subscriptionStatus === "premium" ||
+                  profile?.subscriptionStatus === "business"
+                ) {
+                  captureStatus();
+                  const url = `${MANAGE_URL}?email=${encodeURIComponent(user?.email || "")}`;
+                  WebBrowser.openBrowserAsync(url).finally(() => {
+                    onReturn();
+                  });
+                } else {
+                  captureStatus();
+                  setShowDisclosure(true);
+                }
               }}
               style={{
                 backgroundColor: colors.brand.traceRed,
@@ -484,12 +493,10 @@ export default function ProfileScreen() {
               }}
             >
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
-                {profile?.subscriptionStatus === "free"
-                  ? "View Plans"
-                  : profile?.subscriptionStatus === "premium" ||
-                      profile?.subscriptionStatus === "business"
-                    ? "Manage Plan"
-                    : "View Plans"}
+                {profile?.subscriptionStatus === "premium" ||
+                profile?.subscriptionStatus === "business"
+                  ? "Manage Plan"
+                  : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>
@@ -893,6 +900,7 @@ export default function ProfileScreen() {
         visible={showDisclosure}
         onClose={() => setShowDisclosure(false)}
         email={user?.email || undefined}
+        plan="business"
         onReturn={onReturn}
       />
 

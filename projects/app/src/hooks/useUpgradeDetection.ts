@@ -17,8 +17,16 @@ export function useUpgradeDetection() {
   }, [profile?.subscriptionStatus]);
 
   const onReturn = useCallback(() => {
+    // Check immediately in case the profile already updated while the browser was open
+    const prev = prevStatusRef.current;
+    const curr = profile?.subscriptionStatus;
+    if (prev !== curr) {
+      if (curr === "business") navigation.navigate("BusinessWelcome");
+      else if (curr === "premium") navigation.navigate("PremiumWelcome");
+      return;
+    }
     setWaitingForUpgrade(true);
-  }, []);
+  }, [profile?.subscriptionStatus, navigation]);
 
   useEffect(() => {
     if (!waitingForUpgrade) return;

@@ -17,6 +17,7 @@ export type RootStackParamList = {
   PremiumWelcome: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;
+  EditPreferences: undefined;
   DealType: undefined;
   DealCategory: undefined;
 };
