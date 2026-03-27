@@ -580,9 +580,7 @@ export default function ProfileScreen() {
           </View>
 
           {/* Promo Code */}
-          {(profile?.subscriptionStatus === "free" ||
-            profile?.subscriptionStatus === "trial") && (
-            <View
+          <View
               style={{
                 backgroundColor: theme.card,
                 borderRadius: 16,
@@ -685,7 +683,6 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
-          )}
 
           {/* Share with gradient button */}
           <View
