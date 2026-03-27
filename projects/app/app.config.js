@@ -6,7 +6,7 @@ const devApiUrl = isCodespaces
 
 const devSubscribeUrl = isCodespaces
   ? "https://opulent-space-train-pjxwjr9qpvqv26xpx-3000.app.github.dev/subscribe"
-  : "http://localhost:3000/subscribe";
+  : "http://localhost:3002/subscribe";
 
 module.exports = ({ config }) => ({
   ...config,

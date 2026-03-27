@@ -57,8 +57,6 @@ export default function ProfileScreen() {
   const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
 
-  console.log(profile?.subscriptionStatus, "LW5RoDkKHB");
-
   const [promoCode, setPromoCode] = useState("");
   const [promoStatus, setPromoStatus] = useState<null | "success" | "error">(
     null,

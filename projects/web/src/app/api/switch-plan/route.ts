@@ -63,10 +63,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Swap the price with proration so they only pay/get credited the difference
+    const isTrial = subscription.status === "trialing";
+
+    // Swap the price — skip proration during trial since no billing has occurred
     const updated = await stripe.subscriptions.update(subscriptionId, {
       items: [{ id: currentItem.id, price: newPriceId }],
-      proration_behavior: "create_prorations",
+      proration_behavior: isTrial ? "none" : "create_prorations",
       metadata: { plan },
       // If the sub was set to cancel at period end, undo that
       cancel_at_period_end: false,

@@ -61,6 +61,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isTrial = subscription.status === "trialing";
+
+    if (isTrial) {
+      // During trial — no charge now, just swap price at trial end
+      const newPrice = await stripe.prices.retrieve(newPriceId);
+
+      return NextResponse.json({
+        amountDue: 0,
+        charge: 0,
+        credit: 0,
+        isTrial: true,
+        newPriceAmount: newPrice.unit_amount ?? 0,
+        currentPlan: profile.subscriptionStatus,
+        periodEnd: subscription.trial_end
+          ? new Date(subscription.trial_end * 1000).toISOString()
+          : null,
+      });
+    }
+
     // Preview the proration with an upcoming invoice
     const invoice = await stripe.invoices.createPreview({
       customer: subscription.customer as string,
@@ -80,6 +99,7 @@ export async function POST(req: NextRequest) {
       amountDue,
       charge,
       credit,
+      isTrial: false,
       currentPlan: profile.subscriptionStatus,
       periodEnd: subscription.current_period_end
         ? new Date(subscription.current_period_end * 1000).toISOString()
