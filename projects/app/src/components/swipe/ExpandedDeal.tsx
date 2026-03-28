@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -24,12 +24,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
-import { API_BASE_URL } from "../../lib/constants";
 import WeatherPreview from "./WeatherPreview";
 import DealExperiences from "./DealExperiences";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealQuickTips from "./DealQuickTips";
 import DealTravelTips from "./DealTravelTips";
+import DealBudgetPreview from "./DealBudgetPreview";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
@@ -42,6 +42,112 @@ interface ExpandedDealProps {
   onSave: () => void;
   onBook: () => void;
   userProfile?: any;
+}
+
+type FitLevel = { color: "green" | "yellow" | "red" };
+
+// ── Helper: score how well a deal matches the user's profile ─────────────────
+function getDealFitLevel(deal: Deal, profile: any): FitLevel {
+  const preferredTypes: string[] = profile.dealTypes || [];
+  const destPref: string = profile.destinationPreference || "both";
+  const isIntl = (deal.domestic_or_international || "")
+    .toLowerCase()
+    .includes("international");
+
+  const typeMatch =
+    preferredTypes.length === 0 ||
+    preferredTypes.includes(deal.deal_type || "") ||
+    preferredTypes.includes("surprise");
+  const destMatch =
+    destPref === "both" ||
+    (destPref === "international" && isIntl) ||
+    (destPref === "domestic" && !isIntl);
+
+  if (typeMatch && destMatch) return { color: "green" };
+  if (typeMatch || destMatch) return { color: "yellow" };
+  return { color: "red" };
+}
+
+type Segment = { text: string; bold?: boolean };
+const b = (text: string): Segment => ({ text, bold: true });
+const t = (text: string): Segment => ({ text });
+
+// ── Helper: generate personalized AI fit summary from local profile data ─────
+function generateFitSummary(deal: Deal, profile: any): Segment[] {
+  const preferredTypes: string[] = profile.dealTypes || [];
+  const destPref: string = profile.destinationPreference || "both";
+  const isIntl = (deal.domestic_or_international || "")
+    .toLowerCase()
+    .includes("international");
+
+  const typeMatch =
+    preferredTypes.length === 0 ||
+    preferredTypes.includes(deal.deal_type || "") ||
+    preferredTypes.includes("surprise");
+  const destMatch =
+    destPref === "both" ||
+    (destPref === "international" && isIntl) ||
+    (destPref === "domestic" && !isIntl);
+
+  const dest = deal.destination || "This destination";
+  const vibe = deal.vibe_description
+    ? deal.vibe_description.split(/[.!?]/)[0].trim()
+    : "";
+
+  const typeOffers: Record<string, string> = {
+    luxury: "upscale stays and premium experiences",
+    adventure: "outdoor adventure and active exploration",
+    budget: "strong value without sacrificing the experience",
+    cultural: "rich history, local culture, and real depth",
+    family: "activities the whole family enjoys",
+    relaxation: "beaches, slow mornings, and genuine downtime",
+    romantic: "intimate settings built for two",
+  };
+  const offerDesc = typeOffers[deal.deal_type || ""] || "a solid travel experience";
+
+  // ── Sentence 1 segments ──────────────────────────────────────────────────
+  let s1: Segment[];
+  if (typeMatch && destMatch) {
+    if (vibe) {
+      s1 = [t("This one is "), b("right in your wheelhouse"), t(`. ${vibe}, which is exactly the type of trip you gravitate toward.`)];
+    } else {
+      s1 = [b(dest), t(" delivers "), b(offerDesc), t(", which lines up well with how you like to travel.")];
+    }
+  } else if (typeMatch) {
+    if (vibe) {
+      s1 = [b(vibe), t(", and that style of travel is exactly what you tend to look for. The destination might be new territory, but the experience is familiar.")];
+    } else {
+      s1 = [t("The style of this trip "), b("matches how you like to travel"), t(". "), b(dest), t(` delivers ${offerDesc}, even if it stretches your usual geography.`)];
+    }
+  } else if (destMatch) {
+    if (vibe) {
+      s1 = [b(dest), t(" is headed in the right direction. "), b(vibe), t(", so even if it's a little different from your usual vibe, there is real appeal here.")];
+    } else {
+      s1 = [b(dest), t(" fits where you want to go. The deal type is a bit outside your usual, but the location itself is on point.")];
+    }
+  } else {
+    if (vibe) {
+      s1 = [b(vibe), t(". It's a bit outside your usual range, but that contrast is "), b("exactly what makes it worth a second look"), t(".")];
+    } else {
+      s1 = [b(dest), t(" is outside your usual picks, but sometimes the trips you least expect end up being the most memorable.")];
+    }
+  }
+
+  // ── Sentence 2 segments ──────────────────────────────────────────────────
+  let s2: Segment[];
+  if (deal.discount_pct >= 40) {
+    s2 = [t(" At "), b(`${deal.discount_pct}% off`), t(", the price alone makes this hard to ignore.")];
+  } else if (deal.discount_pct >= 15) {
+    s2 = [t(" The "), b(`${deal.discount_pct}% off`), t(" regular fares makes the timing genuinely good right now.")];
+  } else if (deal.discount_pct > 0) {
+    s2 = [t(" You're saving "), b(`${deal.discount_pct}%`), t(" off normal prices, which gives this deal a real edge.")];
+  } else if (deal.price) {
+    s2 = [t(" At "), b(`$${deal.price}`), t(", it's solid value for everything "), b(dest), t(" brings to the table.")];
+  } else {
+    s2 = [t(" The timing on this makes it worth acting on sooner rather than later.")];
+  }
+
+  return [...s1, ...s2];
 }
 
 // ── Helper: parse travel_tips / interesting_facts string[] into objects ──────
@@ -82,24 +188,14 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
 
-  const [fitSummary, setFitSummary] = useState<string | null>(null);
-  const [fitLoading, setFitLoading] = useState(false);
   const firstName = (userProfile?.displayName || "").split(" ")[0] || null;
-
-  useEffect(() => {
-    if (!visible || !userProfile || !deal) return;
-    setFitSummary(null);
-    setFitLoading(true);
-    fetch(`${API_BASE_URL}/ai/deal-fit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deal, profile: userProfile }),
-    })
-      .then((r) => r.json())
-      .then((data) => setFitSummary(data.summary || null))
-      .catch(() => setFitSummary(null))
-      .finally(() => setFitLoading(false));
-  }, [visible, deal?.id]);
+  const fitData = useMemo(
+    () =>
+      userProfile && deal
+        ? { segments: generateFitSummary(deal, userProfile), level: getDealFitLevel(deal, userProfile) }
+        : null,
+    [deal?.id, userProfile]
+  );
 
   if (!deal) return null;
 
@@ -403,45 +499,67 @@ export default function ExpandedDeal({
               </View>
             )}
 
-            {/* Weather */}
-            <WeatherPreview deal={deal} />
+            {/* Personal AI fit — just below flight details */}
+            {!!userProfile && !!fitData && (() => {
+              const fc =
+                fitData.level.color === "green"
+                  ? {
+                      gradient: ["rgba(22,163,74,0.22)", "rgba(5,150,105,0.10)", "rgba(16,185,129,0.03)"] as const,
+                      border: "rgba(22,163,74,0.30)",
+                      accent: "#16a34a",
+                    }
+                  : fitData.level.color === "yellow"
+                  ? {
+                      gradient: ["rgba(202,138,4,0.22)", "rgba(234,179,8,0.10)", "rgba(249,115,22,0.03)"] as const,
+                      border: "rgba(202,138,4,0.30)",
+                      accent: "#b45309",
+                    }
+                  : {
+                      gradient: ["rgba(255,101,91,0.22)", "rgba(236,72,153,0.10)", "rgba(139,92,246,0.03)"] as const,
+                      border: "rgba(255,101,91,0.30)",
+                      accent: colors.brand.traceRed,
+                    };
 
-            {/* Personal AI fit */}
-            {(fitLoading || fitSummary) && (
-              <View
-                style={[
-                  styles.fitCard,
-                  {
-                    backgroundColor: scheme === "dark" ? "rgba(255,101,91,0.08)" : "rgba(255,101,91,0.05)",
-                    borderColor: scheme === "dark" ? "rgba(255,101,91,0.3)" : "rgba(255,101,91,0.2)",
-                  },
-                ]}
-              >
-                <View style={styles.fitHeader}>
-                  <View style={styles.fitIconWrap}>
-                    <Sparkles size={15} color="#ffffff" />
-                  </View>
-                  <Text style={[styles.fitLabel, { color: colors.brand.traceRed }]}>
-                    {firstName ? `AI fit for ${firstName}` : "Your AI fit"}
-                  </Text>
-                </View>
-                {fitLoading ? (
-                  <View style={styles.fitLoadingRow}>
-                    <View style={[styles.fitPulseDot, { backgroundColor: colors.brand.traceRed }]} />
-                    <Text style={[styles.fitLoadingText, { color: theme.mutedForeground }]}>
-                      {firstName ? `Analyzing this deal for ${firstName}…` : "Analyzing your fit…"}
+              return (
+                <LinearGradient
+                  colors={fc.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[
+                    styles.fitCard,
+                    { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 },
+                  ]}
+                >
+                  <View style={styles.fitShine} />
+
+                  <View style={styles.fitHeader}>
+                    <View style={[styles.fitIconWrap, { backgroundColor: fc.accent }]}>
+                      <Sparkles size={13} color="#ffffff" />
+                    </View>
+                    <Text style={[styles.fitLabel, { color: fc.accent }]}>
+                      {firstName ? `AI Fit for ${firstName}` : "Your AI Fit"}
                     </Text>
                   </View>
-                ) : (
+
                   <Animated.Text
                     entering={FadeIn.duration(400)}
                     style={[styles.fitText, { color: theme.foreground }]}
                   >
-                    {fitSummary}
+                    {fitData.segments.map((seg, i) =>
+                      seg.bold
+                        ? <Text key={i} style={styles.fitTextBold}>{seg.text}</Text>
+                        : <Text key={i}>{seg.text}</Text>
+                    )}
                   </Animated.Text>
-                )}
-              </View>
-            )}
+                </LinearGradient>
+              );
+            })()}
+
+            {/* Daily Budget Estimate */}
+            <DealBudgetPreview deal={deal} />
+
+            {/* Weather */}
+            <WeatherPreview deal={deal} />
 
             {/* AI Insight */}
             {(!!deal.ai_insight || !!deal.vibe_description) && (
@@ -585,9 +703,14 @@ const styles = StyleSheet.create({
   heroContainer: {
     height: HERO_HEIGHT,
     width: "100%",
+    overflow: "hidden",
   },
   heroImage: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: SCREEN_WIDTH,
+    height: HERO_HEIGHT,
   },
   closeButton: {
     position: "absolute",
@@ -788,45 +911,41 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
+    overflow: "hidden",
+  },
+  fitShine: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   fitHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
+    gap: 8,
+    marginBottom: 12,
   },
   fitIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: colors.brand.traceRed,
   },
   fitLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  fitLoadingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  fitPulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    opacity: 0.7,
-  },
-  fitLoadingText: {
-    fontSize: 13,
-    fontStyle: "italic",
+    letterSpacing: 1,
   },
   fitText: {
     fontSize: 14,
     lineHeight: 22,
+  },
+  fitTextBold: {
+    fontWeight: "800",
   },
 
   // ── AI Insight card ─────────────────────────────────────────────────────

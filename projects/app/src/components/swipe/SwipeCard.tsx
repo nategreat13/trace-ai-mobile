@@ -257,18 +257,6 @@ export default function SwipeCard({
 
   // ── Derived display values ──────────────────────────────────────────
   const formattedPrice = `$${deal.price}`;
-  const trendArrow =
-    deal.price_trend === "dropping"
-      ? "↓"
-      : deal.price_trend === "rising"
-        ? "↑"
-        : "→";
-  const trendColor =
-    deal.price_trend === "dropping"
-      ? colors.brand.traceGreen
-      : deal.price_trend === "rising"
-        ? colors.brand.traceRed
-        : colors.brand.amber500;
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -340,35 +328,28 @@ export default function SwipeCard({
                   <Text style={styles.discountBadgeText}>{deal.discount_pct}% OFF</Text>
                 </View>
               )}
-              <Text style={[styles.trendArrow, { color: trendColor }]}>{trendArrow}</Text>
             </View>
           </View>
 
-          {/* Meta row: airline · duration · month */}
+          {/* Info pills */}
           {(!!deal.airlines || !!deal.duration || !!deal.travel_window) && (
-            <View style={styles.metaRow}>
+            <View style={styles.pillsRow}>
               {!!deal.airlines && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>✈️</Text>
-                  <Text style={styles.metaValue} numberOfLines={1}>{deal.airlines}</Text>
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>✈️</Text>
+                  <Text style={styles.pillText}>{deal.airlines}</Text>
                 </View>
-              )}
-              {!!deal.airlines && (!!deal.duration || !!deal.travel_window) && (
-                <View style={styles.metaDivider} />
               )}
               {!!deal.duration && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>⏱</Text>
-                  <Text style={styles.metaValue}>{deal.duration}</Text>
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>⏱</Text>
+                  <Text style={styles.pillText}>{deal.duration}</Text>
                 </View>
               )}
-              {!!deal.duration && !!deal.travel_window && (
-                <View style={styles.metaDivider} />
-              )}
               {!!deal.travel_window && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>📅</Text>
-                  <Text style={styles.metaValue} numberOfLines={1}>{deal.travel_window}</Text>
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>📅</Text>
+                  <Text style={styles.pillText}>{deal.travel_window}</Text>
                 </View>
               )}
             </View>
@@ -539,38 +520,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#fff",
   },
-  trendArrow: {
-    fontSize: 18,
-    fontWeight: "800",
+  pillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  metaRow: {
+  infoPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.35)",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 0,
+    gap: 5,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  metaItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
+  pillIcon: {
+    fontSize: 13,
   },
-  metaLabel: {
-    fontSize: 16,
-  },
-  metaValue: {
-    fontSize: 14,
+  pillText: {
+    fontSize: 13,
     fontWeight: "700",
     color: "rgba(255,255,255,0.95)",
-    flex: 1,
-  },
-  metaDivider: {
-    width: 1,
-    height: 16,
-    backgroundColor: "rgba(255,255,255,0.25)",
-    marginHorizontal: 8,
   },
 });
