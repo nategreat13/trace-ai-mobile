@@ -4,12 +4,20 @@ import {
   Text,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   useColorScheme,
   Modal,
   ScrollView,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,6 +25,7 @@ import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useDealFetch } from "../hooks/useDealFetch";
+import { useSounds } from "../hooks/useSounds";
 import { useProfile } from "../hooks/useProfile";
 import {
   createSwipeAction,
@@ -44,12 +53,58 @@ import type { Deal } from "@trace/shared";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.light | typeof colors.dark }) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.7);
+
+  React.useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.18, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
+      edges={["top", "left", "right"]}
+    >
+      <Animated.Image
+        source={require("../../assets/Bluelogo.png")}
+        style={[{ width: 80, height: 80, resizeMode: "contain" }, animatedStyle]}
+      />
+      <Text style={{ marginTop: 20, color: theme.mutedForeground, fontSize: 14 }}>
+        Finding the best deals for{" "}
+        <Text style={{ fontWeight: "700", color: colors.brand.traceRed }}>{today}</Text>
+      </Text>
+    </SafeAreaView>
+  );
+}
+
 export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
+  const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals } = useDealFetch(
     profile ? { ...profile, id: profile.id! } : null
   );
@@ -59,6 +114,7 @@ export default function SwipeDeckScreen() {
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+  const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
@@ -138,10 +194,13 @@ export default function SwipeDeckScreen() {
 
   const handleUndo = useCallback(() => {
     if (!lastSwipedDeal || currentIndex <= 0) return;
+    const restoredId = lastSwipedDeal.deal.id;
     setCurrentIndex((prev) => prev - 1);
     setLastSwipedDeal(null);
-    // Remove last swipe from local tracking
     setAllSwipes((prev) => prev.slice(1));
+    setUndoneDealId(restoredId);
+    setTimeout(() => setUndoneDealId(null), 500);
+    play("undo");
   }, [lastSwipedDeal, currentIndex]);
 
   const handleSwipe = useCallback(
@@ -168,6 +227,11 @@ export default function SwipeDeckScreen() {
 
       // Track for undo
       setLastSwipedDeal({ deal, action });
+
+      // Sound feedback
+      if (action === "right") play("like");
+      else if (action === "left") play("pass");
+      else if (action === "super") play("save");
 
       // Show swipe tutorial toast for first swipe of each type this session
       if (!shownTutorialTypes.has(action)) {
@@ -274,6 +338,7 @@ export default function SwipeDeckScreen() {
           await updateProfile({ badges: newBadges });
           // Show badge notification
           setUnlockedBadge({ name: badge.name, emoji: badge.emoji, description: badge.desc });
+          play("badge");
           break;
         }
       }
@@ -297,17 +362,7 @@ export default function SwipeDeckScreen() {
 
   if (loading) {
     const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    return (
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
-        edges={["top", "left", "right"]}
-      >
-        <ActivityIndicator size="large" color={colors.brand.traceRed} />
-        <Text style={{ marginTop: 12, color: theme.mutedForeground, fontSize: 14 }}>
-          Finding the best deals for {today}
-        </Text>
-      </SafeAreaView>
-    );
+    return <LoadingScreen today={today} theme={theme} />;
   }
 
   const remaining = activeDeals.length - currentIndex;
@@ -470,6 +525,7 @@ export default function SwipeDeckScreen() {
                   onExpand={() => setExpandedDeal(deal)}
                   triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                   isSwipeDisabled={!isPremium && swipesLeft <= 0}
+                  isUndone={deal.id === undoneDealId}
                 />
               ))}
           </View>
@@ -525,8 +581,8 @@ export default function SwipeDeckScreen() {
               justifyContent: "center",
               alignItems: "center",
               gap: 24,
-              paddingTop: 20,
-              paddingBottom: 8,
+              paddingTop: 4,
+              paddingBottom: 20,
             }}
           >
             <TouchableOpacity

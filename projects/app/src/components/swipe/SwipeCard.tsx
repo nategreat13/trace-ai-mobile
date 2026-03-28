@@ -5,6 +5,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
@@ -46,6 +47,7 @@ interface SwipeCardProps {
   onExpand: () => void;
   triggerSwipe: "left" | "right" | "super" | null;
   isSwipeDisabled: boolean;
+  isUndone?: boolean;
 }
 
 export default function SwipeCard({
@@ -55,11 +57,21 @@ export default function SwipeCard({
   onExpand,
   triggerSwipe,
   isSwipeDisabled,
+  isUndone = false,
 }: SwipeCardProps) {
   // ── Shared values ───────────────────────────────────────────────────
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const isDragging = useSharedValue(false);
+  const undoScale = useSharedValue(isUndone ? 0.82 : 1);
+  const undoOpacity = useSharedValue(isUndone ? 0 : 1);
+
+  useEffect(() => {
+    if (isUndone) {
+      undoScale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      undoOpacity.value = withTiming(1, { duration: 220 });
+    }
+  }, [isUndone]);
 
   // ── Callbacks (must be plain JS for runOnJS) ────────────────────────
   const handleSwipe = useCallback(
@@ -199,11 +211,12 @@ export default function SwipeCard({
     );
 
     return {
+      opacity: undoOpacity.value,
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
         { rotate: `${rotation}deg` },
-        { scale },
+        { scale: scale * undoScale.value },
       ],
     };
   });
@@ -224,13 +237,13 @@ export default function SwipeCard({
     ),
   }));
 
-  const upIndicatorStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      translateY.value,
-      UP_INDICATOR_INPUT,
-      UP_INDICATOR_OUTPUT,
-    ),
-  }));
+  const upIndicatorStyle = useAnimatedStyle(() => {
+    const progress = interpolate(translateY.value, UP_INDICATOR_INPUT, UP_INDICATOR_OUTPUT);
+    return {
+      opacity: progress,
+      transform: [{ scale: interpolate(progress, [0, 1], [0.7, 1.15]) }],
+    };
+  });
 
   // ── Derived display values ──────────────────────────────────────────
   const formattedPrice = `$${deal.price}`;
@@ -301,12 +314,9 @@ export default function SwipeCard({
           </View>
         </Animated.View>
 
-        {/* Up swipe → SAVE stamp */}
+        {/* Up swipe → logo fade */}
         <Animated.View style={[styles.indicatorUp, upIndicatorStyle]}>
-          <View style={styles.saveStamp}>
-            <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain", marginBottom: 4 }} />
-            <Text style={styles.saveText}>SAVE</Text>
-          </View>
+          <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 72, height: 72, resizeMode: "contain" }} />
         </Animated.View>
 
         {/* ── Bottom content ───────────────────────────────────────── */}
@@ -463,21 +473,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "900",
     color: colors.brand.traceGreen,
-    letterSpacing: 3,
-  },
-  saveStamp: {
-    borderWidth: 4,
-    borderColor: colors.brand.amber500,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "rgba(0,0,0,0.15)",
-    alignItems: "center",
-  },
-  saveText: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: colors.brand.amber500,
     letterSpacing: 3,
   },
 

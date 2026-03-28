@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { View, Text, TextInput, Alert, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -28,6 +28,7 @@ export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
+  const lastNameRef = useRef<TextInput>(null);
   const [step, setStep] = useState(0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
@@ -185,7 +186,24 @@ export default function OnboardingScreen() {
             placeholder="First name"
             placeholderTextColor={theme.mutedForeground}
             value={data.firstName}
-            onChangeText={(v) => setData({ ...data, firstName: v })}
+            onChangeText={(v) => {
+              // If the system autofills a full name (e.g. "John Smith"), split it
+              const trimmed = v.trim();
+              const spaceIdx = trimmed.indexOf(" ");
+              if (spaceIdx > 0) {
+                const first = trimmed.slice(0, spaceIdx);
+                const last = trimmed.slice(spaceIdx + 1).trim();
+                setData((d) => ({ ...d, firstName: first, lastName: last }));
+                lastNameRef.current?.focus();
+              } else {
+                setData((d) => ({ ...d, firstName: v }));
+              }
+            }}
+            onSubmitEditing={() => lastNameRef.current?.focus()}
+            returnKeyType="next"
+            textContentType="name"
+            autoComplete="name"
+            autoCapitalize="words"
             style={{
               backgroundColor: theme.muted,
               borderRadius: 12,
@@ -197,10 +215,20 @@ export default function OnboardingScreen() {
             }}
           />
           <TextInput
+            ref={lastNameRef}
             placeholder="Last name"
             placeholderTextColor={theme.mutedForeground}
             value={data.lastName}
-            onChangeText={(v) => setData({ ...data, lastName: v })}
+            onChangeText={(v) => setData((d) => ({ ...d, lastName: v }))}
+            onSubmitEditing={() => {
+              if (data.firstName.trim().length > 0 && data.lastName.trim().length > 0) {
+                setStep(1);
+              }
+            }}
+            returnKeyType="done"
+            textContentType="familyName"
+            autoComplete="name-family"
+            autoCapitalize="words"
             style={{
               backgroundColor: theme.muted,
               borderRadius: 12,

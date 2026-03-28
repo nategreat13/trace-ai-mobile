@@ -64,7 +64,7 @@ export default function OnboardingStep({
 
       {/* Footer buttons */}
       <View style={styles.footer}>
-        {step > 0 ? (
+        {step > 0 && (
           <TouchableOpacity
             onPress={onBack}
             style={[styles.backButton, { borderColor: theme.border }]}
@@ -73,8 +73,6 @@ export default function OnboardingStep({
               Back
             </Text>
           </TouchableOpacity>
-        ) : (
-          <View style={styles.backPlaceholder} />
         )}
 
         <TouchableOpacity
@@ -82,6 +80,7 @@ export default function OnboardingStep({
           disabled={!canProceed}
           style={[
             styles.continueButton,
+            step === 0 && styles.continueButtonFull,
             { opacity: canProceed ? 1 : 0.4 },
           ]}
         >
@@ -134,7 +133,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 12,
   },
-  backPlaceholder: {
+  continueButtonFull: {
     flex: 1,
   },
   backButton: {

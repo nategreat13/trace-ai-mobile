@@ -212,61 +212,9 @@ export default function DashboardScreen() {
               Dashboard
             </Text>
 
-            {/* Travel Personality */}
-            {personality.title && (
-              <View
-                style={{
-                  backgroundColor: theme.card,
-                  borderRadius: 16,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  padding: 16,
-                  marginBottom: 12,
-                }}
-              >
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                  <Text style={{ fontSize: 32 }}>{personality.emoji || "🌍"}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground }}>{personality.title}</Text>
-                    <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>
-                      {personality.description}
-                    </Text>
-                  </View>
-                </View>
-                {/* Level progress bar */}
-                {(() => {
-                  const level = profile?.dealHunterLevel || 1;
-                  const swipes = profile?.swipeCount || 0;
-                  const progressInLevel = (swipes % 25) / 25;
-                  const swipesToNext = 25 - (swipes % 25);
-                  return (
-                    <View>
-                      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                        <Text style={{ fontSize: 11, fontWeight: "700", color: theme.mutedForeground }}>
-                          ⚡ Deal Hunter — Level {level}
-                        </Text>
-                        <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
-                          {swipesToNext} swipes to Lv {level + 1}
-                        </Text>
-                      </View>
-                      <View style={{ height: 6, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
-                        <View
-                          style={{
-                            height: "100%",
-                            borderRadius: 999,
-                            backgroundColor: colors.brand.traceRed,
-                            width: `${Math.round(progressInLevel * 100)}%`,
-                          }}
-                        />
-                      </View>
-                    </View>
-                  );
-                })()}
-              </View>
-            )}
-
-            {/* Stats toggle */}
+            {/* Profile card — personality + stats + badges */}
             <TouchableOpacity
+              activeOpacity={0.85}
               onPress={() => setShowStats(!showStats)}
               style={{
                 backgroundColor: theme.card,
@@ -277,20 +225,59 @@ export default function DashboardScreen() {
                 marginBottom: 12,
               }}
             >
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>Stats & Badges</Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>{showStats ? "Hide ▴" : "Show ▾"}</Text>
+              {/* Always-visible header */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 16 }}>
+                <Text style={{ fontSize: 36 }}>{personality.emoji || "🌍"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>
+                    {personality.title || "Explorer"}
+                  </Text>
+                  {(() => {
+                    const level = profile?.dealHunterLevel || 1;
+                    const swipeCount = profile?.swipeCount || 0;
+                    const progressInLevel = (swipeCount % 25) / 25;
+                    return (
+                      <View style={{ marginTop: 6 }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                          <Text style={{ fontSize: 11, fontWeight: "600", color: theme.mutedForeground }}>
+                            ⚡ Level {level} Deal Hunter
+                          </Text>
+                          <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
+                            {25 - (swipeCount % 25)} to Lv {level + 1}
+                          </Text>
+                        </View>
+                        <View style={{ height: 5, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
+                          <View
+                            style={{
+                              height: "100%",
+                              borderRadius: 999,
+                              backgroundColor: colors.brand.traceRed,
+                              width: `${Math.round(progressInLevel * 100)}%`,
+                            }}
+                          />
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </View>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, paddingLeft: 4 }}>
+                  {showStats ? "▴" : "▾"}
+                </Text>
               </View>
+
+              {/* Expandable: description + stats + badges */}
               {showStats && (
-                <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={{ paddingHorizontal: 12, paddingBottom: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 12 }}>
+                <Animated.View
+                  entering={FadeIn.duration(200)}
+                  exiting={FadeOut.duration(150)}
+                  style={{ borderTopWidth: 1, borderTopColor: theme.border, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 16 }}
+                >
+                  {/* Personality description */}
+                  {personality.description && (
+                    <Text style={{ fontSize: 13, color: theme.mutedForeground, marginBottom: 14, lineHeight: 18 }}>
+                      {personality.description}
+                    </Text>
+                  )}
 
                   {/* Stats 2x2 grid */}
                   <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
