@@ -683,6 +683,7 @@ export default function SwipeDeckScreen() {
         <ExpandedDeal
           deal={expandedDeal}
           visible={!!expandedDeal}
+          userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => {
             handleSwipe("super");

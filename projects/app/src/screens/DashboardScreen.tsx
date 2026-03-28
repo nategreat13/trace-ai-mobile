@@ -482,6 +482,7 @@ export default function DashboardScreen() {
         <ExpandedDeal
           deal={expandedDeal}
           visible={!!expandedDeal}
+          userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => setExpandedDeal(null)}
           onBook={() => { if (expandedDeal?.url) Linking.openURL(expandedDeal.url); }}

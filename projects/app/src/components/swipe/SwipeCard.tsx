@@ -191,9 +191,19 @@ export default function SwipeCard({
       translateY.value = withTiming(0, { duration: 200 });
     });
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(handleExpand)();
-  });
+  const tapScale = useSharedValue(1);
+
+  const tapGesture = Gesture.Tap()
+    .onBegin(() => {
+      tapScale.value = withTiming(0.965, { duration: 80 });
+    })
+    .onEnd(() => {
+      tapScale.value = withSpring(1, { damping: 12, stiffness: 300 });
+      runOnJS(handleExpand)();
+    })
+    .onFinalize(() => {
+      tapScale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    });
 
   const composedGesture = Gesture.Race(panGesture, tapGesture);
 
@@ -216,7 +226,7 @@ export default function SwipeCard({
         { translateX: translateX.value },
         { translateY: translateY.value },
         { rotate: `${rotation}deg` },
-        { scale: scale * undoScale.value },
+        { scale: scale * undoScale.value * tapScale.value },
       ],
     };
   });
@@ -413,7 +423,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   originText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#fff",
     letterSpacing: 0.3,
@@ -513,7 +523,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   originalPrice: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: "500",
     color: "rgba(255,255,255,0.5)",
     textDecorationLine: "line-through",
@@ -521,16 +531,16 @@ const styles = StyleSheet.create({
   discountBadge: {
     backgroundColor: colors.brand.traceGreen,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
   discountBadgeText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: "800",
     color: "#fff",
   },
   trendArrow: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "800",
   },
   metaRow: {
@@ -539,20 +549,20 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.35)",
     borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     gap: 0,
   },
   metaItem: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   metaLabel: {
-    fontSize: 13,
+    fontSize: 16,
   },
   metaValue: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "rgba(255,255,255,0.95)",
     flex: 1,

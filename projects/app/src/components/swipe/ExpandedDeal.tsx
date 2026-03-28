@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
+import { API_BASE_URL } from "../../lib/constants";
 import WeatherPreview from "./WeatherPreview";
 import DealExperiences from "./DealExperiences";
 import DealInterestingFacts from "./DealInterestingFacts";
@@ -40,6 +41,7 @@ interface ExpandedDealProps {
   onClose: () => void;
   onSave: () => void;
   onBook: () => void;
+  userProfile?: any;
 }
 
 // ── Helper: parse travel_tips / interesting_facts string[] into objects ──────
@@ -74,10 +76,30 @@ export default function ExpandedDeal({
   onClose,
   onSave,
   onBook,
+  userProfile,
 }: ExpandedDealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
+
+  const [fitSummary, setFitSummary] = useState<string | null>(null);
+  const [fitLoading, setFitLoading] = useState(false);
+  const firstName = (userProfile?.displayName || "").split(" ")[0] || null;
+
+  useEffect(() => {
+    if (!visible || !userProfile || !deal) return;
+    setFitSummary(null);
+    setFitLoading(true);
+    fetch(`${API_BASE_URL}/ai/deal-fit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deal, profile: userProfile }),
+    })
+      .then((r) => r.json())
+      .then((data) => setFitSummary(data.summary || null))
+      .catch(() => setFitSummary(null))
+      .finally(() => setFitLoading(false));
+  }, [visible, deal?.id]);
 
   if (!deal) return null;
 
@@ -383,6 +405,43 @@ export default function ExpandedDeal({
 
             {/* Weather */}
             <WeatherPreview deal={deal} />
+
+            {/* Personal AI fit */}
+            {(fitLoading || fitSummary) && (
+              <View
+                style={[
+                  styles.fitCard,
+                  {
+                    backgroundColor: scheme === "dark" ? "rgba(255,101,91,0.08)" : "rgba(255,101,91,0.05)",
+                    borderColor: scheme === "dark" ? "rgba(255,101,91,0.3)" : "rgba(255,101,91,0.2)",
+                  },
+                ]}
+              >
+                <View style={styles.fitHeader}>
+                  <View style={styles.fitIconWrap}>
+                    <Sparkles size={15} color="#ffffff" />
+                  </View>
+                  <Text style={[styles.fitLabel, { color: colors.brand.traceRed }]}>
+                    {firstName ? `AI fit for ${firstName}` : "Your AI fit"}
+                  </Text>
+                </View>
+                {fitLoading ? (
+                  <View style={styles.fitLoadingRow}>
+                    <View style={[styles.fitPulseDot, { backgroundColor: colors.brand.traceRed }]} />
+                    <Text style={[styles.fitLoadingText, { color: theme.mutedForeground }]}>
+                      {firstName ? `Analyzing this deal for ${firstName}…` : "Analyzing your fit…"}
+                    </Text>
+                  </View>
+                ) : (
+                  <Animated.Text
+                    entering={FadeIn.duration(400)}
+                    style={[styles.fitText, { color: theme.foreground }]}
+                  >
+                    {fitSummary}
+                  </Animated.Text>
+                )}
+              </View>
+            )}
 
             {/* AI Insight */}
             {(!!deal.ai_insight || !!deal.vibe_description) && (
@@ -722,6 +781,52 @@ const styles = StyleSheet.create({
   metaValue: {
     fontSize: 13,
     fontWeight: "600",
+  },
+
+  // ── Personal fit card ───────────────────────────────────────────────────
+  fitCard: {
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+  },
+  fitHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  fitIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.brand.traceRed,
+  },
+  fitLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  fitLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  fitPulseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    opacity: 0.7,
+  },
+  fitLoadingText: {
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+  fitText: {
+    fontSize: 14,
+    lineHeight: 22,
   },
 
   // ── AI Insight card ─────────────────────────────────────────────────────
