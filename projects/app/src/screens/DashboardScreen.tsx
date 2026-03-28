@@ -7,12 +7,14 @@ import {
   ActivityIndicator,
   useColorScheme,
   RefreshControl,
+  Alert,
   Linking,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
-import { ExternalLink, Trash2 } from "lucide-react-native";
+import { ChevronRight, Trash2 } from "lucide-react-native";
+import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -36,6 +38,8 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<"saved" | "alerts">("saved");
   const [showStats, setShowStats] = useState(false);
+  const [expandedDeal, setExpandedDeal] = useState<any | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -61,11 +65,33 @@ export default function DashboardScreen() {
   }, [loadData]);
 
   const handleDeleteDeal = async (dealId: string) => {
-    await deleteSavedDeal(dealId);
-    setDeals((prev) => prev.filter((d) => d.id !== dealId));
-    // Also delete the swipe action
-    const swipe = swipes.find((s: any) => s.dealId === dealId && s.action === "super");
-    if (swipe) await deleteSwipeAction(swipe.id);
+    setDeletingIds((prev) => new Set(prev).add(dealId));
+    // Let the exit animation play, then remove
+    setTimeout(async () => {
+      await deleteSavedDeal(dealId);
+      setDeals((prev) => prev.filter((d) => d.id !== dealId));
+      setDeletingIds((prev) => { const s = new Set(prev); s.delete(dealId); return s; });
+      const swipe = swipes.find((s: any) => s.dealId === dealId && s.action === "super");
+      if (swipe) await deleteSwipeAction(swipe.id);
+    }, 250);
+  };
+
+  const handleClearAll = () => {
+    Alert.alert("Clear All Saved Deals", "Remove all saved deals? This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear All",
+        style: "destructive",
+        onPress: async () => {
+          for (const deal of deals) {
+            await deleteSavedDeal(deal.id);
+            const swipe = swipes.find((s: any) => s.dealId === deal.id && s.action === "super");
+            if (swipe) await deleteSwipeAction(swipe.id);
+          }
+          setDeals([]);
+        },
+      },
+    ]);
   };
 
   // Parse travel personality
@@ -89,64 +115,98 @@ export default function DashboardScreen() {
     );
   }
 
-  const renderSavedDeal = ({ item }: { item: any }) => (
-    <View
-      style={{
-        backgroundColor: theme.card,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: theme.border,
-        overflow: "hidden",
-        marginBottom: 12,
-      }}
-    >
-      {item.imageUrl && (
-        <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 120 }} contentFit="cover" />
-      )}
-      <View style={{ padding: 12 }}>
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-          <Text style={{ fontSize: 16, fontWeight: "800", color: theme.foreground }}>{item.destination}</Text>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
-        </View>
-        {item.vibeDescription && (
-          <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4 }} numberOfLines={1}>
-            {item.vibeDescription}
-          </Text>
-        )}
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-          {item.url && (
-            <TouchableOpacity
-              onPress={() => Linking.openURL(item.url)}
-              style={{
-                flex: 1,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                paddingVertical: 10,
-                backgroundColor: colors.brand.traceRed,
-                borderRadius: 10,
-              }}
-            >
-              <ExternalLink color="#fff" size={14} />
-              <Text style={{ color: "#fff", fontSize: 13, fontWeight: "600" }}>Book Now</Text>
-            </TouchableOpacity>
+  // Map a SavedDeal record → Deal shape for ExpandedDeal
+  const savedDealToDeal = (item: any) => ({
+    id: item.originalDealId || item.id,
+    destination: item.destination || "",
+    destination_code: item.destinationCode || "",
+    origin: item.origin || "",
+    price: item.price || 0,
+    original_price: item.originalPrice || 0,
+    discount_pct: item.discountPct || 0,
+    travel_window: item.travelWindow || "",
+    dateString: "",
+    deal_type: item.dealType || null,
+    image_url: item.imageUrl || "",
+    ai_insight: item.aiInsight || "",
+    vibe_description: item.vibeDescription || "",
+    continent: item.continent || "",
+    urgency: item.urgency || "",
+    price_trend: item.priceTrend || "",
+    itinerary_ideas: [],
+    neighborhood_previews: [],
+    best_time_to_book: "",
+    experiences: [],
+    travel_tips: [],
+    quick_tips: [],
+    interesting_facts: [],
+    weather_preview: item.weatherPreview || "",
+    url: item.url || "",
+    airlines: item.airlines || "",
+    month_type: "",
+    layover_info: item.layoverInfo || "",
+    duration: item.duration || "",
+    domestic_or_international: "",
+    price_will_last: "",
+    is_business_class: item.isBusinessClass || false,
+  });
+
+  const renderSavedDeal = ({ item }: { item: any }) => {
+    const isDeleting = deletingIds.has(item.id);
+    return (
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        exiting={FadeOut.duration(220)}
+        layout={LinearTransition.duration(200)}
+        style={{
+          backgroundColor: theme.card,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: theme.border,
+          overflow: "hidden",
+          marginBottom: 12,
+          opacity: isDeleting ? 0.4 : 1,
+        }}
+      >
+        <TouchableOpacity activeOpacity={0.85} onPress={() => setExpandedDeal(savedDealToDeal(item))}>
+          {item.imageUrl && (
+            <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 120 }} contentFit="cover" />
           )}
-          <TouchableOpacity
-            onPress={() => handleDeleteDeal(item.id)}
-            style={{
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              backgroundColor: theme.muted,
-              borderRadius: 10,
-            }}
-          >
-            <Trash2 color="#ef4444" size={16} />
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  );
+          <View style={{ padding: 12 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: theme.foreground, flex: 1 }} numberOfLines={1}>{item.destination}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
+                <ChevronRight size={16} color={theme.mutedForeground} />
+              </View>
+            </View>
+            {item.vibeDescription && (
+              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4 }} numberOfLines={1}>
+                {item.vibeDescription}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleDeleteDeal(item.id)}
+          disabled={isDeleting}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Trash2 color="#fff" size={14} />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const renderAlert = ({ item }: { item: any }) => (
     <View
@@ -343,14 +403,15 @@ export default function DashboardScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Tabs */}
+            {/* Tabs + clear all */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
             <View
               style={{
+                flex: 1,
                 flexDirection: "row",
                 backgroundColor: theme.muted,
                 borderRadius: 12,
                 padding: 4,
-                marginBottom: 16,
               }}
             >
               <TouchableOpacity
@@ -394,6 +455,12 @@ export default function DashboardScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
+            {tab === "saved" && deals.length > 0 && (
+              <TouchableOpacity onPress={handleClearAll} style={{ paddingHorizontal: 10, paddingVertical: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#ef4444" }}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -410,6 +477,16 @@ export default function DashboardScreen() {
           </View>
         }
       />
+
+      {expandedDeal && (
+        <ExpandedDeal
+          deal={expandedDeal}
+          visible={!!expandedDeal}
+          onClose={() => setExpandedDeal(null)}
+          onSave={() => setExpandedDeal(null)}
+          onBook={() => { if (expandedDeal?.url) Linking.openURL(expandedDeal.url); }}
+        />
+      )}
     </SafeAreaView>
   );
 }

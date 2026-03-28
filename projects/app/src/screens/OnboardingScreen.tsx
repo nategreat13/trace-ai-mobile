@@ -48,8 +48,12 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (profile) {
       setExistingProfileId(profile.id);
+      // Pre-populate name from existing profile so it's preserved on save
+      const nameParts = (profile.displayName || "").split(" ");
       setData((d) => ({
         ...d,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
         homeAirport: profile.homeAirport || "LAX",
         destinationPreference: profile.destinationPreference || "both",
         dealTypes: profile.dealTypes || [],
@@ -117,8 +121,8 @@ export default function OnboardingScreen() {
       const fullName = [firstName, lastName].filter(Boolean).join(" ");
 
       if (profile?.id) {
-        // Existing profile — update preferences
-        const updates = {
+        // Existing profile — update preferences (include name so it stays in sync)
+        const updates: Record<string, any> = {
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -127,6 +131,7 @@ export default function OnboardingScreen() {
           onboardingComplete: true,
           howToSwipeShown: true,
         };
+        if (fullName) updates.displayName = fullName;
         await updateUserProfile(profile.id, updates);
         setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
       } else {

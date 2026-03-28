@@ -279,22 +279,12 @@ export default function SwipeCard({
           style={styles.gradient}
         />
 
-        {/* ── Top row: origin pill + discount badge ────────────────── */}
+        {/* ── Top row: route pill ──────────────────────────────────── */}
         <View style={styles.topRow}>
           {deal.origin && (
             <View style={styles.originPill}>
               <Text style={styles.originText}>✈️  {deal.origin} → {deal.destination_code || deal.destination}</Text>
             </View>
-          )}
-          {deal.discount_pct > 0 && (
-            <LinearGradient
-              colors={["#00D665", "#00B84D"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.discountPill}
-            >
-              <Text style={styles.discountPillText}>{deal.discount_pct}% OFF</Text>
-            </LinearGradient>
           )}
         </View>
 
@@ -321,43 +311,58 @@ export default function SwipeCard({
 
         {/* ── Bottom content ───────────────────────────────────────── */}
         <View style={styles.content}>
-          {/* Destination + price */}
-          <View style={styles.headerRow}>
-            <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {deal.destination}
-            </Text>
-            <View style={styles.pricePill}>
+          {/* Destination */}
+          <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {deal.destination}
+          </Text>
+
+          {/* Price row */}
+          <View style={styles.priceRow}>
+            <View style={styles.priceLeft}>
+              <Text style={styles.price}>{formattedPrice}</Text>
               {deal.original_price > deal.price && (
                 <Text style={styles.originalPrice}>${deal.original_price}</Text>
               )}
-              <Text style={styles.price}>{formattedPrice}</Text>
+            </View>
+            <View style={styles.priceRight}>
+              {deal.discount_pct > 0 && (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>{deal.discount_pct}% OFF</Text>
+                </View>
+              )}
               <Text style={[styles.trendArrow, { color: trendColor }]}>{trendArrow}</Text>
             </View>
           </View>
 
-          {/* Vibe description */}
-          <Text style={styles.vibe} numberOfLines={2}>
-            {deal.vibe_description}
-          </Text>
-
-          {/* Info chips */}
-          <View style={styles.chips}>
-            {!!deal.airlines && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>{deal.airlines}</Text>
-              </View>
-            )}
-            {!!deal.duration && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>⏱ {deal.duration}</Text>
-              </View>
-            )}
-            {!!deal.travel_window && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>📅 {deal.travel_window}</Text>
-              </View>
-            )}
-          </View>
+          {/* Meta row: airline · duration · month */}
+          {(!!deal.airlines || !!deal.duration || !!deal.travel_window) && (
+            <View style={styles.metaRow}>
+              {!!deal.airlines && (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>✈️</Text>
+                  <Text style={styles.metaValue} numberOfLines={1}>{deal.airlines}</Text>
+                </View>
+              )}
+              {!!deal.airlines && (!!deal.duration || !!deal.travel_window) && (
+                <View style={styles.metaDivider} />
+              )}
+              {!!deal.duration && (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>⏱</Text>
+                  <Text style={styles.metaValue}>{deal.duration}</Text>
+                </View>
+              )}
+              {!!deal.duration && !!deal.travel_window && (
+                <View style={styles.metaDivider} />
+              )}
+              {!!deal.travel_window && (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>📅</Text>
+                  <Text style={styles.metaValue} numberOfLines={1}>{deal.travel_window}</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </Animated.View>
     </GestureDetector>
@@ -412,16 +417,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
     letterSpacing: 0.3,
-  },
-  discountPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  discountPillText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#fff",
   },
 
   // ── Swipe stamp indicators ─────────────────────────────────────────
@@ -486,69 +481,86 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     paddingTop: 16,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 6,
-  },
   destination: {
-    flex: 1,
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: "900",
     color: "#ffffff",
-    marginRight: 12,
+    marginBottom: 6,
     textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+    letterSpacing: -0.5,
   },
-  pricePill: {
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  priceLeft: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 3,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 8,
+  },
+  priceRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  price: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "500",
     color: "rgba(255,255,255,0.5)",
     textDecorationLine: "line-through",
   },
-  price: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#ffffff",
+  discountBadge: {
+    backgroundColor: colors.brand.traceGreen,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  discountBadgeText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#fff",
   },
   trendArrow: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "800",
   },
-  vibe: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.82)",
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  chips: {
+  metaRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 0,
   },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+  metaItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.9)",
+  metaLabel: {
+    fontSize: 13,
+  },
+  metaValue: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.95)",
+    flex: 1,
+  },
+  metaDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    marginHorizontal: 8,
   },
 });
