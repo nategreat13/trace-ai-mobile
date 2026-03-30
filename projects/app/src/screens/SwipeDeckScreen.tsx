@@ -47,7 +47,6 @@ import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
-import LoginPrompt from "../components/LoginPrompt";
 import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
@@ -103,8 +102,7 @@ export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium, isGuest } = useAuth();
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
@@ -147,7 +145,7 @@ export default function SwipeDeckScreen() {
 
   // Initialize swipes left and fetch swipe history
   useEffect(() => {
-    if (!profile || !user || isGuest) return;
+    if (!profile || !user) return;
     const init = async () => {
       const today = new Date().toISOString().split("T")[0];
       let dailySwipes = profile.dailySwipesToday || 0;
@@ -226,18 +224,12 @@ export default function SwipeDeckScreen() {
       if (!profile || currentIndex >= activeDeals.length) return;
       setTriggerSwipe(null);
 
-      // Guest users can browse (left/right) but must sign up to save
-      if (isGuest && action === "super") {
-        setShowLoginPrompt(true);
-        return;
-      }
-
-      if (!isPremium && !isGuest && swipesLeft <= 0) {
+      if (!isPremium && swipesLeft <= 0) {
         setShowUpgradePopup(true);
         return;
       }
 
-      if (!isPremium && !isGuest && action === "super") {
+      if (!isPremium && action === "super") {
         const savedCount = allSwipes.filter((s) => s.action === "super").length;
         if (savedCount >= MAX_SAVES) {
           setShowUpgradePopup(true);
@@ -264,8 +256,7 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setTutorialAction(null), 3000);
       }
 
-      // Skip all persistence for guest users
-      if (isGuest || !user) return;
+      if (!user) return;
 
       // Track session swipe count for AI learning modal
       sessionSwipeCount.current += 1;
@@ -375,7 +366,7 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
-    [currentIndex, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, isGuest, deckMode, shownTutorialTypes]
+    [currentIndex, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, shownTutorialTypes]
   );
 
   const handleButtonSwipe = (action: "left" | "right" | "super") => {
@@ -428,7 +419,7 @@ export default function SwipeDeckScreen() {
             </View>
           )}
         </View>
-        {!isPremium && !isGuest && (
+        {!isPremium && (
           <TouchableOpacity onPress={() => setShowUpgradePopup(true)}>
             <Crown color={colors.brand.amber500} size={24} />
           </TouchableOpacity>
@@ -615,7 +606,7 @@ export default function SwipeDeckScreen() {
           </View>
 
           {/* Swipes left indicator */}
-          {!isPremium && !isGuest && swipesLeft > 0 && swipesLeft <= 3 && (
+          {!isPremium && swipesLeft > 0 && swipesLeft <= 3 && (
             <Animated.View entering={FadeIn.duration(300)}>
               <TouchableOpacity
                 onPress={() => setShowUpgradePopup(true)}
@@ -753,12 +744,10 @@ export default function SwipeDeckScreen() {
           userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => {
-            if (isGuest) { setExpandedDeal(null); setShowLoginPrompt(true); return; }
             handleSwipe("super");
             setExpandedDeal(null);
           }}
           onBook={() => {
-            if (isGuest) { setExpandedDeal(null); setShowLoginPrompt(true); return; }
             if (expandedDeal.url) {
               const { Linking } = require("react-native");
               Linking.openURL(expandedDeal.url);
@@ -864,11 +853,6 @@ export default function SwipeDeckScreen() {
         onReturn={onReturn}
       />
 
-      <LoginPrompt
-        visible={showLoginPrompt}
-        onClose={() => setShowLoginPrompt(false)}
-        message="Create an account to save deals and track your favorites."
-      />
     </SafeAreaView>
   );
 }

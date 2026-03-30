@@ -13,10 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useColorScheme } from "react-native";
 import { colors } from "../theme/colors";
 import { login, signup } from "../services/auth";
-import { useAuth } from "../context/AuthContext";
 
 export default function LoginScreen() {
-  const { enterGuestMode } = useAuth();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const [email, setEmail] = useState("");
@@ -136,15 +134,6 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Guest browse */}
-        <TouchableOpacity
-          onPress={enterGuestMode}
-          style={{ marginTop: 16, alignItems: "center" }}
-        >
-          <Text style={{ color: theme.mutedForeground, fontSize: 14, textDecorationLine: "underline" }}>
-            Browse as Guest
-          </Text>
-        </TouchableOpacity>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

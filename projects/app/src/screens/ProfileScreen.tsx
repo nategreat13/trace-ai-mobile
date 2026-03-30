@@ -54,7 +54,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium, isGuest, exitGuestMode } = useAuth();
+  const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
 
   const [promoCode, setPromoCode] = useState("");
@@ -70,32 +70,6 @@ export default function ProfileScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
   const { captureStatus, onReturn } = useUpgradeDetection();
-
-  if (isGuest) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.muted, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }} edges={["top", "left", "right"]}>
-        <Text style={{ fontSize: 48, marginBottom: 20 }}>👤</Text>
-        <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, marginBottom: 10, textAlign: "center" }}>
-          Your Profile
-        </Text>
-        <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: "center", marginBottom: 28, lineHeight: 20 }}>
-          Create an account to personalize your deal preferences, track stats, and manage your subscription.
-        </Text>
-        <TouchableOpacity
-          onPress={exitGuestMode}
-          style={{
-            width: "100%",
-            backgroundColor: colors.brand.traceRed,
-            borderRadius: 14,
-            paddingVertical: 15,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Sign Up</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();

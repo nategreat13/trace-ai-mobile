@@ -29,7 +29,7 @@ import { ALL_BADGES } from "../lib/constants";
 export default function DashboardScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isGuest, exitGuestMode } = useAuth();
+  const { user, profile } = useAuth();
 
   const [deals, setDeals] = useState<any[]>([]);
   const [swipes, setSwipes] = useState<any[]>([]);
@@ -106,32 +106,6 @@ export default function DashboardScreen() {
   const earnedBadges = ALL_BADGES.filter((b) =>
     profile?.badges?.includes(b.id) || b.requirement(profile || {}, swipes)
   );
-
-  if (isGuest) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }} edges={["top", "left", "right"]}>
-        <Text style={{ fontSize: 48, marginBottom: 20 }}>✈️</Text>
-        <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, marginBottom: 10, textAlign: "center" }}>
-          Track Your Deals
-        </Text>
-        <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: "center", marginBottom: 28, lineHeight: 20 }}>
-          Create an account to save deals, view your swipe history, and earn badges.
-        </Text>
-        <TouchableOpacity
-          onPress={exitGuestMode}
-          style={{
-            width: "100%",
-            backgroundColor: colors.brand.traceRed,
-            borderRadius: 14,
-            paddingVertical: 15,
-            alignItems: "center",
-          }}
-        >
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Sign Up</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
 
   if (loading) {
     return (

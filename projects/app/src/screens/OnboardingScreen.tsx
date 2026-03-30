@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, TextInput, Alert, useColorScheme } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, Alert, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -10,7 +10,6 @@ import {
   updateUserProfile,
   getUserProfile,
 } from "../services/firestore";
-import { updateUserProfile as updateAuthProfile } from "../services/auth";
 import { DEAL_TYPES, TIMEFRAMES, DEST_OPTIONS } from "../lib/constants";
 import OnboardingStep from "../components/onboarding/OnboardingStep";
 import AirportInput from "../components/onboarding/AirportInput";
@@ -28,7 +27,6 @@ export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  const lastNameRef = useRef<TextInput>(null);
   const [step, setStep] = useState(0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
@@ -37,8 +35,6 @@ export default function OnboardingScreen() {
   );
 
   const [data, setData] = useState({
-    firstName: "",
-    lastName: "",
     homeAirport: "",
     destinationPreference: "both" as "domestic" | "international" | "both",
     dealTypes: [] as string[],
@@ -48,18 +44,13 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (profile) {
       setExistingProfileId(profile.id);
-      // Pre-populate name from existing profile so it's preserved on save
-      const nameParts = (profile.displayName || "").split(" ");
       setData((d) => ({
         ...d,
-        firstName: nameParts[0] || "",
-        lastName: nameParts.slice(1).join(" ") || "",
         homeAirport: profile.homeAirport || "LAX",
         destinationPreference: profile.destinationPreference || "both",
         dealTypes: profile.dealTypes || [],
         travelTimeframe: profile.travelTimeframe || [],
       }));
-      setStep(1); // Skip name step for existing profiles
     }
   }, []);
 
@@ -105,23 +96,12 @@ export default function OnboardingScreen() {
     setShowPersonality(true);
   };
 
-  const capitalizeName = (name: string) =>
-    name.trim().replace(/\b\w/g, (c) => c.toUpperCase());
-
   const handleContinue = async () => {
     if (!user) return;
 
     try {
-      const firstName = data.firstName.trim()
-        ? capitalizeName(data.firstName)
-        : "";
-      const lastName = data.lastName.trim()
-        ? capitalizeName(data.lastName)
-        : "";
-      const fullName = [firstName, lastName].filter(Boolean).join(" ");
-
       if (profile?.id) {
-        // Existing profile — update preferences (include name so it stays in sync)
+        // Existing profile — update preferences
         const updates: Record<string, any> = {
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
@@ -131,19 +111,14 @@ export default function OnboardingScreen() {
           onboardingComplete: true,
           howToSwipeShown: true,
         };
-        if (fullName) updates.displayName = fullName;
         await updateUserProfile(profile.id, updates);
         setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
       } else {
         // Brand new user — create profile
-        if (fullName) {
-          await updateAuthProfile({ displayName: fullName });
-        }
-
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
-          displayName: fullName || "Travel Explorer",
+          displayName: "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -180,73 +155,6 @@ export default function OnboardingScreen() {
   };
 
   const steps = [
-    {
-      title: "What's your name?",
-      subtitle: "We'd love to know you",
-      canProceed:
-        data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
-      content: (
-        <View style={{ gap: 12 }}>
-          <TextInput
-            placeholder="First name"
-            placeholderTextColor={theme.mutedForeground}
-            value={data.firstName}
-            onChangeText={(v) => {
-              // If the system autofills a full name (e.g. "John Smith"), split it
-              const trimmed = v.trim();
-              const spaceIdx = trimmed.indexOf(" ");
-              if (spaceIdx > 0) {
-                const first = trimmed.slice(0, spaceIdx);
-                const last = trimmed.slice(spaceIdx + 1).trim();
-                setData((d) => ({ ...d, firstName: first, lastName: last }));
-                lastNameRef.current?.focus();
-              } else {
-                setData((d) => ({ ...d, firstName: v }));
-              }
-            }}
-            onSubmitEditing={() => lastNameRef.current?.focus()}
-            returnKeyType="next"
-            textContentType="name"
-            autoComplete="name"
-            autoCapitalize="words"
-            style={{
-              backgroundColor: theme.muted,
-              borderRadius: 12,
-              padding: 14,
-              fontSize: 16,
-              color: theme.foreground,
-              borderWidth: 2,
-              borderColor: theme.border,
-            }}
-          />
-          <TextInput
-            ref={lastNameRef}
-            placeholder="Last name"
-            placeholderTextColor={theme.mutedForeground}
-            value={data.lastName}
-            onChangeText={(v) => setData((d) => ({ ...d, lastName: v }))}
-            onSubmitEditing={() => {
-              if (data.firstName.trim().length > 0 && data.lastName.trim().length > 0) {
-                setStep(1);
-              }
-            }}
-            returnKeyType="done"
-            textContentType="familyName"
-            autoComplete="name-family"
-            autoCapitalize="words"
-            style={{
-              backgroundColor: theme.muted,
-              borderRadius: 12,
-              padding: 14,
-              fontSize: 16,
-              color: theme.foreground,
-              borderWidth: 2,
-              borderColor: theme.border,
-            }}
-          />
-        </View>
-      ),
-    },
     {
       title: "Where do you fly from?",
       subtitle: "Your home airport",
@@ -325,7 +233,7 @@ export default function OnboardingScreen() {
               Trace AI
             </Text>
             <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-              Your next adventure starts with a swipe
+              Let's personalize your deal experience
             </Text>
           </View>
         )}

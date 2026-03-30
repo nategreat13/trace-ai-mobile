@@ -24,7 +24,6 @@ import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
-import LoginPrompt from "../components/LoginPrompt";
 import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -36,8 +35,7 @@ export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium, isGuest } = useAuth();
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const { user, profile, isPremium } = useAuth();
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [savedDealIds, setSavedDealIds] = useState<Set<string>>(new Set());
@@ -199,10 +197,6 @@ export default function ExploreScreen() {
   }, [deals, searchTerm, filters]);
 
   const handleSave = async (deal: Deal) => {
-    if (isGuest) {
-      setShowLoginPrompt(true);
-      return;
-    }
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
       captureStatus(); setShowDisclosure(true);
@@ -296,7 +290,7 @@ export default function ExploreScreen() {
     return (
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => { if (isBlurred) { if (isGuest) { setShowLoginPrompt(true); } else { captureStatus(); setShowDisclosure(true); } } else { setExpandedDeal(deal); } }}
+        onPress={() => { if (isBlurred) { captureStatus(); setShowDisclosure(true); } else { setExpandedDeal(deal); } }}
         style={{
           backgroundColor: theme.card,
           borderRadius: 16,
@@ -691,13 +685,13 @@ export default function ExploreScreen() {
                 style={{ borderRadius: 12, width: "100%" }}
               >
                 <TouchableOpacity
-                  onPress={() => { if (isGuest) { setShowLoginPrompt(true); } else { captureStatus(); setShowDisclosure(true); } }}
+                  onPress={() => { captureStatus(); setShowDisclosure(true); }}
                   style={{
                     paddingVertical: 14,
                     alignItems: "center",
                   }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>{isGuest ? "Sign Up" : "View Plans"}</Text>
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
                 </TouchableOpacity>
               </LinearGradient>
             </View>
@@ -733,7 +727,6 @@ export default function ExploreScreen() {
             setExpandedDeal(null);
           }}
           onBook={() => {
-            if (isGuest) { setExpandedDeal(null); setShowLoginPrompt(true); return; }
             if (expandedDeal.url) Linking.openURL(expandedDeal.url);
           }}
         />
@@ -747,11 +740,6 @@ export default function ExploreScreen() {
         onReturn={onReturn}
       />
 
-      <LoginPrompt
-        visible={showLoginPrompt}
-        onClose={() => setShowLoginPrompt(false)}
-        message="Create an account to save deals and track your favorites."
-      />
     </SafeAreaView>
   );
 }
