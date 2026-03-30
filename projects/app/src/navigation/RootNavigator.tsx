@@ -16,7 +16,7 @@ import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, isGuest } = useAuth();
 
   if (loading) {
     return (
@@ -28,9 +28,9 @@ export default function RootNavigator() {
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {!user ? (
+      {!user && !isGuest ? (
         <Stack.Screen name="Login" component={LoginScreen} />
-      ) : !profile?.onboardingComplete ? (
+      ) : !isGuest && !profile?.onboardingComplete ? (
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
       ) : (
         <>

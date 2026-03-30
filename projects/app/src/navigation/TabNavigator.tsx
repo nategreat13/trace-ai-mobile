@@ -19,7 +19,7 @@ export default function TabNavigator() {
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { profile } = useAuth();
+  const { profile, isGuest } = useAuth();
   const isBusinessUser = profile?.subscriptionStatus === "business";
 
   return (
@@ -65,7 +65,7 @@ export default function TabNavigator() {
           tabBarIcon: ({ color, size }) => <Plane color={color} size={size} />,
         }}
       />
-      {!isBusinessUser && (
+      {!isBusinessUser && !isGuest && (
         <Tab.Screen
           name="Upgrade"
           component={UpgradeScreen}
