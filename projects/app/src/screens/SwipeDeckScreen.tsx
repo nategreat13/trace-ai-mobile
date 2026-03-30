@@ -4,12 +4,20 @@ import {
   Text,
   Image,
   TouchableOpacity,
-  ActivityIndicator,
   useColorScheme,
   Modal,
   ScrollView,
 } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,6 +25,7 @@ import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useDealFetch } from "../hooks/useDealFetch";
+import { useSounds } from "../hooks/useSounds";
 import { useProfile } from "../hooks/useProfile";
 import {
   createSwipeAction,
@@ -44,21 +53,69 @@ import type { Deal } from "@trace/shared";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.light | typeof colors.dark }) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.7);
+
+  React.useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.18, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <SafeAreaView
+      style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
+      edges={["top", "left", "right"]}
+    >
+      <Animated.Image
+        source={require("../../assets/Bluelogo.png")}
+        style={[{ width: 80, height: 80, resizeMode: "contain" }, animatedStyle]}
+      />
+      <Text style={{ marginTop: 20, color: theme.mutedForeground, fontSize: 14 }}>
+        Finding the best deals for{" "}
+        <Text style={{ fontWeight: "700", color: colors.brand.traceRed }}>{today}</Text>
+      </Text>
+    </SafeAreaView>
+  );
+}
+
 export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
-  const { deals, premiumDeals, loading, showingAllDeals } = useDealFetch(
+  const { play } = useSounds();
+  const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
     profile ? { ...profile, id: profile.id! } : null
   );
 
   const [deckMode, setDeckMode] = useState<"economy" | "business">("economy");
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted">("swiping");
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+  const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showUpgradePopup, setShowUpgradePopup] = useState(false);
   const [showDisclosure, setShowDisclosure] = useState(false);
@@ -126,6 +183,21 @@ export default function SwipeDeckScreen() {
     }
   }, [profile?.subscriptionStatus, premiumDeals.length]);
 
+  // When the deck runs out during normal swiping: reload to expand the pool
+  useEffect(() => {
+    const isOutOfDeals = activeDeals.length - currentIndex <= 0;
+    if (!isOutOfDeals || loading || deckPhase !== "swiping") return;
+    setDeckPhase("expanding");
+    setCurrentIndex(0);
+    reload();
+  }, [activeDeals.length, currentIndex, loading, deckPhase]);
+
+  // When the expansion reload finishes: decide if we have new deals or are truly done
+  useEffect(() => {
+    if (deckPhase !== "expanding" || loading) return;
+    setDeckPhase(activeDeals.length > 0 ? "swiping" : "exhausted");
+  }, [loading, deckPhase, activeDeals.length]);
+
   const handleDismissHowToSwipe = useCallback(async () => {
     setShowHowToSwipe(false);
     await updateProfile({ howToSwipeShown: true });
@@ -138,10 +210,13 @@ export default function SwipeDeckScreen() {
 
   const handleUndo = useCallback(() => {
     if (!lastSwipedDeal || currentIndex <= 0) return;
+    const restoredId = lastSwipedDeal.deal.id;
     setCurrentIndex((prev) => prev - 1);
     setLastSwipedDeal(null);
-    // Remove last swipe from local tracking
     setAllSwipes((prev) => prev.slice(1));
+    setUndoneDealId(restoredId);
+    setTimeout(() => setUndoneDealId(null), 500);
+    play("undo");
   }, [lastSwipedDeal, currentIndex]);
 
   const handleSwipe = useCallback(
@@ -168,6 +243,11 @@ export default function SwipeDeckScreen() {
 
       // Track for undo
       setLastSwipedDeal({ deal, action });
+
+      // Sound feedback
+      if (action === "right") play("like");
+      else if (action === "left") play("pass");
+      else if (action === "super") play("save");
 
       // Show swipe tutorial toast for first swipe of each type this session
       if (!shownTutorialTypes.has(action)) {
@@ -274,6 +354,7 @@ export default function SwipeDeckScreen() {
           await updateProfile({ badges: newBadges });
           // Show badge notification
           setUnlockedBadge({ name: badge.name, emoji: badge.emoji, description: badge.desc });
+          play("badge");
           break;
         }
       }
@@ -295,23 +376,11 @@ export default function SwipeDeckScreen() {
     setTimeout(() => setTriggerSwipe(null), 400);
   };
 
-  if (loading) {
+  if (loading && deckPhase === "swiping") {
     const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    return (
-      <SafeAreaView
-        style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
-        edges={["top", "left", "right"]}
-      >
-        <ActivityIndicator size="large" color={colors.brand.traceRed} />
-        <Text style={{ marginTop: 12, color: theme.mutedForeground, fontSize: 14 }}>
-          Finding the best deals for {today}
-        </Text>
-      </SafeAreaView>
-    );
+    return <LoadingScreen today={today} theme={theme} />;
   }
 
-  const remaining = activeDeals.length - currentIndex;
-  const isOutOfDeals = remaining <= 0;
   const isBusinessMember = profile?.subscriptionStatus === "business";
 
   return (
@@ -410,29 +479,71 @@ export default function SwipeDeckScreen() {
       )}
 
       {/* Main content */}
-      {isOutOfDeals ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 24 }}>
-          <Text style={{ fontSize: 48, marginBottom: 16 }}>🎉</Text>
-          <Text style={{ fontSize: 24, fontWeight: "800", color: theme.foreground, marginBottom: 8 }}>
-            You've Seen Them All!
+      {deckPhase === "exhausted" ? (
+        <Animated.View
+          entering={FadeIn.duration(400)}
+          style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}
+        >
+          <Text style={{ fontSize: 52, marginBottom: 20 }}>✈️</Text>
+          <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, marginBottom: 10, textAlign: "center" }}>
+            You've seen every deal!
           </Text>
-          <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: "center", marginBottom: 32 }}>
-            Check your saved deals or come back later
+          <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: "center", marginBottom: 36, lineHeight: 20 }}>
+            Check your saved deals on the dashboard or start fresh to review again.
           </Text>
           <TouchableOpacity
             onPress={() => navigation.navigate("MainTabs", { screen: "Dashboard" })}
             style={{
-              backgroundColor: theme.foreground,
-              borderRadius: 999,
-              paddingHorizontal: 24,
-              paddingVertical: 14,
+              width: "100%",
+              backgroundColor: colors.brand.traceRed,
+              borderRadius: 14,
+              paddingVertical: 15,
+              alignItems: "center",
+              marginBottom: 12,
             }}
           >
-            <Text style={{ color: theme.background, fontSize: 14, fontWeight: "600" }}>
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
               View Dashboard
             </Text>
           </TouchableOpacity>
-        </View>
+          <TouchableOpacity
+            onPress={async () => {
+              const today = new Date().toISOString().split("T")[0];
+              await setItem(`deck_position_${today}_${profile?.homeAirport}`, 0);
+              setCurrentIndex(0);
+              setDeckPhase("swiping");
+            }}
+            style={{
+              width: "100%",
+              backgroundColor: theme.card,
+              borderRadius: 14,
+              paddingVertical: 15,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <Text style={{ color: theme.foreground, fontSize: 15, fontWeight: "700" }}>
+              See Deals Again
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      ) : deckPhase === "expanding" ? (
+        <Animated.View
+          entering={FadeIn.duration(300)}
+          style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 24 }}
+        >
+          <Animated.Image
+            source={require("../../assets/Bluelogo.png")}
+            style={{ width: 60, height: 60, resizeMode: "contain", marginBottom: 20 }}
+          />
+          <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>
+            Finding more deals…
+          </Text>
+          <Text style={{ color: theme.mutedForeground, fontSize: 13, textAlign: "center" }}>
+            Expanding beyond your usual preferences
+          </Text>
+        </Animated.View>
       ) : (
         <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8, position: "relative" }}>
           {/* Card stack */}
@@ -470,6 +581,7 @@ export default function SwipeDeckScreen() {
                   onExpand={() => setExpandedDeal(deal)}
                   triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                   isSwipeDisabled={!isPremium && swipesLeft <= 0}
+                  isUndone={deal.id === undoneDealId}
                 />
               ))}
           </View>
@@ -525,8 +637,8 @@ export default function SwipeDeckScreen() {
               justifyContent: "center",
               alignItems: "center",
               gap: 24,
-              paddingTop: 20,
-              paddingBottom: 8,
+              paddingTop: 4,
+              paddingBottom: 20,
             }}
           >
             <TouchableOpacity
@@ -627,6 +739,7 @@ export default function SwipeDeckScreen() {
         <ExpandedDeal
           deal={expandedDeal}
           visible={!!expandedDeal}
+          userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => {
             handleSwipe("super");

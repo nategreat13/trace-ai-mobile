@@ -1,6 +1,6 @@
 import React from "react";
 import { Text, StyleSheet, useColorScheme } from "react-native";
-import Animated, { FadeIn, FadeOut, SlideInUp, SlideOutUp } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { colors } from "../../theme/colors";
 
 interface SwipeTutorialProps {
@@ -23,16 +23,12 @@ export default function SwipeTutorial({ action }: SwipeTutorialProps) {
 
   return (
     <Animated.View
-      entering={SlideInUp.springify().damping(30).stiffness(400)}
-      exiting={SlideOutUp.springify().damping(30).stiffness(400)}
+      entering={FadeIn.duration(180)}
+      exiting={FadeOut.duration(180)}
       style={styles.container}
       pointerEvents="none"
     >
-      <Animated.View
-        entering={FadeIn.duration(200)}
-        exiting={FadeOut.duration(200)}
-        style={styles.toast}
-      >
+      <Animated.View style={styles.toast}>
         <Text style={styles.emoji}>{message.emoji}</Text>
         <Text style={styles.text}>{message.text}</Text>
       </Animated.View>

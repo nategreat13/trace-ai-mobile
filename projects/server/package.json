@@ -8,6 +8,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@trace/shared": "file:../shared",
     "cors": "^2.8.5",
     "express": "^4.21.2",

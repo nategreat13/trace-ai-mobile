@@ -5,6 +5,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSpring,
   interpolate,
   runOnJS,
 } from "react-native-reanimated";
@@ -46,6 +47,7 @@ interface SwipeCardProps {
   onExpand: () => void;
   triggerSwipe: "left" | "right" | "super" | null;
   isSwipeDisabled: boolean;
+  isUndone?: boolean;
 }
 
 export default function SwipeCard({
@@ -55,11 +57,21 @@ export default function SwipeCard({
   onExpand,
   triggerSwipe,
   isSwipeDisabled,
+  isUndone = false,
 }: SwipeCardProps) {
   // ── Shared values ───────────────────────────────────────────────────
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const isDragging = useSharedValue(false);
+  const undoScale = useSharedValue(isUndone ? 0.82 : 1);
+  const undoOpacity = useSharedValue(isUndone ? 0 : 1);
+
+  useEffect(() => {
+    if (isUndone) {
+      undoScale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      undoOpacity.value = withTiming(1, { duration: 220 });
+    }
+  }, [isUndone]);
 
   // ── Callbacks (must be plain JS for runOnJS) ────────────────────────
   const handleSwipe = useCallback(
@@ -179,9 +191,19 @@ export default function SwipeCard({
       translateY.value = withTiming(0, { duration: 200 });
     });
 
-  const tapGesture = Gesture.Tap().onEnd(() => {
-    runOnJS(handleExpand)();
-  });
+  const tapScale = useSharedValue(1);
+
+  const tapGesture = Gesture.Tap()
+    .onBegin(() => {
+      tapScale.value = withTiming(0.965, { duration: 80 });
+    })
+    .onEnd(() => {
+      tapScale.value = withSpring(1, { damping: 12, stiffness: 300 });
+      runOnJS(handleExpand)();
+    })
+    .onFinalize(() => {
+      tapScale.value = withSpring(1, { damping: 12, stiffness: 300 });
+    });
 
   const composedGesture = Gesture.Race(panGesture, tapGesture);
 
@@ -199,11 +221,12 @@ export default function SwipeCard({
     );
 
     return {
+      opacity: undoOpacity.value,
       transform: [
         { translateX: translateX.value },
         { translateY: translateY.value },
         { rotate: `${rotation}deg` },
-        { scale },
+        { scale: scale * undoScale.value * tapScale.value },
       ],
     };
   });
@@ -224,28 +247,16 @@ export default function SwipeCard({
     ),
   }));
 
-  const upIndicatorStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      translateY.value,
-      UP_INDICATOR_INPUT,
-      UP_INDICATOR_OUTPUT,
-    ),
-  }));
+  const upIndicatorStyle = useAnimatedStyle(() => {
+    const progress = interpolate(translateY.value, UP_INDICATOR_INPUT, UP_INDICATOR_OUTPUT);
+    return {
+      opacity: progress,
+      transform: [{ scale: interpolate(progress, [0, 1], [0.7, 1.15]) }],
+    };
+  });
 
   // ── Derived display values ──────────────────────────────────────────
   const formattedPrice = `$${deal.price}`;
-  const trendArrow =
-    deal.price_trend === "dropping"
-      ? "↓"
-      : deal.price_trend === "rising"
-        ? "↑"
-        : "→";
-  const trendColor =
-    deal.price_trend === "dropping"
-      ? colors.brand.traceGreen
-      : deal.price_trend === "rising"
-        ? colors.brand.traceRed
-        : colors.brand.amber500;
 
   // ── Render ──────────────────────────────────────────────────────────
   return (
@@ -266,22 +277,12 @@ export default function SwipeCard({
           style={styles.gradient}
         />
 
-        {/* ── Top row: origin pill + discount badge ────────────────── */}
+        {/* ── Top row: route pill ──────────────────────────────────── */}
         <View style={styles.topRow}>
           {deal.origin && (
             <View style={styles.originPill}>
               <Text style={styles.originText}>✈️  {deal.origin} → {deal.destination_code || deal.destination}</Text>
             </View>
-          )}
-          {deal.discount_pct > 0 && (
-            <LinearGradient
-              colors={["#00D665", "#00B84D"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.discountPill}
-            >
-              <Text style={styles.discountPillText}>{deal.discount_pct}% OFF</Text>
-            </LinearGradient>
           )}
         </View>
 
@@ -301,53 +302,58 @@ export default function SwipeCard({
           </View>
         </Animated.View>
 
-        {/* Up swipe → SAVE stamp */}
+        {/* Up swipe → logo fade */}
         <Animated.View style={[styles.indicatorUp, upIndicatorStyle]}>
-          <View style={styles.saveStamp}>
-            <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain", marginBottom: 4 }} />
-            <Text style={styles.saveText}>SAVE</Text>
-          </View>
+          <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 72, height: 72, resizeMode: "contain" }} />
         </Animated.View>
 
         {/* ── Bottom content ───────────────────────────────────────── */}
         <View style={styles.content}>
-          {/* Destination + price */}
-          <View style={styles.headerRow}>
-            <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {deal.destination}
-            </Text>
-            <View style={styles.pricePill}>
+          {/* Destination */}
+          <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+            {deal.destination}
+          </Text>
+
+          {/* Price row */}
+          <View style={styles.priceRow}>
+            <View style={styles.priceLeft}>
+              <Text style={styles.price}>{formattedPrice}</Text>
               {deal.original_price > deal.price && (
                 <Text style={styles.originalPrice}>${deal.original_price}</Text>
               )}
-              <Text style={styles.price}>{formattedPrice}</Text>
-              <Text style={[styles.trendArrow, { color: trendColor }]}>{trendArrow}</Text>
+            </View>
+            <View style={styles.priceRight}>
+              {deal.discount_pct > 0 && (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>{deal.discount_pct}% OFF</Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Vibe description */}
-          <Text style={styles.vibe} numberOfLines={2}>
-            {deal.vibe_description}
-          </Text>
-
-          {/* Info chips */}
-          <View style={styles.chips}>
-            {!!deal.airlines && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>{deal.airlines}</Text>
-              </View>
-            )}
-            {!!deal.duration && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>⏱ {deal.duration}</Text>
-              </View>
-            )}
-            {!!deal.travel_window && (
-              <View style={styles.chip}>
-                <Text style={styles.chipText}>📅 {deal.travel_window}</Text>
-              </View>
-            )}
-          </View>
+          {/* Info pills */}
+          {(!!deal.airlines || !!deal.duration || !!deal.travel_window) && (
+            <View style={styles.pillsRow}>
+              {!!deal.airlines && (
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>✈️</Text>
+                  <Text style={styles.pillText}>{deal.airlines}</Text>
+                </View>
+              )}
+              {!!deal.duration && (
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>⏱</Text>
+                  <Text style={styles.pillText}>{deal.duration}</Text>
+                </View>
+              )}
+              {!!deal.travel_window && (
+                <View style={styles.infoPill}>
+                  <Text style={styles.pillIcon}>📅</Text>
+                  <Text style={styles.pillText}>{deal.travel_window}</Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </Animated.View>
     </GestureDetector>
@@ -398,20 +404,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   originText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "700",
     color: "#fff",
     letterSpacing: 0.3,
-  },
-  discountPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  discountPillText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#fff",
   },
 
   // ── Swipe stamp indicators ─────────────────────────────────────────
@@ -465,21 +461,6 @@ const styles = StyleSheet.create({
     color: colors.brand.traceGreen,
     letterSpacing: 3,
   },
-  saveStamp: {
-    borderWidth: 4,
-    borderColor: colors.brand.amber500,
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "rgba(0,0,0,0.15)",
-    alignItems: "center",
-  },
-  saveText: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: colors.brand.amber500,
-    letterSpacing: 3,
-  },
 
   // ── Bottom content ─────────────────────────────────────────────────
   content: {
@@ -491,69 +472,74 @@ const styles = StyleSheet.create({
     paddingBottom: 26,
     paddingTop: 16,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 6,
-  },
   destination: {
-    flex: 1,
-    fontSize: 32,
+    fontSize: 34,
     fontWeight: "900",
     color: "#ffffff",
-    marginRight: 12,
+    marginBottom: 6,
     textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
+    letterSpacing: -0.5,
   },
-  pricePill: {
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  priceLeft: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 3,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 8,
+  },
+  priceRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  price: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#ffffff",
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: "500",
     color: "rgba(255,255,255,0.5)",
     textDecorationLine: "line-through",
   },
-  price: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#ffffff",
+  discountBadge: {
+    backgroundColor: colors.brand.traceGreen,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
-  trendArrow: {
-    fontSize: 14,
-    fontWeight: "700",
+  discountBadgeText: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#fff",
   },
-  vibe: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "rgba(255,255,255,0.82)",
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  chips: {
+  pillsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 7,
+    gap: 8,
   },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+  infoPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(0,0,0,0.45)",
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.9)",
+  pillIcon: {
+    fontSize: 13,
+  },
+  pillText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.95)",
   },
 });
