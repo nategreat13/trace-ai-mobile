@@ -1,4 +1,4 @@
-import * as WebBrowser from "expo-web-browser";
+import { Linking } from "react-native";
 import { SUBSCRIBE_URL } from "./constants";
 
 export async function openSubscribeUrl(plan?: string, email?: string) {
@@ -7,5 +7,5 @@ export async function openSubscribeUrl(plan?: string, email?: string) {
   if (email) params.set("email", email);
   const qs = params.toString();
   const url = qs ? `${SUBSCRIBE_URL}?${qs}` : SUBSCRIBE_URL;
-  await WebBrowser.openBrowserAsync(url);
+  await Linking.openURL(url);
 }

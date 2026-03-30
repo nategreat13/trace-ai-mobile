@@ -1,12 +1,25 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
+
+const APP_SCHEME = "tracetravel://upgrade-success";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const plan = searchParams.get("plan") || "premium";
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.location.href = `${APP_SCHEME}?plan=${plan}`;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [plan]);
+
+  const handleOpenApp = () => {
+    window.location.href = `${APP_SCHEME}?plan=${plan}`;
+  };
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#0a0a0a] px-6">
@@ -27,18 +40,21 @@ function SuccessContent() {
             is active with a 3-day free trial.
           </p>
           <p className="text-gray-500 text-sm mb-8">
-            Close this page to return to Trace.
+            Returning you to Trace...
           </p>
 
-          <div className="rounded-2xl bg-[#1c1c1e] p-6 mb-6 text-left">
+          <button
+            onClick={handleOpenApp}
+            className="w-full rounded-2xl bg-[#e11d48] py-4 text-white font-bold text-base mb-6 hover:bg-[#be123c] transition-colors"
+          >
+            Open Trace
+          </button>
+
+          <div className="rounded-2xl bg-[#1c1c1e] p-6 text-left">
             <h3 className="text-sm font-bold text-gray-300 mb-3">
               What&apos;s next?
             </h3>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li className="flex items-start gap-2">
-                <span className="text-green-400 mt-0.5">&#10003;</span>
-                Close this page to return to the app
-              </li>
               <li className="flex items-start gap-2">
                 <span className="text-green-400 mt-0.5">&#10003;</span>
                 Your premium features are already unlocked
