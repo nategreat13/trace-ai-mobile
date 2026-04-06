@@ -21,6 +21,7 @@
       }
     },
     "android": {
+      "package": "co.tracetravel.aiapp",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

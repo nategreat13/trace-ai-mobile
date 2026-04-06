@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:help.going.com)",
+      "WebFetch(domain:apps.apple.com)"
+    ]
+  }
+}
