@@ -269,7 +269,7 @@ export default function LandingScreen() {
           , right when they drop.
         </Text>
         <TouchableOpacity
-          onPress={() => navigation.navigate("Login")}
+          onPress={() => navigation.navigate("Login", { mode: "signup" })}
           style={{
             backgroundColor: colors.brand.traceRed,
             borderRadius: 14,
@@ -282,7 +282,7 @@ export default function LandingScreen() {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => navigation.navigate("Login")}
+          onPress={() => navigation.navigate("Login", { mode: "signin" })}
           style={{ marginTop: 14, alignItems: "center" }}
         >
           <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>

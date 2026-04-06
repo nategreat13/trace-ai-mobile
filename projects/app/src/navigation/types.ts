@@ -10,7 +10,7 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   Landing: undefined;
-  Login: undefined;
+  Login: { mode?: "signup" | "signin" } | undefined;
   Onboarding: undefined;
   MainTabs: NavigatorScreenParams<TabParamList>;
   TrialSignup: { plan: string };
