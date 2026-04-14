@@ -10,6 +10,8 @@
     "deploy:api": "yarn workspace @trace/shared build && rm -rf projects/server/shared && cp -r projects/shared projects/server/shared && yarn workspace @trace/server build && firebase deploy --only functions",
     "build:ios": "cd projects/app && npx eas-cli build --platform ios --profile production",
     "submit:ios": "cd projects/app && npx eas-cli submit --platform ios --profile production",
+    "build:android": "cd projects/app && npx eas-cli build --platform android --profile production",
+    "submit:android": "cd projects/app && npx eas-cli submit --platform android --profile production",
     "dev:web": "yarn workspace @trace/web dev",
     "postinstall": "yarn workspace @trace/shared build"
   },
