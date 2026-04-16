@@ -38,7 +38,7 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
 
     // Find the user's profile document by userId field
     const profileQuery = await db
-      .collection("profiles")
+      .collection("userProfiles")
       .where("userId", "==", app_user_id)
       .limit(1)
       .get();

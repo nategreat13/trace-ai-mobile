@@ -170,10 +170,13 @@ export default function SwipeDeckScreen() {
     }
   }, [profile?.howToSwipeShown, loading]);
 
-  // Auto-switch to business for business members
+  // Auto-switch to business for business members — and reset to economy
+  // when they're no longer on the Business tier
   useEffect(() => {
     if (profile?.subscriptionStatus === "business" && premiumDeals.length > 0) {
       setDeckMode("business");
+    } else if (profile?.subscriptionStatus !== "business" && deckMode === "business") {
+      setDeckMode("economy");
     }
   }, [profile?.subscriptionStatus, premiumDeals.length]);
 

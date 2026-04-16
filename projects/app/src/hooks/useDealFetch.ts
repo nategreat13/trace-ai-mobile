@@ -175,7 +175,8 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
-      // Fetch premium deals for business users
+      // Fetch premium deals for business users — clear them if the user
+      // has downgraded so we don't keep showing business-class deals.
       if (profile.subscriptionStatus === "business") {
         try {
           const prem = await fetchPremiumDeals(airportCode);
@@ -184,6 +185,8 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
         } catch {
           // silent fail
         }
+      } else {
+        setPremiumDeals([]);
       }
     } catch (error) {
       console.error("Failed to fetch deals:", error);
