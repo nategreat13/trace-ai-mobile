@@ -9,6 +9,8 @@ import {
   Share,
   useColorScheme,
   Modal,
+  Platform,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -26,9 +28,6 @@ import {
   User,
   Trash2,
   Crown,
-  Tag,
-  CheckCircle,
-  AlertCircle,
   Share2,
   Pencil,
   Camera,
@@ -39,12 +38,8 @@ import { useProfile } from "../hooks/useProfile";
 import { logout, deleteAuthUser } from "../services/auth";
 import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
-import { DEAL_TYPE_LABELS, DEST_LABELS, SUBSCRIBE_URL } from "../lib/constants";
-import * as WebBrowser from "expo-web-browser";
-import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
-import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
-
-const MANAGE_URL = SUBSCRIBE_URL.replace(/\/subscribe$/, "/manage");
+import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
+import { restorePurchases, hasEntitlement } from "../services/iap";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -57,19 +52,12 @@ export default function ProfileScreen() {
   const { user, profile, isPremium } = useAuth();
   const { updateProfile } = useProfile();
 
-  const [promoCode, setPromoCode] = useState("");
-  const [promoStatus, setPromoStatus] = useState<null | "success" | "error">(
-    null,
-  );
-  const [promoLoading, setPromoLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [tempFirstName, setTempFirstName] = useState("");
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [showDisclosure, setShowDisclosure] = useState(false);
-  const { captureStatus, onReturn } = useUpgradeDetection();
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -123,32 +111,6 @@ export default function ProfileScreen() {
         error?.message || "Could not save photo. Check Firebase Storage rules.",
       );
     }
-  };
-
-  const handlePromoCode = async () => {
-    setPromoLoading(true);
-    setPromoStatus(null);
-    const VALID_CODES = ["TRACE2024", "TRACE2025", "TRACETEST", "TRACEVIP"];
-    const BUSINESS_CODES = ["TRACEBIZ"];
-    const code = promoCode.trim().toUpperCase();
-
-    if (VALID_CODES.includes(code) || BUSINESS_CODES.includes(code)) {
-      const trialEnd = new Date();
-      trialEnd.setFullYear(trialEnd.getFullYear() + 1);
-      const isBusiness = BUSINESS_CODES.includes(code);
-      await updateProfile({
-        subscriptionStatus: isBusiness ? "business" : "premium",
-        trialEndDate: trialEnd,
-      });
-      setPromoStatus("success");
-      setPromoCode("");
-      setTimeout(() => {
-        navigation.navigate(isBusiness ? "BusinessWelcome" : "PremiumWelcome");
-      }, 1000);
-    } else {
-      setPromoStatus("error");
-    }
-    setPromoLoading(false);
   };
 
   const handleLogout = async () => {
@@ -473,14 +435,13 @@ export default function ProfileScreen() {
                   profile?.subscriptionStatus === "premium" ||
                   profile?.subscriptionStatus === "business"
                 ) {
-                  captureStatus();
-                  const url = `${MANAGE_URL}?email=${encodeURIComponent(user?.email || "")}`;
-                  WebBrowser.openBrowserAsync(url).finally(() => {
-                    onReturn();
-                  });
+                  Linking.openURL(
+                    Platform.OS === "ios"
+                      ? "https://apps.apple.com/account/subscriptions"
+                      : "https://play.google.com/store/account/subscriptions"
+                  );
                 } else {
-                  captureStatus();
-                  setShowDisclosure(true);
+                  navigation.navigate("Paywall");
                 }
               }}
               style={{
@@ -493,7 +454,7 @@ export default function ProfileScreen() {
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
                 {profile?.subscriptionStatus === "premium" ||
                 profile?.subscriptionStatus === "business"
-                  ? "Manage Plan"
+                  ? "Manage Subscription"
                   : "View Plans"}
               </Text>
             </TouchableOpacity>
@@ -579,111 +540,6 @@ export default function ProfileScreen() {
             ))}
           </View>
 
-          {/* Promo Code */}
-          <View
-              style={{
-                backgroundColor: theme.card,
-                borderRadius: 16,
-                padding: 24,
-                borderWidth: 1,
-                borderColor: theme.border,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                  marginBottom: 16,
-                }}
-              >
-                <Tag color={theme.foreground} size={16} />
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "700",
-                    color: theme.foreground,
-                  }}
-                >
-                  Promo Code
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <TextInput
-                  value={promoCode}
-                  onChangeText={(v) => {
-                    setPromoCode(v);
-                    setPromoStatus(null);
-                  }}
-                  placeholder="Enter code"
-                  placeholderTextColor={theme.mutedForeground}
-                  autoCapitalize="characters"
-                  style={{
-                    flex: 1,
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    backgroundColor: theme.background,
-                    borderRadius: 8,
-                    fontSize: 14,
-                    color: theme.foreground,
-                  }}
-                />
-                <TouchableOpacity
-                  onPress={handlePromoCode}
-                  disabled={promoLoading || !promoCode}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                    backgroundColor: theme.foreground,
-                    borderRadius: 8,
-                    opacity: promoLoading || !promoCode ? 0.5 : 1,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: theme.background,
-                      fontSize: 14,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {promoLoading ? "..." : "Apply"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {promoStatus === "success" && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    marginTop: 8,
-                  }}
-                >
-                  <CheckCircle color="#16a34a" size={16} />
-                  <Text style={{ color: "#16a34a", fontSize: 14 }}>
-                    Premium activated!
-                  </Text>
-                </View>
-              )}
-              {promoStatus === "error" && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    marginTop: 8,
-                  }}
-                >
-                  <AlertCircle color="#ef4444" size={16} />
-                  <Text style={{ color: "#ef4444", fontSize: 14 }}>
-                    Invalid promo code.
-                  </Text>
-                </View>
-              )}
-            </View>
-
           {/* Share with gradient button */}
           <View
             style={{
@@ -736,6 +592,48 @@ export default function ProfileScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          {/* Restore Purchases */}
+          <TouchableOpacity
+            onPress={async () => {
+              try {
+                const customerInfo = await restorePurchases();
+                if (hasEntitlement(customerInfo, "business")) {
+                  await updateProfile({ subscriptionStatus: "business" });
+                  Alert.alert("Restored", "Your subscription has been restored.");
+                } else if (hasEntitlement(customerInfo, "premium")) {
+                  await updateProfile({ subscriptionStatus: "premium" });
+                  Alert.alert("Restored", "Your subscription has been restored.");
+                } else {
+                  Alert.alert("No Purchases Found", "We couldn't find any active subscriptions to restore.");
+                }
+              } catch (e: any) {
+                Alert.alert("Error", e?.message || "Failed to restore purchases.");
+              }
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              paddingVertical: 14,
+              backgroundColor: theme.card,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.border,
+            }}
+          >
+            <RefreshCw color={theme.foreground} size={20} />
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: theme.foreground,
+              }}
+            >
+              Restore Purchases
+            </Text>
+          </TouchableOpacity>
 
           {/* Actions */}
           <TouchableOpacity
@@ -890,14 +788,6 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-
-      <ExternalLinkDisclosure
-        visible={showDisclosure}
-        onClose={() => setShowDisclosure(false)}
-        email={user?.email || undefined}
-        plan="business"
-        onReturn={onReturn}
-      />
 
       {/* Delete modal */}
       <Modal visible={showDeleteModal} transparent animationType="fade">

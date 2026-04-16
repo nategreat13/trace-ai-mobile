@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { getUserProfile, subscribeToProfile } from "../services/firestore";
+import { initializeIAP, logOutIAP } from "../services/iap";
 import { UserProfile } from "@trace/shared";
 
 interface AuthContextType {
@@ -31,9 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
       if (!firebaseUser) {
         setProfile(null);
+        logOutIAP();
         setLoading(false);
         return;
       }
+      // Initialize RevenueCat with the Firebase user ID
+      await initializeIAP(firebaseUser.uid);
       // Fetch initial profile
       const p = await getUserProfile(firebaseUser.uid);
       console.log("[AuthContext] getUserProfile result:", p?.id, p?.homeAirport);

@@ -8,8 +8,7 @@ import LandingScreen from "../screens/LandingScreen";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import TabNavigator from "./TabNavigator";
-import TrialSignupScreen from "../screens/TrialSignupScreen";
-import SubscriptionPlanScreen from "../screens/SubscriptionPlanScreen";
+import PaywallScreen from "../screens/PaywallScreen";
 import PremiumWelcomeScreen from "../screens/PremiumWelcomeScreen";
 import BusinessWelcomeScreen from "../screens/BusinessWelcomeScreen";
 import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
@@ -40,13 +39,8 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />
           <Stack.Screen
-            name="TrialSignup"
-            component={TrialSignupScreen}
-            options={{ presentation: "modal" }}
-          />
-          <Stack.Screen
-            name="SubscriptionPlan"
-            component={SubscriptionPlanScreen}
+            name="Paywall"
+            component={PaywallScreen}
             options={{ presentation: "modal" }}
           />
           <Stack.Screen

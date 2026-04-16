@@ -5,7 +5,6 @@ import {
   Image,
   TouchableOpacity,
   useColorScheme,
-  Modal,
   ScrollView,
 } from "react-native";
 import Animated, {
@@ -46,8 +45,6 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
-import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 
@@ -117,9 +114,6 @@ export default function SwipeDeckScreen() {
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
-  const [showUpgradePopup, setShowUpgradePopup] = useState(false);
-  const [showDisclosure, setShowDisclosure] = useState(false);
-  const { captureStatus, onReturn } = useUpgradeDetection();
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -225,14 +219,14 @@ export default function SwipeDeckScreen() {
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
-        setShowUpgradePopup(true);
+        navigation.navigate("Paywall");
         return;
       }
 
       if (!isPremium && action === "super") {
         const savedCount = allSwipes.filter((s) => s.action === "super").length;
         if (savedCount >= MAX_SAVES) {
-          setShowUpgradePopup(true);
+          navigation.navigate("Paywall");
           return;
         }
       }
@@ -371,7 +365,7 @@ export default function SwipeDeckScreen() {
 
   const handleButtonSwipe = (action: "left" | "right" | "super") => {
     if (!isPremium && swipesLeft <= 0) {
-      setShowUpgradePopup(true);
+      navigation.navigate("Paywall");
       return;
     }
     setTriggerSwipe(action);
@@ -420,7 +414,7 @@ export default function SwipeDeckScreen() {
           )}
         </View>
         {!isPremium && (
-          <TouchableOpacity onPress={() => setShowUpgradePopup(true)}>
+          <TouchableOpacity onPress={() => navigation.navigate("Paywall")}>
             <Crown color={colors.brand.amber500} size={24} />
           </TouchableOpacity>
         )}
@@ -609,7 +603,7 @@ export default function SwipeDeckScreen() {
           {!isPremium && swipesLeft > 0 && swipesLeft <= 3 && (
             <Animated.View entering={FadeIn.duration(300)}>
               <TouchableOpacity
-                onPress={() => setShowUpgradePopup(true)}
+                onPress={() => navigation.navigate("Paywall")}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -755,103 +749,6 @@ export default function SwipeDeckScreen() {
           }}
         />
       )}
-
-      {/* Upgrade popup modal */}
-      <Modal visible={showUpgradePopup} transparent animationType="fade">
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setShowUpgradePopup(false)}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.6)",
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: 16,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.card,
-              borderRadius: 24,
-              padding: 28,
-              width: "100%",
-              maxWidth: 380,
-              borderWidth: 1,
-              borderColor: theme.border,
-            }}
-          >
-            <View style={{ alignItems: "center", gap: 16 }}>
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 32,
-                  backgroundColor: colors.brand.amber500,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Crown color="#fff" size={32} />
-              </View>
-              <Text style={{ fontSize: 24, fontWeight: "900", color: theme.foreground }}>
-                Unlock Unlimited Swipes
-              </Text>
-              <Text style={{ color: theme.mutedForeground, fontSize: 14, textAlign: "center" }}>
-                Free users get {MAX_DAILY_SWIPES} swipes per day. Upgrade to Premium and never miss
-                a deal.
-              </Text>
-              {["Unlimited daily swipes", "Unlimited saved deals", "Full Explore access", "Priority deal alerts"].map(
-                (f, i) => (
-                  <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 10, width: "100%" }}>
-                    <View
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: 10,
-                        backgroundColor: colors.brand.amber500,
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>✓</Text>
-                    </View>
-                    <Text style={{ color: theme.foreground, fontSize: 14 }}>{f}</Text>
-                  </View>
-                )
-              )}
-              <TouchableOpacity
-                onPress={() => {
-                  setShowUpgradePopup(false);
-                  captureStatus();
-                  setShowDisclosure(true);
-                }}
-                style={{
-                  width: "100%",
-                  paddingVertical: 14,
-                  borderRadius: 16,
-                  backgroundColor: colors.brand.amber500,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-                  View Plans
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowUpgradePopup(false)}>
-                <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>Maybe later</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      <ExternalLinkDisclosure
-        visible={showDisclosure}
-        onClose={() => setShowDisclosure(false)}
-        plan="premium"
-        email={user?.email || undefined}
-        onReturn={onReturn}
-      />
 
     </SafeAreaView>
   );

@@ -62,19 +62,10 @@ export default function PrivacyPage() {
             Payment Information
           </h3>
           <p>
-            Subscriptions are processed by Stripe. We store your Stripe customer
-            ID and subscription status but never see or store your full card
-            number. Payment information is handled entirely by Stripe in
-            accordance with their{" "}
-            <a
-              href="https://stripe.com/privacy"
-              className="text-rose-500 underline"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              privacy policy
-            </a>
-            .
+            Subscriptions are processed through Apple&apos;s App Store or Google
+            Play. We store your subscription status but never see or store your
+            payment method details. Payment information is handled entirely by
+            Apple or Google in accordance with their respective privacy policies.
           </p>
         </section>
 
@@ -117,7 +108,7 @@ export default function PrivacyPage() {
               file storage
             </li>
             <li>
-              <strong>Stripe</strong> — payment processing
+              <strong>RevenueCat</strong> — subscription management
             </li>
             <li>
               <strong>Expo</strong> — app updates and delivery
@@ -150,8 +141,8 @@ export default function PrivacyPage() {
             We retain your data for as long as your account is active. You can
             delete your account at any time from the app&apos;s profile screen.
             When you delete your account, we remove your profile, swipe history,
-            saved deals, and deal alerts. Stripe may retain billing records as
-            required by law.
+            saved deals, and deal alerts. Apple or Google may retain billing
+            records in accordance with their policies.
           </p>
         </section>
 

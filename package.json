@@ -13,9 +13,17 @@
     "build:android": "cd projects/app && npx eas-cli build --platform android --profile production",
     "submit:android": "cd projects/app && npx eas-cli submit --platform android --profile production",
     "dev:web": "yarn workspace @trace/web dev",
-    "postinstall": "yarn workspace @trace/shared build"
+    "postinstall": "yarn workspace @trace/shared build",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
+  },
+  "version": "1.0.0",
+  "dependencies": {
+    "expo": "~54.0.33",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

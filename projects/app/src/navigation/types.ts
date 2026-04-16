@@ -13,8 +13,7 @@ export type RootStackParamList = {
   Login: { mode?: "signup" | "signin" } | undefined;
   Onboarding: undefined;
   MainTabs: NavigatorScreenParams<TabParamList>;
-  TrialSignup: { plan: string };
-  SubscriptionPlan: undefined;
+  Paywall: undefined;
   PremiumWelcome: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;

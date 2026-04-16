@@ -23,8 +23,6 @@ import { createSwipeAction, saveDeal, getSwipeActions } from "../services/firest
 import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ExternalLinkDisclosure from "../components/ExternalLinkDisclosure";
-import { useUpgradeDetection } from "../hooks/useUpgradeDetection";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -44,8 +42,6 @@ export default function ExploreScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [showDisclosure, setShowDisclosure] = useState(false);
-  const { captureStatus, onReturn } = useUpgradeDetection();
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
@@ -199,7 +195,7 @@ export default function ExploreScreen() {
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
-      captureStatus(); setShowDisclosure(true);
+      navigation.navigate("Paywall");
       return;
     }
     await saveDeal({
@@ -290,7 +286,7 @@ export default function ExploreScreen() {
     return (
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => { if (isBlurred) { captureStatus(); setShowDisclosure(true); } else { setExpandedDeal(deal); } }}
+        onPress={() => { if (isBlurred) { navigation.navigate("Paywall"); } else { setExpandedDeal(deal); } }}
         style={{
           backgroundColor: theme.card,
           borderRadius: 16,
@@ -685,7 +681,7 @@ export default function ExploreScreen() {
                 style={{ borderRadius: 12, width: "100%" }}
               >
                 <TouchableOpacity
-                  onPress={() => { captureStatus(); setShowDisclosure(true); }}
+                  onPress={() => navigation.navigate("Paywall")}
                   style={{
                     paddingVertical: 14,
                     alignItems: "center",
@@ -731,14 +727,6 @@ export default function ExploreScreen() {
           }}
         />
       )}
-
-      <ExternalLinkDisclosure
-        visible={showDisclosure}
-        onClose={() => setShowDisclosure(false)}
-        plan="premium"
-        email={user?.email || undefined}
-        onReturn={onReturn}
-      />
 
     </SafeAreaView>
   );

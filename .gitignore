@@ -40,6 +40,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+projects/app/ios/
+projects/app/android/
 
 # monorepo build artifacts
 projects/shared/dist/
