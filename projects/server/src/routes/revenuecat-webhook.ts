@@ -3,10 +3,26 @@ import { getDb } from "../firebase";
 
 export const revenuecatWebhookRoutes = Router();
 
+type Tier = "premium" | "business";
+
 /**
- * Map a RevenueCat product ID to our Firestore subscription status.
+ * Derive the user's effective tier from an RC event's `entitlement_ids` array.
+ * Business wins over Premium if both are present.
+ * Returns null if no known entitlements are active.
  */
-function productToStatus(productId: string): "premium" | "business" | null {
+function tierFromEntitlements(entitlementIds: unknown): Tier | null {
+  if (!Array.isArray(entitlementIds)) return null;
+  if (entitlementIds.includes("business")) return "business";
+  if (entitlementIds.includes("premium")) return "premium";
+  return null;
+}
+
+/**
+ * Fallback: derive tier from a product ID string using naming convention.
+ * Used only when `entitlement_ids` is missing.
+ */
+function tierFromProductId(productId: unknown): Tier | null {
+  if (typeof productId !== "string") return null;
   if (productId.includes("business")) return "business";
   if (productId.includes("premium")) return "premium";
   return null;
@@ -23,10 +39,29 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       return;
     }
 
-    const event = req.body;
-    const { type, app_user_id, product_id, expiration_at_ms } = event.event || {};
+    const payload = req.body;
+    const ev = payload.event || {};
+    const {
+      type,
+      app_user_id,
+      product_id,
+      new_product_id,
+      entitlement_ids,
+      expiration_at_ms,
+    } = ev;
 
-    console.log("[RC Webhook] Event:", type, "User:", app_user_id, "Product:", product_id);
+    console.log(
+      "[RC Webhook] Event:",
+      type,
+      "User:",
+      app_user_id,
+      "Product:",
+      product_id,
+      "New product:",
+      new_product_id,
+      "Entitlements:",
+      entitlement_ids
+    );
 
     if (!app_user_id) {
       console.warn("[RC Webhook] No app_user_id in event");
@@ -36,7 +71,6 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
 
     const db = getDb();
 
-    // Find the user's profile document by userId field
     const profileQuery = await db
       .collection("userProfiles")
       .where("userId", "==", app_user_id)
@@ -55,34 +89,75 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
     switch (type) {
       case "INITIAL_PURCHASE":
       case "RENEWAL":
-      case "UNCANCELLATION":
-      case "PRODUCT_CHANGE": {
-        const status = productToStatus(product_id || "");
-        if (!status) {
-          console.warn("[RC Webhook] Unknown product:", product_id);
+      case "UNCANCELLATION": {
+        // Source of truth: entitlement_ids from RC. Fall back to product_id
+        // naming convention only if entitlement_ids is missing.
+        const tier =
+          tierFromEntitlements(entitlement_ids) ??
+          tierFromProductId(product_id);
+        if (!tier) {
+          console.warn(
+            "[RC Webhook] Could not resolve tier for event",
+            type,
+            { entitlement_ids, product_id }
+          );
           break;
         }
 
-        const updates: Record<string, any> = {
-          subscriptionStatus: status,
-        };
-
+        const updates: Record<string, any> = { subscriptionStatus: tier };
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
         }
-
         await profileRef.update(updates);
-        console.log("[RC Webhook] Updated profile to:", status);
+        console.log("[RC Webhook] Updated profile to:", tier);
         break;
       }
 
-      case "CANCELLATION":
+      case "PRODUCT_CHANGE": {
+        // For tier upgrades (e.g. Premium → Business), the change takes
+        // effect immediately and entitlement_ids reflects the new tier.
+        // For tier downgrades or billing-period changes that Apple queues
+        // until period end, the user still has their existing entitlement.
+        // In both cases, entitlement_ids is the correct source of truth.
+        // Fall back to new_product_id (the product being switched TO) if
+        // entitlements are missing, NOT product_id (the old product).
+        const tier =
+          tierFromEntitlements(entitlement_ids) ??
+          tierFromProductId(new_product_id) ??
+          tierFromProductId(product_id);
+        if (!tier) {
+          console.warn(
+            "[RC Webhook] Could not resolve tier for PRODUCT_CHANGE",
+            { entitlement_ids, product_id, new_product_id }
+          );
+          break;
+        }
+
+        const updates: Record<string, any> = { subscriptionStatus: tier };
+        if (expiration_at_ms) {
+          updates.trialEndDate = new Date(expiration_at_ms);
+        }
+        await profileRef.update(updates);
+        console.log("[RC Webhook] PRODUCT_CHANGE applied:", tier);
+        break;
+      }
+
+      case "CANCELLATION": {
+        // User turned off auto-renew but access continues until expiration.
+        // Do NOT flip to free yet — just log for observability.
+        console.log(
+          "[RC Webhook] User cancelled (access continues until expiration):",
+          app_user_id
+        );
+        break;
+      }
+
       case "EXPIRATION": {
         await profileRef.update({
           subscriptionStatus: "free",
           trialEndDate: null,
         });
-        console.log("[RC Webhook] Reset profile to free");
+        console.log("[RC Webhook] Subscription expired, reset to free");
         break;
       }
 
