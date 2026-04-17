@@ -108,17 +108,36 @@ export default function PaywallScreen() {
     const info = await purchase(selectedPkg);
     if (!info) return;
 
-    const isPremium = hasEntitlement(info, "premium");
-    const isBusiness = hasEntitlement(info, "business");
-    if (isPremium || isBusiness) {
-      setProfile((prev) =>
-        prev ? { ...prev, subscriptionStatus: isBusiness ? "business" : "premium" } : prev
+    // Derive the welcome screen from the tier the user just bought, NOT from
+    // their current entitlements. In sandbox (and occasionally production),
+    // a user can hold a higher-tier entitlement from a prior subscription
+    // that hasn't expired yet when they purchase a different tier, which
+    // would otherwise send them to the wrong welcome screen.
+    const purchasedTier: "premium" | "business" = selected;
+
+    // Still use RC's CustomerInfo to decide whether to update the local
+    // subscription status optimistically. If neither entitlement is active
+    // (e.g. downgrade queued for end of period), prefer the higher of
+    // current vs purchased tier so the UI doesn't regress.
+    const nowHasBusiness = hasEntitlement(info, "business");
+    const nowHasPremium = hasEntitlement(info, "premium");
+    const statusAfter: "premium" | "business" = nowHasBusiness
+      ? "business"
+      : nowHasPremium
+      ? "premium"
+      : purchasedTier;
+
+    setProfile((prev) =>
+      prev ? { ...prev, subscriptionStatus: statusAfter } : prev
+    );
+
+    // Always navigate — purchase succeeded as far as Apple is concerned
+    navigation.goBack();
+    setTimeout(() => {
+      navigation.navigate(
+        purchasedTier === "business" ? "BusinessWelcome" : "PremiumWelcome"
       );
-      navigation.goBack();
-      setTimeout(() => {
-        navigation.navigate(isBusiness ? "BusinessWelcome" : "PremiumWelcome");
-      }, 100);
-    }
+    }, 100);
   };
 
   const handleRestore = async () => {
