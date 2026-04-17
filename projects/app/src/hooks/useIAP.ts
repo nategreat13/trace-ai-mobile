@@ -15,8 +15,10 @@ import {
 
 interface UseIAPResult {
   offerings: PurchasesOfferings | null;
-  premiumPackage: PurchasesPackage | null;
-  businessPackage: PurchasesPackage | null;
+  premiumAnnualPackage: PurchasesPackage | null;
+  premiumMonthlyPackage: PurchasesPackage | null;
+  businessAnnualPackage: PurchasesPackage | null;
+  businessMonthlyPackage: PurchasesPackage | null;
   trialEligible: boolean;
   loading: boolean;
   purchasing: boolean;
@@ -24,6 +26,13 @@ interface UseIAPResult {
   purchase: (pkg: PurchasesPackage) => Promise<CustomerInfo | null>;
   restore: () => Promise<CustomerInfo | null>;
 }
+
+const PRODUCT_IDS = [
+  "trace_premium_annual",
+  "trace_premium_monthly",
+  "trace_business_annual",
+  "trace_business_monthly",
+] as const;
 
 export function useIAP(): UseIAPResult {
   const [offerings, setOfferings] = useState<PurchasesOfferings | null>(null);
@@ -39,20 +48,18 @@ export function useIAP(): UseIAPResult {
         const off = await getOfferings();
         if (!cancelled) setOfferings(off);
 
-        // Check trial eligibility for both products
-        const products = [
-          "trace_premium_annual",
-          "trace_business_annual",
-        ];
+        // Check trial eligibility across all products. User is eligible if any
+        // product still offers them the intro offer.
         try {
           const eligibility =
-            await Purchases.checkTrialOrIntroductoryPriceEligibility(products);
+            await Purchases.checkTrialOrIntroductoryPriceEligibility([
+              ...PRODUCT_IDS,
+            ]);
           const eligible = Object.values(eligibility).some(
             (e) => e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
           );
           if (!cancelled) setTrialEligible(eligible);
         } catch {
-          // Default to eligible if check fails
           if (!cancelled) setTrialEligible(true);
         }
       } catch (err: any) {
@@ -67,15 +74,15 @@ export function useIAP(): UseIAPResult {
     };
   }, []);
 
-  const premiumPackage =
+  const findPackage = (productId: string) =>
     offerings?.current?.availablePackages.find(
-      (p) => p.product.identifier === "trace_premium_annual"
+      (p) => p.product.identifier === productId
     ) ?? null;
 
-  const businessPackage =
-    offerings?.current?.availablePackages.find(
-      (p) => p.product.identifier === "trace_business_annual"
-    ) ?? null;
+  const premiumAnnualPackage = findPackage("trace_premium_annual");
+  const premiumMonthlyPackage = findPackage("trace_premium_monthly");
+  const businessAnnualPackage = findPackage("trace_business_annual");
+  const businessMonthlyPackage = findPackage("trace_business_monthly");
 
   const purchase = useCallback(async (pkg: PurchasesPackage) => {
     setPurchasing(true);
@@ -85,7 +92,6 @@ export function useIAP(): UseIAPResult {
       return info;
     } catch (err: any) {
       if (err.userCancelled) {
-        // User cancelled — not an error
         return null;
       }
       setError(err.message || "Purchase failed");
@@ -117,8 +123,10 @@ export function useIAP(): UseIAPResult {
 
   return {
     offerings,
-    premiumPackage,
-    businessPackage,
+    premiumAnnualPackage,
+    premiumMonthlyPackage,
+    businessAnnualPackage,
+    businessMonthlyPackage,
     trialEligible,
     loading,
     purchasing,
