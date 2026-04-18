@@ -7,8 +7,7 @@ import Purchases, {
 import { Platform } from "react-native";
 
 const IOS_API_KEY = "appl_BFjCotDvhsDBOschVVzoWiRPabt";
-// TODO: replace with your actual Android SDK key from RevenueCat
-const ANDROID_API_KEY = "goog_REPLACE_ME";
+const ANDROID_API_KEY = "goog_AeONOrpyROKpCepkdogBNUGAsiV";
 
 let initialized = false;
 
