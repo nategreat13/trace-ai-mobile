@@ -74,9 +74,15 @@ export function useIAP(): UseIAPResult {
     };
   }, []);
 
+  // On iOS, product identifiers are the plain product ID (e.g.
+  // "trace_premium_annual"). On Android, RevenueCat appends the base plan
+  // name (e.g. "trace_premium_annual:premium-annual") so the same product
+  // can host multiple base plans. Accept both forms.
   const findPackage = (productId: string) =>
     offerings?.current?.availablePackages.find(
-      (p) => p.product.identifier === productId
+      (p) =>
+        p.product.identifier === productId ||
+        p.product.identifier.startsWith(productId + ":")
     ) ?? null;
 
   const premiumAnnualPackage = findPackage("trace_premium_annual");
