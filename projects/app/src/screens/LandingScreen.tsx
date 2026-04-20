@@ -103,15 +103,16 @@ export default function LandingScreen() {
     (action: "left" | "right" | "super") => {
       setTriggerSwipe(null);
 
-      // Right swipe / super swipe = user wants to save → signup prompt
-      if (action === "right" || action === "super") {
-        setShowSavePrompt(true);
-        return;
-      }
-
-      // Left swipe = advance deck + increment count
+      // Always advance the deck so the card that just animated off isn't
+      // re-rendered underneath the next one.
       setCurrentIndex((i) => i + 1);
       setSwipeCount((c) => c + 1);
+
+      // Right/super swipe also surfaces the signup save prompt, but the
+      // deck still advances so dismissing the prompt lands on the next card.
+      if (action === "right" || action === "super") {
+        setShowSavePrompt(true);
+      }
     },
     []
   );
@@ -365,8 +366,10 @@ export default function LandingScreen() {
             contentContainerStyle={{ padding: 20 }}
             keyboardShouldPersistTaps="handled"
           >
+            {/* Pass an empty string so AirportInput renders its search UI
+                directly (it would otherwise show a "Change" pill first). */}
             <AirportInput
-              value={airport}
+              value=""
               onChange={(code) => {
                 if (code) {
                   setAirport(code);
