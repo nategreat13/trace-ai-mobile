@@ -24,7 +24,7 @@ import AirportInput from "../components/onboarding/AirportInput";
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const MAX_GUEST_DEALS = 10;
-const SOFT_PROMPT_EVERY = 3;
+const SOFT_PROMPT_EVERY = 2;
 
 function dedupeByDestination(arr: Deal[]): Deal[] {
   const seen = new Set<string>();
@@ -63,7 +63,7 @@ export default function LandingScreen() {
 
   // Prompt state
   const [showSoftPrompt, setShowSoftPrompt] = useState(false);
-  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [showDetailPrompt, setShowDetailPrompt] = useState(false);
   const [showHardWall, setShowHardWall] = useState(false);
 
   // Load deals whenever the airport changes
@@ -99,23 +99,14 @@ export default function LandingScreen() {
     }
   }, [swipeCount]);
 
-  const handleSwipe = useCallback(
-    (action: "left" | "right" | "super") => {
-      setTriggerSwipe(null);
-
-      // Always advance the deck so the card that just animated off isn't
-      // re-rendered underneath the next one.
-      setCurrentIndex((i) => i + 1);
-      setSwipeCount((c) => c + 1);
-
-      // Right/super swipe also surfaces the signup save prompt, but the
-      // deck still advances so dismissing the prompt lands on the next card.
-      if (action === "right" || action === "super") {
-        setShowSavePrompt(true);
-      }
-    },
-    []
-  );
+  // All swipe directions behave the same way: advance the deck and bump
+  // the counter. The soft-prompt effect handles surfacing a signup modal
+  // every N swipes.
+  const handleSwipe = useCallback((_action: "left" | "right" | "super") => {
+    setTriggerSwipe(null);
+    setCurrentIndex((i) => i + 1);
+    setSwipeCount((c) => c + 1);
+  }, []);
 
   const handleButtonSwipe = (action: "left" | "right") => {
     setTriggerSwipe(action);
@@ -124,14 +115,14 @@ export default function LandingScreen() {
 
   const goToSignup = () => {
     setShowSoftPrompt(false);
-    setShowSavePrompt(false);
+    setShowDetailPrompt(false);
     setShowHardWall(false);
     navigation.navigate("Login", { mode: "signup" });
   };
 
   const goToSignin = () => {
     setShowSoftPrompt(false);
-    setShowSavePrompt(false);
+    setShowDetailPrompt(false);
     setShowHardWall(false);
     navigation.navigate("Login", { mode: "signin" });
   };
@@ -243,7 +234,7 @@ export default function LandingScreen() {
                 deal={deal}
                 isTop={i === arr.length - 1}
                 onSwipe={handleSwipe}
-                onExpand={() => setShowSavePrompt(true)}
+                onExpand={() => setShowDetailPrompt(true)}
                 triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                 isSwipeDisabled={false}
               />
@@ -294,7 +285,7 @@ export default function LandingScreen() {
                 <X color="#ef4444" size={28} strokeWidth={3} />
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => setShowSavePrompt(true)}
+                onPress={() => handleButtonSwipe("right")}
                 style={{
                   width: 56,
                   height: 56,
@@ -453,11 +444,11 @@ export default function LandingScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Save prompt — triggered by right swipe / heart tap */}
-      <Modal visible={showSavePrompt} transparent animationType="fade">
+      {/* Detail prompt — shown when a guest taps a deal card */}
+      <Modal visible={showDetailPrompt} transparent animationType="fade">
         <TouchableOpacity
           activeOpacity={1}
-          onPress={() => setShowSavePrompt(false)}
+          onPress={() => setShowDetailPrompt(false)}
           style={{
             flex: 1,
             backgroundColor: "rgba(0,0,0,0.55)",
@@ -478,9 +469,9 @@ export default function LandingScreen() {
               alignItems: "center",
             }}
           >
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>❤️</Text>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>🧭</Text>
             <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
-              Save deals you love
+              See full deal details
             </Text>
             <Text
               style={{
@@ -491,7 +482,7 @@ export default function LandingScreen() {
                 lineHeight: 20,
               }}
             >
-              Create a free account to save this deal, set price alerts, and get AI-personalized recommendations.
+              Create a free account to unlock full itinerary details, AI travel advice, weather previews, and booking links for this deal.
             </Text>
             <TouchableOpacity
               onPress={goToSignup}
@@ -506,7 +497,7 @@ export default function LandingScreen() {
             >
               <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Create account</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSavePrompt(false)} style={{ paddingVertical: 8 }}>
+            <TouchableOpacity onPress={() => setShowDetailPrompt(false)} style={{ paddingVertical: 8 }}>
               <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>Not now</Text>
             </TouchableOpacity>
           </View>
