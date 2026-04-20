@@ -1,298 +1,607 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
-  Dimensions,
+  Image,
   ActivityIndicator,
-  FlatList,
-  ViewToken,
+  Modal,
+  useColorScheme,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useColorScheme } from "react-native";
-import { Image } from "expo-image";
-import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { LinearGradient } from "expo-linear-gradient";
+import { X, Heart, ChevronDown, Sparkles, Lock } from "lucide-react-native";
 import type { RootStackParamList } from "../navigation/types";
 import { colors } from "../theme/colors";
 import { fetchDeals } from "../services/dealsApi";
 import { Deal } from "@trace/shared";
+import SwipeCard from "../components/swipe/SwipeCard";
+import AirportInput from "../components/onboarding/AirportInput";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const CARD_WIDTH = SCREEN_WIDTH - 48;
-const CARD_HEIGHT = CARD_WIDTH * 0.85;
-const AUTO_ADVANCE_MS = 4000;
+const MAX_GUEST_DEALS = 10;
+const SOFT_PROMPT_EVERY = 3;
+
+function dedupeByDestination(arr: Deal[]): Deal[] {
+  const seen = new Set<string>();
+  return arr.filter((d) => {
+    if (seen.has(d.destination)) return false;
+    seen.add(d.destination);
+    return true;
+  });
+}
+
+function sortByBestDeal(arr: Deal[]): Deal[] {
+  return [...arr].sort((a, b) => {
+    if ((b.discount_pct || 0) !== (a.discount_pct || 0))
+      return (b.discount_pct || 0) - (a.discount_pct || 0);
+    return (a.price || 0) - (b.price || 0);
+  });
+}
 
 export default function LandingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const navigation = useNavigation<Nav>();
+
+  // Airport state
+  const [airport, setAirport] = useState("LAX");
+  const [showAirportPicker, setShowAirportPicker] = useState(false);
+
+  // Deals state
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval>>(null);
 
+  // Swipe state
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [swipeCount, setSwipeCount] = useState(0);
+  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+
+  // Prompt state
+  const [showSoftPrompt, setShowSoftPrompt] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
+  const [showHardWall, setShowHardWall] = useState(false);
+
+  // Load deals whenever the airport changes
   useEffect(() => {
-    fetchDeals("LAX")
+    setLoading(true);
+    fetchDeals(airport)
       .then((all) => {
-        // Pick 5 deals with good images spread across destinations
-        const shuffled = all.sort(() => Math.random() - 0.5);
-        const seen = new Set<string>();
-        const picked: Deal[] = [];
-        for (const d of shuffled) {
-          if (!seen.has(d.destination) && d.image_url) {
-            seen.add(d.destination);
-            picked.push(d);
-            if (picked.length >= 5) break;
-          }
-        }
-        setDeals(picked);
+        const withImages = all.filter((d) => d.image_url);
+        const sorted = sortByBestDeal(withImages);
+        const deduped = dedupeByDestination(sorted).slice(0, MAX_GUEST_DEALS);
+        setDeals(deduped);
+        // Reset swipe state for new airport
+        setCurrentIndex(0);
+        setSwipeCount(0);
+        setShowSoftPrompt(false);
+        setShowHardWall(false);
       })
-      .catch(() => {})
+      .catch(() => setDeals([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [airport]);
 
-  // Auto-advance carousel
+  // Check for prompts as swipe count changes
   useEffect(() => {
-    if (deals.length <= 1) return;
-    timerRef.current = setInterval(() => {
-      setActiveIndex((prev) => {
-        const next = (prev + 1) % deals.length;
-        flatListRef.current?.scrollToIndex({ index: next, animated: true });
-        return next;
-      });
-    }, AUTO_ADVANCE_MS);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [deals.length]);
+    if (swipeCount === 0) return;
+    // Hard wall after the final swipe
+    if (swipeCount >= MAX_GUEST_DEALS) {
+      setShowHardWall(true);
+      return;
+    }
+    // Soft prompt every N swipes
+    if (swipeCount % SOFT_PROMPT_EVERY === 0) {
+      setShowSoftPrompt(true);
+    }
+  }, [swipeCount]);
 
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        setActiveIndex(viewableItems[0].index);
+  const handleSwipe = useCallback(
+    (action: "left" | "right" | "super") => {
+      setTriggerSwipe(null);
+
+      // Right swipe / super swipe = user wants to save → signup prompt
+      if (action === "right" || action === "super") {
+        setShowSavePrompt(true);
+        return;
       }
+
+      // Left swipe = advance deck + increment count
+      setCurrentIndex((i) => i + 1);
+      setSwipeCount((c) => c + 1);
     },
-  ).current;
-
-  const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
-
-  const renderCard = ({ item }: { item: Deal }) => (
-    <View style={{ width: CARD_WIDTH }}>
-      <View
-        style={{
-          width: CARD_WIDTH,
-          height: CARD_HEIGHT,
-          borderRadius: 20,
-          overflow: "hidden",
-          backgroundColor: "#1a1a1a",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.15,
-          shadowRadius: 12,
-          elevation: 8,
-        }}
-      >
-        <Image
-          source={{ uri: item.image_url }}
-          style={{ width: "100%", height: "100%" }}
-          contentFit="cover"
-        />
-        <LinearGradient
-          colors={[
-            "rgba(0,0,0,0.0)",
-            "rgba(0,0,0,0.0)",
-            "rgba(0,0,0,0.5)",
-            "rgba(0,0,0,0.88)",
-          ]}
-          locations={[0, 0.4, 0.7, 1]}
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-          }}
-        />
-        {/* Top row: origin pill + price pill */}
-        <View
-          style={{
-            position: "absolute",
-            top: 16,
-            left: 16,
-            right: 16,
-            flexDirection: "row",
-            justifyContent: "space-between",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: "rgba(0,0,0,0.45)",
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: 12,
-            }}
-          >
-            <Text
-              style={{
-                color: "#fff",
-                fontWeight: "700",
-                fontSize: 13,
-                letterSpacing: 0.3,
-              }}
-            >
-              From {item.origin}
-            </Text>
-          </View>
-          <View
-            style={{
-              backgroundColor: colors.brand.traceGreen,
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              borderRadius: 12,
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>
-              ${item.price}
-            </Text>
-          </View>
-        </View>
-        {/* Destination */}
-        <View style={{ position: "absolute", bottom: 20, left: 20, right: 20 }}>
-          <Text
-            style={{
-              color: "#fff",
-              fontSize: 34,
-              fontWeight: "900",
-              textShadowColor: "rgba(0,0,0,0.6)",
-              textShadowOffset: { width: 0, height: 1 },
-              textShadowRadius: 4,
-            }}
-          >
-            {item.destination}
-          </Text>
-        </View>
-      </View>
-    </View>
+    []
   );
+
+  const handleButtonSwipe = (action: "left" | "right") => {
+    setTriggerSwipe(action);
+    setTimeout(() => setTriggerSwipe(null), 400);
+  };
+
+  const goToSignup = () => {
+    setShowSoftPrompt(false);
+    setShowSavePrompt(false);
+    setShowHardWall(false);
+    navigation.navigate("Login", { mode: "signup" });
+  };
+
+  const goToSignin = () => {
+    setShowSoftPrompt(false);
+    setShowSavePrompt(false);
+    setShowHardWall(false);
+    navigation.navigate("Login", { mode: "signin" });
+  };
+
+  // Stack of up to 3 cards rendered behind the top
+  const visibleCards = useMemo(
+    () => deals.slice(currentIndex, currentIndex + 3).reverse(),
+    [deals, currentIndex]
+  );
+
+  const isDeckDone = currentIndex >= deals.length;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Header */}
-      <View style={{ alignItems: "center", marginTop: 16, marginBottom: 20 }}>
-        <Text style={{ fontSize: 36, marginBottom: 10 }}>✈️</Text>
-        <Text
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 20,
+          paddingTop: 8,
+          paddingBottom: 8,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Image
+            source={require("../../assets/Bluelogo.png")}
+            style={{ width: 28, height: 28, resizeMode: "contain" }}
+          />
+          <Text style={{ fontSize: 18, fontWeight: "900", color: theme.foreground }}>Trace</Text>
+        </View>
+        <TouchableOpacity
+          onPress={goToSignin}
           style={{
-            fontSize: 28,
-            fontWeight: "900",
-            color: theme.foreground,
-            textAlign: "center",
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: theme.border,
           }}
         >
-          Your next adventure{"\n"}starts with a{" "}
-          <Text style={{ color: colors.brand.traceRed }}>swipe</Text>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground }}>Sign in</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Airport selector */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 }}>
+        <TouchableOpacity
+          onPress={() => setShowAirportPicker(true)}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            alignSelf: "flex-start",
+            backgroundColor: theme.muted,
+            borderRadius: 999,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            gap: 6,
+          }}
+        >
+          <Text style={{ fontSize: 13, fontWeight: "600", color: theme.mutedForeground }}>
+            Deals from
+          </Text>
+          <Text style={{ fontSize: 14, fontWeight: "800", color: theme.foreground }}>
+            {airport}
+          </Text>
+          <ChevronDown color={theme.mutedForeground} size={14} />
+        </TouchableOpacity>
+        <Text
+          style={{
+            marginTop: 12,
+            fontSize: 22,
+            fontWeight: "900",
+            color: theme.foreground,
+            lineHeight: 28,
+          }}
+        >
+          Today's top flight deals
+        </Text>
+        <Text style={{ marginTop: 4, fontSize: 13, color: theme.mutedForeground }}>
+          Swipe through {MAX_GUEST_DEALS} live deals from {airport}
         </Text>
       </View>
 
-      {/* Deal carousel — fills available space */}
-      <View style={{ flex: 1, justifyContent: "center" }}>
+      {/* Deck */}
+      <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 12 }}>
         {loading ? (
-          <ActivityIndicator size="large" color={colors.brand.traceRed} />
-        ) : deals.length > 0 ? (
-          <View>
-            <FlatList
-              ref={flatListRef}
-              data={deals}
-              renderItem={renderCard}
-              keyExtractor={(item) => item.id}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={CARD_WIDTH + 12}
-              decelerationRate="fast"
-              contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}
-              onViewableItemsChanged={onViewableItemsChanged}
-              viewabilityConfig={viewabilityConfig}
-              getItemLayout={(_, index) => ({
-                length: CARD_WIDTH + 12,
-                offset: (CARD_WIDTH + 12) * index,
-                index,
-              })}
-            />
-            {/* Dots */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                marginTop: 14,
-                gap: 6,
-              }}
-            >
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <ActivityIndicator size="large" color={colors.brand.traceRed} />
+          </View>
+        ) : deals.length === 0 ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 }}>
+            <Text style={{ fontSize: 40, marginBottom: 12 }}>🛫</Text>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, textAlign: "center" }}>
+              No deals from {airport} today
+            </Text>
+            <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginTop: 6 }}>
+              Try a different airport
+            </Text>
+          </View>
+        ) : isDeckDone ? (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }} />
+        ) : (
+          <View style={{ flex: 1, position: "relative" }}>
+            {visibleCards.map((deal, i, arr) => (
+              <SwipeCard
+                key={deal.id}
+                deal={deal}
+                isTop={i === arr.length - 1}
+                onSwipe={handleSwipe}
+                onExpand={() => setShowSavePrompt(true)}
+                triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
+                isSwipeDisabled={false}
+              />
+            ))}
+          </View>
+        )}
+
+        {/* Progress dots + action buttons */}
+        {!loading && deals.length > 0 && !isDeckDone && (
+          <>
+            {/* Progress */}
+            <View style={{ flexDirection: "row", justifyContent: "center", gap: 4, marginTop: 12 }}>
               {deals.map((_, i) => (
                 <View
                   key={i}
                   style={{
-                    width: activeIndex === i ? 20 : 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor:
-                      activeIndex === i
-                        ? colors.brand.traceRed
-                        : theme.border,
+                    width: i === currentIndex ? 18 : 6,
+                    height: 4,
+                    borderRadius: 2,
+                    backgroundColor: i <= currentIndex ? colors.brand.traceRed : theme.border,
                   }}
                 />
               ))}
             </View>
-          </View>
-        ) : null}
+
+            {/* Action buttons */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 36,
+                paddingVertical: 16,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => handleButtonSwipe("left")}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: theme.card,
+                  borderWidth: 2,
+                  borderColor: theme.border,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <X color="#ef4444" size={28} strokeWidth={3} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowSavePrompt(true)}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: theme.card,
+                  borderWidth: 2,
+                  borderColor: theme.border,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Heart color={colors.brand.traceGreen} fill={colors.brand.traceGreen} size={28} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
-      {/* CTA section — pinned to bottom */}
-      <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
-        <Text
-          style={{
-            textAlign: "center",
-            color: theme.mutedForeground,
-            fontSize: 15,
-            lineHeight: 22,
-            marginBottom: 16,
-          }}
-        >
-          Sign up to get flight deals personalized{"\n"}to{" "}
-          <Text style={{ color: colors.brand.traceRed, fontWeight: "700" }}>
-            your airport
-          </Text>
-          , right when they drop.
-        </Text>
+      {/* Bottom CTA */}
+      <View
+        style={{
+          paddingHorizontal: 20,
+          paddingBottom: 12,
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
+          paddingTop: 12,
+        }}
+      >
         <TouchableOpacity
-          onPress={() => navigation.navigate("Login", { mode: "signup" })}
+          onPress={goToSignup}
           style={{
             backgroundColor: colors.brand.traceRed,
             borderRadius: 14,
-            paddingVertical: 16,
+            paddingVertical: 14,
             alignItems: "center",
           }}
         >
-          <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700" }}>
-            Get started
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => navigation.navigate("Login", { mode: "signin" })}
-          style={{ marginTop: 14, alignItems: "center" }}
-        >
-          <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>
-            Already have an account?{" "}
-            <Text style={{ color: theme.foreground, fontWeight: "600" }}>
-              Sign in
-            </Text>
-          </Text>
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Create account</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Airport picker modal */}
+      <Modal
+        visible={showAirportPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowAirportPicker(false)}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: theme.border,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>
+              Pick an airport
+            </Text>
+            <TouchableOpacity onPress={() => setShowAirportPicker(false)}>
+              <X color={theme.foreground} size={24} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            contentContainerStyle={{ padding: 20 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <AirportInput
+              value={airport}
+              onChange={(code) => {
+                if (code) {
+                  setAirport(code);
+                  setShowAirportPicker(false);
+                }
+              }}
+            />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Soft signup prompt — non-blocking, shown every 3 swipes */}
+      <Modal visible={showSoftPrompt} transparent animationType="fade">
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowSoftPrompt(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 22,
+              padding: 24,
+              maxWidth: 380,
+              width: "100%",
+              borderWidth: 1,
+              borderColor: theme.border,
+              alignItems: "center",
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: colors.brand.traceRed + "15",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 12,
+              }}
+            >
+              <Sparkles color={colors.brand.traceRed} size={28} />
+            </View>
+            <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+              Loving these deals?
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                textAlign: "center",
+                marginBottom: 20,
+                lineHeight: 20,
+              }}
+            >
+              Sign up to save your favorites and let our AI learn your preferences for even better matches.
+            </Text>
+            <TouchableOpacity
+              onPress={goToSignup}
+              style={{
+                width: "100%",
+                backgroundColor: colors.brand.traceRed,
+                borderRadius: 12,
+                paddingVertical: 13,
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Create account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowSoftPrompt(false)} style={{ paddingVertical: 8 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>Maybe later</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Save prompt — triggered by right swipe / heart tap */}
+      <Modal visible={showSavePrompt} transparent animationType="fade">
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowSavePrompt(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 22,
+              padding: 24,
+              maxWidth: 380,
+              width: "100%",
+              borderWidth: 1,
+              borderColor: theme.border,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>❤️</Text>
+            <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+              Save deals you love
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                textAlign: "center",
+                marginBottom: 20,
+                lineHeight: 20,
+              }}
+            >
+              Create a free account to save this deal, set price alerts, and get AI-personalized recommendations.
+            </Text>
+            <TouchableOpacity
+              onPress={goToSignup}
+              style={{
+                width: "100%",
+                backgroundColor: colors.brand.traceRed,
+                borderRadius: 12,
+                paddingVertical: 13,
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Create account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowSavePrompt(false)} style={{ paddingVertical: 8 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>Not now</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Hard wall — after the 10th swipe, no bypass */}
+      <Modal visible={showHardWall} transparent animationType="fade">
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.75)",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 20,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 22,
+              padding: 28,
+              maxWidth: 400,
+              width: "100%",
+              borderWidth: 1,
+              borderColor: theme.border,
+              alignItems: "center",
+            }}
+          >
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: colors.brand.traceRed + "18",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 14,
+              }}
+            >
+              <Lock color={colors.brand.traceRed} size={28} />
+            </View>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "900",
+                color: theme.foreground,
+                textAlign: "center",
+                marginBottom: 8,
+              }}
+            >
+              You've seen today's top 10 deals
+            </Text>
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                textAlign: "center",
+                lineHeight: 20,
+                marginBottom: 20,
+              }}
+            >
+              Sign up for 500+ personalized deals, save favorites, and get alerts when prices drop.
+            </Text>
+            <View style={{ width: "100%", gap: 8 }}>
+              {[
+                "Personalized deals powered by AI",
+                "500+ deals from your home airport",
+                "Save favorites & get price-drop alerts",
+                "Unlimited daily swipes",
+              ].map((line, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={{ fontSize: 14, color: colors.brand.traceGreen }}>✓</Text>
+                  <Text style={{ fontSize: 13, color: theme.foreground, flex: 1 }}>{line}</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={goToSignup}
+              style={{
+                width: "100%",
+                backgroundColor: colors.brand.traceRed,
+                borderRadius: 12,
+                paddingVertical: 14,
+                alignItems: "center",
+                marginTop: 20,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Create account</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goToSignin} style={{ paddingVertical: 10, marginTop: 4 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>
+                Already have an account? <Text style={{ color: theme.foreground, fontWeight: "700" }}>Sign in</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
