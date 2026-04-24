@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getDb } from "../firebase";
+import { fanOutConversion } from "../lib/ad-conversions";
 
 export const revenuecatWebhookRoutes = Router();
 
@@ -48,6 +49,9 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       new_product_id,
       entitlement_ids,
       expiration_at_ms,
+      price_in_purchased_currency,
+      currency,
+      period_type,
     } = ev;
 
     console.log(
@@ -110,6 +114,24 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         }
         await profileRef.update(updates);
         console.log("[RC Webhook] Updated profile to:", tier);
+
+        // Fire ad platform conversions for INITIAL_PURCHASE (new sub).
+        // RENEWAL is excluded — those are not acquisition events.
+        if (type === "INITIAL_PURCHASE") {
+          const isTrial = period_type === "TRIAL";
+          const email = (profileDoc.data() as { email?: string }).email ?? null;
+          void fanOutConversion({
+            kind: isTrial ? "start_trial" : "purchase",
+            userId: app_user_id,
+            email,
+            amountUsd:
+              typeof price_in_purchased_currency === "number"
+                ? price_in_purchased_currency
+                : undefined,
+            currency: currency ?? "USD",
+            productId: product_id ?? undefined,
+          });
+        }
         break;
       }
 

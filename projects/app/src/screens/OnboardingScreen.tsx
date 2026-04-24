@@ -12,6 +12,7 @@ import {
 } from "../services/firestore";
 import { DEAL_TYPES, TIMEFRAMES, DEST_OPTIONS } from "../lib/constants";
 import OnboardingStep from "../components/onboarding/OnboardingStep";
+import { logEvent } from "../lib/analytics";
 import AirportInput from "../components/onboarding/AirportInput";
 import OptionGrid from "../components/onboarding/OptionGrid";
 import PersonalityReveal from "../components/PersonalityReveal";
@@ -42,6 +43,7 @@ export default function OnboardingScreen() {
   });
 
   useEffect(() => {
+    logEvent("onboarding_started", { is_editing: isEditing });
     if (profile) {
       setExistingProfileId(profile.id);
       setData((d) => ({
@@ -52,6 +54,7 @@ export default function OnboardingScreen() {
         travelTimeframe: profile.travelTimeframe || [],
       }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleFinish = async () => {
@@ -142,6 +145,14 @@ export default function OnboardingScreen() {
         const newProfile = await getUserProfile(user.uid);
         if (newProfile) setProfile(newProfile);
       }
+
+      logEvent("onboarding_completed", {
+        home_airport: data.homeAirport,
+        destination_preference: data.destinationPreference,
+        deal_types_count: data.dealTypes.length,
+        travel_timeframe_count: data.travelTimeframe.length,
+        is_editing: isEditing,
+      });
 
       if (isEditing) {
         navigation.goBack();

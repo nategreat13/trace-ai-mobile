@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useIAP } from "../hooks/useIAP";
 import { hasEntitlement } from "../services/iap";
+import { logEvent } from "../lib/analytics";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -72,6 +73,13 @@ export default function PaywallScreen() {
   const [selected, setSelected] = useState<Tier>(hasPremium ? "business" : "premium");
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("annual");
 
+  useEffect(() => {
+    logEvent("paywall_viewed", {
+      current_tier: currentTier ?? "free",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Resolve the package the user is about to purchase based on tier + billing
   const selectedPkg: PurchasesPackage | null = (() => {
     if (selected === "premium") {
@@ -104,6 +112,17 @@ export default function PaywallScreen() {
 
   const handlePurchase = async () => {
     if (!selectedPkg) return;
+
+    logEvent("paywall_cta_tapped", {
+      tier: selected,
+      billing: billingPeriod,
+      product_id: selectedPkg.product.identifier,
+    });
+    logEvent("purchase_initiated", {
+      tier: selected,
+      billing: billingPeriod,
+      product_id: selectedPkg.product.identifier,
+    });
 
     const info = await purchase(selectedPkg);
     if (!info) return;
@@ -141,6 +160,7 @@ export default function PaywallScreen() {
   };
 
   const handleRestore = async () => {
+    logEvent("paywall_restore_tapped", {});
     const info = await restore();
     if (!info) return;
 

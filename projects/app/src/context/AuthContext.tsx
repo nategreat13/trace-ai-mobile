@@ -3,6 +3,7 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { getUserProfile, subscribeToProfile } from "../services/firestore";
 import { initializeIAP, logOutIAP } from "../services/iap";
+import { setAnalyticsUser } from "../lib/analytics";
 import { UserProfile } from "@trace/shared";
 
 interface AuthContextType {
@@ -30,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("[AuthContext] onAuthStateChanged:", firebaseUser?.uid);
       setUser(firebaseUser);
+      setAnalyticsUser(firebaseUser?.uid ?? null);
       if (!firebaseUser) {
         setProfile(null);
         logOutIAP();

@@ -16,6 +16,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { login, signup } from "../services/auth";
+import { logEvent } from "../lib/analytics";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -38,6 +39,7 @@ export default function LoginScreen() {
     try {
       if (isSignup) {
         await signup(email.trim(), password);
+        logEvent("signup_completed", { method: "email" });
       } else {
         await login(email.trim(), password);
       }

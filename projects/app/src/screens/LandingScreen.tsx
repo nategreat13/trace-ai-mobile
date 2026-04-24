@@ -20,6 +20,7 @@ import { fetchDeals } from "../services/dealsApi";
 import { Deal } from "@trace/shared";
 import SwipeCard from "../components/swipe/SwipeCard";
 import AirportInput from "../components/onboarding/AirportInput";
+import { logEvent } from "../lib/analytics";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -66,6 +67,12 @@ export default function LandingScreen() {
   const [showDetailPrompt, setShowDetailPrompt] = useState(false);
   const [showHardWall, setShowHardWall] = useState(false);
 
+  // Log a landing view on initial mount (not on every airport change)
+  useEffect(() => {
+    logEvent("landing_viewed", { airport });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Load deals whenever the airport changes
   useEffect(() => {
     setLoading(true);
@@ -91,32 +98,45 @@ export default function LandingScreen() {
     // Hard wall after the final swipe
     if (swipeCount >= MAX_GUEST_DEALS) {
       setShowHardWall(true);
+      logEvent("hard_wall_shown", { airport, swipe_count: swipeCount });
       return;
     }
     // Soft prompt every N swipes
     if (swipeCount % SOFT_PROMPT_EVERY === 0) {
       setShowSoftPrompt(true);
+      logEvent("soft_prompt_shown", { airport, swipe_count: swipeCount });
     }
-  }, [swipeCount]);
+  }, [swipeCount, airport]);
 
   // All swipe directions behave the same way: advance the deck and bump
   // the counter. The soft-prompt effect handles surfacing a signup modal
   // every N swipes.
-  const handleSwipe = useCallback((_action: "left" | "right" | "super") => {
-    setTriggerSwipe(null);
-    setCurrentIndex((i) => i + 1);
-    setSwipeCount((c) => c + 1);
-  }, []);
+  const handleSwipe = useCallback(
+    (action: "left" | "right" | "super") => {
+      setTriggerSwipe(null);
+      setCurrentIndex((i) => i + 1);
+      setSwipeCount((c) => c + 1);
+      logEvent("guest_swipe", {
+        airport,
+        index: currentIndex,
+        direction: action,
+      });
+    },
+    [airport, currentIndex]
+  );
 
   const handleButtonSwipe = (action: "left" | "right") => {
     setTriggerSwipe(action);
     setTimeout(() => setTriggerSwipe(null), 400);
   };
 
-  const goToSignup = () => {
+  const goToSignup = (source: string) => {
+    if (showSoftPrompt) logEvent("soft_prompt_accepted", { source });
+    if (showHardWall) logEvent("hard_wall_accepted", { source });
     setShowSoftPrompt(false);
     setShowDetailPrompt(false);
     setShowHardWall(false);
+    logEvent("signup_viewed", { source });
     navigation.navigate("Login", { mode: "signup" });
   };
 
@@ -234,7 +254,10 @@ export default function LandingScreen() {
                 deal={deal}
                 isTop={i === arr.length - 1}
                 onSwipe={handleSwipe}
-                onExpand={() => setShowDetailPrompt(true)}
+                onExpand={() => {
+                  setShowDetailPrompt(true);
+                  logEvent("guest_detail_prompt", { airport, index: currentIndex });
+                }}
                 triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                 isSwipeDisabled={false}
               />
@@ -315,7 +338,7 @@ export default function LandingScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={goToSignup}
+          onPress={() => goToSignup("bottom_cta")}
           style={{
             backgroundColor: colors.brand.traceRed,
             borderRadius: 14,
@@ -363,6 +386,7 @@ export default function LandingScreen() {
               value=""
               onChange={(code) => {
                 if (code) {
+                  logEvent("airport_changed", { from: airport, to: code });
                   setAirport(code);
                   setShowAirportPicker(false);
                 }
@@ -425,7 +449,7 @@ export default function LandingScreen() {
               Sign up to save your favorites and let our AI learn your preferences for even better matches.
             </Text>
             <TouchableOpacity
-              onPress={goToSignup}
+              onPress={() => goToSignup("soft_prompt")}
               style={{
                 width: "100%",
                 backgroundColor: colors.brand.traceRed,
@@ -485,7 +509,7 @@ export default function LandingScreen() {
               Create a free account to unlock full itinerary details, AI travel advice, weather previews, and booking links for this deal.
             </Text>
             <TouchableOpacity
-              onPress={goToSignup}
+              onPress={() => goToSignup("detail_prompt")}
               style={{
                 width: "100%",
                 backgroundColor: colors.brand.traceRed,
@@ -576,7 +600,7 @@ export default function LandingScreen() {
               ))}
             </View>
             <TouchableOpacity
-              onPress={goToSignup}
+              onPress={() => goToSignup("hard_wall")}
               style={{
                 width: "100%",
                 backgroundColor: colors.brand.traceRed,

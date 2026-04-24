@@ -26,6 +26,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDealFetch } from "../hooks/useDealFetch";
 import { useSounds } from "../hooks/useSounds";
 import { useProfile } from "../hooks/useProfile";
+import { logEvent } from "../lib/analytics";
 import {
   createSwipeAction,
   getSwipeActions,
@@ -222,6 +223,7 @@ export default function SwipeDeckScreen() {
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
+        logEvent("daily_limit_hit", { swipes_left: 0 });
         navigation.navigate("Paywall");
         return;
       }
@@ -229,6 +231,7 @@ export default function SwipeDeckScreen() {
       if (!isPremium && action === "super") {
         const savedCount = allSwipes.filter((s) => s.action === "super").length;
         if (savedCount >= MAX_SAVES) {
+          logEvent("daily_limit_hit", { reason: "max_saves" });
           navigation.navigate("Paywall");
           return;
         }
@@ -237,6 +240,20 @@ export default function SwipeDeckScreen() {
       const deal = activeDeals[currentIndex];
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
+
+      logEvent("swipe", {
+        action,
+        deal_type: deal.deal_type ?? null,
+        destination: deal.destination,
+        price: deal.price,
+      });
+      if (action === "super") {
+        logEvent("deal_saved", {
+          deal_type: deal.deal_type ?? null,
+          destination: deal.destination,
+          price: deal.price,
+        });
+      }
 
       // Track for undo
       setLastSwipedDeal({ deal, action });
