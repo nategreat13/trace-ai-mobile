@@ -1,139 +1,108 @@
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
   Modal,
+  Animated,
   useColorScheme,
-  ScrollView,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { LinearGradient } from "expo-linear-gradient";
-import { X, Heart, ChevronDown, Sparkles, Lock } from "lucide-react-native";
+import { Lock } from "lucide-react-native";
 import type { RootStackParamList } from "../navigation/types";
 import { colors } from "../theme/colors";
-import { fetchDeals } from "../services/dealsApi";
 import { Deal } from "@trace/shared";
 import SwipeCard from "../components/swipe/SwipeCard";
-import AirportInput from "../components/onboarding/AirportInput";
 import { logEvent } from "../lib/analytics";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const MAX_GUEST_DEALS = 10;
-const SOFT_PROMPT_EVERY = 2;
+const MAX_GUEST_DEALS = 8;
 
-function dedupeByDestination(arr: Deal[]): Deal[] {
-  const seen = new Set<string>();
-  return arr.filter((d) => {
-    if (seen.has(d.destination)) return false;
-    seen.add(d.destination);
-    return true;
-  });
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
-function sortByBestDeal(arr: Deal[]): Deal[] {
-  return [...arr].sort((a, b) => {
-    if ((b.discount_pct || 0) !== (a.discount_pct || 0))
-      return (b.discount_pct || 0) - (a.discount_pct || 0);
-    return (a.price || 0) - (b.price || 0);
-  });
-}
+const PREVIEW_DEALS: Pick<Deal, "id"|"destination"|"destination_code"|"origin"|"price"|"original_price"|"discount_pct"|"travel_window"|"dateString"|"deal_type"|"image_url"|"airlines"|"duration"|"ai_insight"|"vibe_description"|"continent"|"urgency"|"price_trend"|"itinerary_ideas"|"neighborhood_previews"|"best_time_to_book"|"experiences"|"travel_tips"|"quick_tips"|"interesting_facts"|"weather_preview"|"url"|"month_type"|"layover_info"|"domestic_or_international"|"price_will_last">[] = [
+  { id:"p1", destination:"Tokyo",       destination_code:"TYO", origin:"", price:649,  original_price:1380, discount_pct:53, travel_window:"Jan – Mar", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png", airlines:"ANA",             duration:"11h 30m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Asia",    urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p2", destination:"Paris",       destination_code:"CDG", origin:"", price:529,  original_price:1140, discount_pct:54, travel_window:"Feb – Apr", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2750595/embeddable_ce33e13c-352c-400f-b9e7-8a851b4130bf.png", airlines:"Air France",      duration:"9h 45m",  dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Europe",  urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p3", destination:"Barcelona",   destination_code:"BCN", origin:"", price:489,  original_price:1050, discount_pct:53, travel_window:"Mar – May", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2760078/embeddable_1e9d52ea-32c3-4c3d-af29-04039343f472.png", airlines:"Iberia",          duration:"10h 20m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Europe",  urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p4", destination:"London",      destination_code:"LHR", origin:"", price:579,  original_price:1220, discount_pct:53, travel_window:"Apr – Jun", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2872586/embeddable_1464348e-bd81-49bd-8b32-6387877bce46.png", airlines:"British Airways", duration:"10h 15m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Europe",  urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p5", destination:"Santorini",   destination_code:"JTR", origin:"", price:629,  original_price:1350, discount_pct:53, travel_window:"May – Jul", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2862015/embeddable_d3c4dab1-f04c-438b-87ba-eada8b5b9ff4.png", airlines:"Aegean",          duration:"12h 50m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Europe",  urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p6", destination:"Mexico City", destination_code:"MEX", origin:"", price:298,  original_price:640,  discount_pct:53, travel_window:"Jan – Apr", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2884895/embeddable_9907fe52-404d-40a7-bd09-990830b237f5.png", airlines:"Aeromexico",      duration:"4h 30m",  dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Americas", urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p7", destination:"Bangkok",     destination_code:"BKK", origin:"", price:689,  original_price:1480, discount_pct:53, travel_window:"Nov – Feb", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2858420/embeddable_19bf2895-3afa-413c-abfe-9420a68e4313.png", airlines:"Thai Airways",    duration:"18h 10m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Asia",    urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+  { id:"p8", destination:"Rome",        destination_code:"FCO", origin:"", price:549,  original_price:1180, discount_pct:53, travel_window:"Mar – Jun", image_url:"https://www.dripuploads.com/uploads/image_upload/image/2845097/embeddable_153fff30-5516-442c-828b-f58c08e353e9.png", airlines:"Alitalia",        duration:"11h 05m", dateString:"", deal_type:null, ai_insight:"", vibe_description:"", continent:"Europe",  urgency:"", price_trend:"", itinerary_ideas:[], neighborhood_previews:[], best_time_to_book:"", experiences:[], travel_tips:[], quick_tips:[], interesting_facts:[], weather_preview:"", url:"", month_type:"", layover_info:"", domestic_or_international:"international", price_will_last:"" },
+] as Deal[];
 
 export default function LandingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const navigation = useNavigation<Nav>();
 
-  // Airport state
-  const [airport, setAirport] = useState("LAX");
-  const [showAirportPicker, setShowAirportPicker] = useState(false);
-
-  // Deals state
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Swipe state
+  const [deals, setDeals] = useState<Deal[]>(() => shuffle(PREVIEW_DEALS));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipeCount, setSwipeCount] = useState(0);
-  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+  const swipeHint = useRef(new Animated.Value(0)).current;
+  const swipeHintOpacity = useRef(new Animated.Value(0)).current;
 
-  // Prompt state
-  const [showSoftPrompt, setShowSoftPrompt] = useState(false);
   const [showDetailPrompt, setShowDetailPrompt] = useState(false);
   const [showHardWall, setShowHardWall] = useState(false);
 
-  // Log a landing view on initial mount (not on every airport change)
   useEffect(() => {
-    logEvent("landing_viewed", { airport });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    logEvent("landing_viewed", {});
+    const t = setTimeout(() => {
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(swipeHint, { toValue: 22, duration: 260, useNativeDriver: true }),
+          Animated.timing(swipeHint, { toValue: -12, duration: 200, useNativeDriver: true }),
+          Animated.timing(swipeHint, { toValue: 0, duration: 160, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(swipeHintOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+          Animated.delay(500),
+          Animated.timing(swipeHintOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+        ]),
+      ]).start();
+    }, 700);
+    return () => clearTimeout(t);
   }, []);
 
-  // Load deals whenever the airport changes
-  useEffect(() => {
-    setLoading(true);
-    fetchDeals(airport)
-      .then((all) => {
-        const withImages = all.filter((d) => d.image_url);
-        const sorted = sortByBestDeal(withImages);
-        const deduped = dedupeByDestination(sorted).slice(0, MAX_GUEST_DEALS);
-        setDeals(deduped);
-        // Reset swipe state for new airport
-        setCurrentIndex(0);
-        setSwipeCount(0);
-        setShowSoftPrompt(false);
-        setShowHardWall(false);
-      })
-      .catch(() => setDeals([]))
-      .finally(() => setLoading(false));
-  }, [airport]);
-
-  // Check for prompts as swipe count changes
-  useEffect(() => {
-    if (swipeCount === 0) return;
-    // Hard wall after the final swipe
-    if (swipeCount >= MAX_GUEST_DEALS) {
-      setShowHardWall(true);
-      logEvent("hard_wall_shown", { airport, swipe_count: swipeCount });
-      return;
-    }
-    // Soft prompt every N swipes
-    if (swipeCount % SOFT_PROMPT_EVERY === 0) {
-      setShowSoftPrompt(true);
-      logEvent("soft_prompt_shown", { airport, swipe_count: swipeCount });
-    }
-  }, [swipeCount, airport]);
-
-  // All swipe directions behave the same way: advance the deck and bump
-  // the counter. The soft-prompt effect handles surfacing a signup modal
-  // every N swipes.
-  const handleSwipe = useCallback(
-    (action: "left" | "right" | "super") => {
-      setTriggerSwipe(null);
-      setCurrentIndex((i) => i + 1);
-      setSwipeCount((c) => c + 1);
-      logEvent("guest_swipe", {
-        airport,
-        index: currentIndex,
-        direction: action,
-      });
-    },
-    [airport, currentIndex]
+  useFocusEffect(
+    useCallback(() => {
+      setDeals(shuffle(PREVIEW_DEALS));
+      setCurrentIndex(0);
+      setSwipeCount(0);
+      setShowDetailPrompt(false);
+      setShowHardWall(false);
+    }, [])
   );
 
-  const handleButtonSwipe = (action: "left" | "right") => {
-    setTriggerSwipe(action);
-    setTimeout(() => setTriggerSwipe(null), 400);
-  };
+  useEffect(() => {
+    if (swipeCount > 0 && swipeCount >= MAX_GUEST_DEALS) {
+      setShowHardWall(true);
+      logEvent("hard_wall_shown", { swipe_count: swipeCount });
+    }
+  }, [swipeCount]);
+
+  const handleSwipe = useCallback(
+    (action: "left" | "right" | "super") => {
+      setCurrentIndex((i) => i + 1);
+      setSwipeCount((c) => c + 1);
+      logEvent("guest_swipe", { index: currentIndex, direction: action });
+    },
+    [currentIndex]
+  );
 
   const goToSignup = (source: string) => {
-    if (showSoftPrompt) logEvent("soft_prompt_accepted", { source });
-    if (showHardWall) logEvent("hard_wall_accepted", { source });
-    setShowSoftPrompt(false);
     setShowDetailPrompt(false);
     setShowHardWall(false);
     logEvent("signup_viewed", { source });
@@ -141,13 +110,11 @@ export default function LandingScreen() {
   };
 
   const goToSignin = () => {
-    setShowSoftPrompt(false);
     setShowDetailPrompt(false);
     setShowHardWall(false);
     navigation.navigate("Login", { mode: "signin" });
   };
 
-  // Stack of up to 3 cards rendered behind the top
   const visibleCards = useMemo(
     () => deals.slice(currentIndex, currentIndex + 3).reverse(),
     [deals, currentIndex]
@@ -157,97 +124,36 @@ export default function LandingScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          paddingHorizontal: 20,
-          paddingTop: 8,
-          paddingBottom: 8,
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+      {/* Logo */}
+      <View style={{ alignItems: "center", paddingTop: 32 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Image
             source={require("../../assets/Bluelogo.png")}
-            style={{ width: 28, height: 28, resizeMode: "contain" }}
+            style={{ width: 34, height: 34, resizeMode: "contain" }}
           />
-          <Text style={{ fontSize: 18, fontWeight: "900", color: theme.foreground }}>Trace</Text>
+          <Text style={{ fontSize: 24, fontWeight: "900", color: theme.foreground }}>Trace</Text>
         </View>
-        <TouchableOpacity
-          onPress={goToSignin}
-          style={{
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: theme.border,
-          }}
-        >
-          <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground }}>Sign in</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Airport selector */}
-      <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 4 }}>
-        <TouchableOpacity
-          onPress={() => setShowAirportPicker(true)}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            alignSelf: "flex-start",
-            backgroundColor: theme.muted,
-            borderRadius: 999,
-            paddingHorizontal: 14,
-            paddingVertical: 8,
-            gap: 6,
-          }}
-        >
-          <Text style={{ fontSize: 13, fontWeight: "600", color: theme.mutedForeground }}>
-            Deals from
-          </Text>
-          <Text style={{ fontSize: 14, fontWeight: "800", color: theme.foreground }}>
-            {airport}
-          </Text>
-          <ChevronDown color={theme.mutedForeground} size={14} />
-        </TouchableOpacity>
-        <Text
-          style={{
-            marginTop: 12,
-            fontSize: 22,
-            fontWeight: "900",
-            color: theme.foreground,
-            lineHeight: 28,
-          }}
-        >
-          Today's top flight deals
-        </Text>
-        <Text style={{ marginTop: 4, fontSize: 13, color: theme.mutedForeground }}>
-          Swipe through {MAX_GUEST_DEALS} live deals from {airport}
-        </Text>
-      </View>
+      {/* Headline */}
+      <Text
+        style={{
+          paddingHorizontal: 32,
+          paddingTop: 24,
+          fontSize: 34,
+          fontWeight: "900",
+          color: theme.foreground,
+          textAlign: "center",
+          lineHeight: 40,
+        }}
+      >
+        Let the best flights{"\n"}find you.
+      </Text>
 
-      {/* Deck */}
-      <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 12 }}>
-        {loading ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator size="large" color={colors.brand.traceRed} />
-          </View>
-        ) : deals.length === 0 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24 }}>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>🛫</Text>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, textAlign: "center" }}>
-              No deals from {airport} today
-            </Text>
-            <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginTop: 6 }}>
-              Try a different airport
-            </Text>
-          </View>
-        ) : isDeckDone ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }} />
-        ) : (
-          <View style={{ flex: 1, position: "relative" }}>
+      {/* Card — centered in remaining space */}
+      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20, paddingVertical: 16 }}>
+        {!isDeckDone && (
+          <Animated.View style={{ height: 340, position: "relative", transform: [{ translateX: swipeHint }] }}>
             {visibleCards.map((deal, i, arr) => (
               <SwipeCard
                 key={deal.id}
@@ -256,219 +162,84 @@ export default function LandingScreen() {
                 onSwipe={handleSwipe}
                 onExpand={() => {
                   setShowDetailPrompt(true);
-                  logEvent("guest_detail_prompt", { airport, index: currentIndex });
+                  logEvent("guest_detail_prompt", { index: currentIndex });
                 }}
-                triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
+                triggerSwipe={null}
                 isSwipeDisabled={false}
               />
             ))}
-          </View>
+          </Animated.View>
         )}
-
-        {/* Progress dots + action buttons */}
-        {!loading && deals.length > 0 && !isDeckDone && (
-          <>
-            {/* Progress */}
-            <View style={{ flexDirection: "row", justifyContent: "center", gap: 4, marginTop: 12 }}>
-              {deals.map((_, i) => (
-                <View
-                  key={i}
-                  style={{
-                    width: i === currentIndex ? 18 : 6,
-                    height: 4,
-                    borderRadius: 2,
-                    backgroundColor: i <= currentIndex ? colors.brand.traceRed : theme.border,
-                  }}
-                />
-              ))}
-            </View>
-
-            {/* Action buttons */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: 36,
-                paddingVertical: 16,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => handleButtonSwipe("left")}
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: theme.card,
-                  borderWidth: 2,
-                  borderColor: theme.border,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <X color="#ef4444" size={28} strokeWidth={3} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleButtonSwipe("right")}
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: theme.card,
-                  borderWidth: 2,
-                  borderColor: theme.border,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Heart color={colors.brand.traceGreen} fill={colors.brand.traceGreen} size={28} />
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+        <Animated.Text
+          style={{
+            opacity: swipeHintOpacity,
+            textAlign: "center",
+            fontSize: 12,
+            color: theme.mutedForeground,
+            marginTop: 14,
+            letterSpacing: 0.5,
+          }}
+        >
+          ← swipe to explore →
+        </Animated.Text>
       </View>
 
       {/* Bottom CTA */}
-      <View
-        style={{
-          paddingHorizontal: 20,
-          paddingBottom: 12,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          paddingTop: 12,
-        }}
-      >
+      <View style={{ paddingHorizontal: 24, paddingBottom: 20 }}>
+        <Text
+          style={{
+            fontSize: 15,
+            fontWeight: "600",
+            color: theme.foreground,
+            textAlign: "center",
+            marginBottom: 16,
+            lineHeight: 22,
+          }}
+        >
+          Create an account to get the latest flight deals{" "}
+          <Text style={{ color: colors.brand.traceRed }}>right when they drop.</Text>
+        </Text>
+
         <TouchableOpacity
           onPress={() => goToSignup("bottom_cta")}
           style={{
             backgroundColor: colors.brand.traceRed,
             borderRadius: 14,
-            paddingVertical: 14,
+            paddingVertical: 16,
             alignItems: "center",
+            marginBottom: 14,
           }}
         >
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Create account</Text>
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Get Started</Text>
         </TouchableOpacity>
+
+        <Text
+          style={{
+            fontSize: 11,
+            color: theme.mutedForeground,
+            textAlign: "center",
+            lineHeight: 16,
+          }}
+        >
+          I have read and accepted Trace Travel's{" "}
+          <Text
+            style={{ color: theme.foreground, textDecorationLine: "underline" }}
+            onPress={() => Linking.openURL("https://tracetravelapp.com/terms")}
+          >
+            Terms & Conditions
+          </Text>
+          {" "}and{" "}
+          <Text
+            style={{ color: theme.foreground, textDecorationLine: "underline" }}
+            onPress={() => Linking.openURL("https://tracetravelapp.com/privacy")}
+          >
+            Privacy Policy
+          </Text>
+          .
+        </Text>
       </View>
 
-      {/* Airport picker modal */}
-      <Modal
-        visible={showAirportPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAirportPicker(false)}
-      >
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingHorizontal: 20,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderBottomColor: theme.border,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>
-              Pick an airport
-            </Text>
-            <TouchableOpacity onPress={() => setShowAirportPicker(false)}>
-              <X color={theme.foreground} size={24} />
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            contentContainerStyle={{ padding: 20 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Pass an empty string so AirportInput renders its search UI
-                directly (it would otherwise show a "Change" pill first). */}
-            <AirportInput
-              value=""
-              onChange={(code) => {
-                if (code) {
-                  logEvent("airport_changed", { from: airport, to: code });
-                  setAirport(code);
-                  setShowAirportPicker(false);
-                }
-              }}
-            />
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Soft signup prompt — non-blocking, shown every 3 swipes */}
-      <Modal visible={showSoftPrompt} transparent animationType="fade">
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setShowSoftPrompt(false)}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.55)",
-            justifyContent: "center",
-            alignItems: "center",
-            paddingHorizontal: 20,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.card,
-              borderRadius: 22,
-              padding: 24,
-              maxWidth: 380,
-              width: "100%",
-              borderWidth: 1,
-              borderColor: theme.border,
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 28,
-                backgroundColor: colors.brand.traceRed + "15",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 12,
-              }}
-            >
-              <Sparkles color={colors.brand.traceRed} size={28} />
-            </View>
-            <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
-              Loving these deals?
-            </Text>
-            <Text
-              style={{
-                fontSize: 14,
-                color: theme.mutedForeground,
-                textAlign: "center",
-                marginBottom: 20,
-                lineHeight: 20,
-              }}
-            >
-              Sign up to save your favorites and let our AI learn your preferences for even better matches.
-            </Text>
-            <TouchableOpacity
-              onPress={() => goToSignup("soft_prompt")}
-              style={{
-                width: "100%",
-                backgroundColor: colors.brand.traceRed,
-                borderRadius: 12,
-                paddingVertical: 13,
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Create account</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSoftPrompt(false)} style={{ paddingVertical: 8 }}>
-              <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>Maybe later</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Detail prompt — shown when a guest taps a deal card */}
+      {/* Detail prompt */}
       <Modal visible={showDetailPrompt} transparent animationType="fade">
         <TouchableOpacity
           activeOpacity={1}
@@ -528,7 +299,7 @@ export default function LandingScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Hard wall — after the 10th swipe, no bypass */}
+      {/* Hard wall */}
       <Modal visible={showHardWall} transparent animationType="fade">
         <View
           style={{
@@ -573,7 +344,7 @@ export default function LandingScreen() {
                 marginBottom: 8,
               }}
             >
-              You've seen today's top 10 deals
+              You've seen today's top deals
             </Text>
             <Text
               style={{
@@ -586,7 +357,7 @@ export default function LandingScreen() {
             >
               Sign up for 500+ personalized deals, save favorites, and get alerts when prices drop.
             </Text>
-            <View style={{ width: "100%", gap: 8 }}>
+            <View style={{ width: "100%", gap: 8, marginBottom: 20 }}>
               {[
                 "Personalized deals powered by AI",
                 "500+ deals from your home airport",
@@ -607,14 +378,14 @@ export default function LandingScreen() {
                 borderRadius: 12,
                 paddingVertical: 14,
                 alignItems: "center",
-                marginTop: 20,
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Create account</Text>
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Get Started</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={goToSignin} style={{ paddingVertical: 10, marginTop: 4 }}>
               <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>
-                Already have an account? <Text style={{ color: theme.foreground, fontWeight: "700" }}>Sign in</Text>
+                Already have an account?{" "}
+                <Text style={{ color: theme.foreground, fontWeight: "700" }}>Sign in</Text>
               </Text>
             </TouchableOpacity>
           </View>
