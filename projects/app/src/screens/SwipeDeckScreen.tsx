@@ -416,7 +416,7 @@ export default function SwipeDeckScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Image source={require("../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />
           <Text style={{ fontWeight: "800", fontSize: 16, color: theme.foreground }}>
-            Trace Flights
+            Trace Travel
           </Text>
           {profile?.homeAirport && (
             <View

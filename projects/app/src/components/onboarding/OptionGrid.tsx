@@ -21,6 +21,7 @@ interface OptionGridProps {
   selected: string | string[];
   onSelect: (value: string | string[]) => void;
   multi?: boolean;
+  numColumns?: number;
 }
 
 export default function OptionGrid({
@@ -28,6 +29,7 @@ export default function OptionGrid({
   selected,
   onSelect,
   multi = false,
+  numColumns = 2,
 }: OptionGridProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -52,6 +54,8 @@ export default function OptionGrid({
     }
   };
 
+  const compact = numColumns >= 3;
+
   const renderItem = ({ item }: { item: Option }) => {
     const active = isSelected(item.value);
 
@@ -61,19 +65,22 @@ export default function OptionGrid({
         activeOpacity={0.7}
         style={[
           styles.card,
+          compact && styles.cardCompact,
           {
             backgroundColor: active ? colors.brand.traceRed + "12" : theme.card,
             borderColor: active ? colors.brand.traceRed : theme.border,
           },
         ]}
       >
-        <Text style={styles.icon}>{item.icon}</Text>
-        <Text style={[styles.label, { color: theme.foreground }]}>
+        <Text style={compact ? styles.iconCompact : styles.icon}>{item.icon}</Text>
+        <Text style={[compact ? styles.labelCompact : styles.label, { color: theme.foreground }]}>
           {item.label}
         </Text>
-        <Text style={[styles.sub, { color: theme.mutedForeground }]}>
-          {item.sub}
-        </Text>
+        {!compact && (
+          <Text style={[styles.sub, { color: theme.mutedForeground }]}>
+            {item.sub}
+          </Text>
+        )}
       </TouchableOpacity>
     );
   };
@@ -83,20 +90,22 @@ export default function OptionGrid({
       data={options}
       keyExtractor={(item) => item.value}
       renderItem={renderItem}
-      numColumns={2}
+      numColumns={numColumns}
+      key={numColumns}
       columnWrapperStyle={styles.row}
       contentContainerStyle={styles.list}
       showsVerticalScrollIndicator={false}
+      scrollEnabled={false}
     />
   );
 }
 
 const styles = StyleSheet.create({
   list: {
-    gap: 12,
+    gap: 10,
   },
   row: {
-    gap: 12,
+    gap: 10,
   },
   card: {
     flex: 1,
@@ -105,17 +114,31 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 120,
+    minHeight: 110,
+  },
+  cardCompact: {
+    padding: 10,
+    minHeight: 82,
+    borderRadius: 12,
   },
   icon: {
-    fontSize: 32,
+    fontSize: 30,
     marginBottom: 8,
   },
+  iconCompact: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
   label: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 4,
+  },
+  labelCompact: {
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
   },
   sub: {
     fontSize: 12,

@@ -79,7 +79,7 @@ export default function LoginScreen() {
               marginBottom: 4,
             }}
           >
-            Trace AI
+            Trace Travel
           </Text>
           <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
             Your next adventure starts with a swipe

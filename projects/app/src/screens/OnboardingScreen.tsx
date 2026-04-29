@@ -167,8 +167,8 @@ export default function OnboardingScreen() {
 
   const steps = [
     {
-      title: "Where do you fly from?",
-      subtitle: "Your home airport",
+      title: "What's your home airport?",
+      subtitle: "Choose your home airport",
       canProceed: !!data.homeAirport,
       content: (
         <AirportInput
@@ -207,6 +207,7 @@ export default function OnboardingScreen() {
           selected={data.dealTypes}
           onSelect={(val) => setData({ ...data, dealTypes: val as string[] })}
           multi
+          numColumns={3}
         />
       ),
     },
@@ -222,6 +223,7 @@ export default function OnboardingScreen() {
             setData({ ...data, travelTimeframe: val as string[] })
           }
           multi
+          numColumns={3}
         />
       ),
     },
@@ -241,7 +243,7 @@ export default function OnboardingScreen() {
                 marginBottom: 4,
               }}
             >
-              Trace AI
+              Trace Travel
             </Text>
             <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
               Let's personalize your deal experience

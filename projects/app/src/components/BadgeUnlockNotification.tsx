@@ -1,11 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { Text, StyleSheet, useColorScheme } from "react-native";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  SlideInUp,
-  SlideOutUp,
-} from "react-native-reanimated";
+import { Text, TouchableOpacity, StyleSheet, useColorScheme } from "react-native";
+import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from "react-native-reanimated";
 import { Sparkles } from "lucide-react-native";
 import { colors } from "../theme/colors";
 
@@ -30,16 +25,10 @@ export default function BadgeUnlockNotification({
 
   useEffect(() => {
     if (badge) {
-      timerRef.current = setTimeout(() => {
-        onDismiss();
-      }, 3000);
+      timerRef.current = setTimeout(onDismiss, 3000);
     }
-
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [badge, onDismiss]);
 
@@ -47,110 +36,101 @@ export default function BadgeUnlockNotification({
 
   return (
     <Animated.View
-      entering={SlideInUp.springify().damping(20).stiffness(300)}
-      exiting={SlideOutUp.springify().damping(20).stiffness(300)}
-      style={styles.container}
+      entering={FadeIn.duration(200)}
+      exiting={FadeOut.duration(250)}
+      style={styles.backdrop}
       pointerEvents="box-none"
     >
-      <Animated.View
-        entering={FadeIn.duration(300)}
-        exiting={FadeOut.duration(200)}
-        style={[
-          styles.toast,
-          {
-            backgroundColor: theme.card,
-            borderColor: colors.brand.amber400,
-          },
-        ]}
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onDismiss}
+        style={styles.backdrop}
       >
-        {/* Badge emoji */}
-        <Text style={styles.emoji}>{badge.emoji}</Text>
-
-        {/* Content */}
         <Animated.View
-          entering={FadeIn.duration(300).delay(150)}
-          style={styles.content}
+          entering={ZoomIn.duration(220).springify().damping(18).stiffness(260)}
+          exiting={ZoomOut.duration(180)}
+          style={[styles.card, { backgroundColor: theme.card, borderColor: colors.brand.amber400 }]}
         >
-          {/* Badge Unlocked label */}
+          <Text style={styles.emoji}>{badge.emoji}</Text>
+
           <Animated.View style={styles.labelRow}>
-            <Sparkles size={12} color={colors.brand.amber500} />
+            <Sparkles size={11} color={colors.brand.amber500} />
             <Text style={styles.label}>Badge Unlocked!</Text>
-            <Sparkles size={12} color={colors.brand.amber500} />
+            <Sparkles size={11} color={colors.brand.amber500} />
           </Animated.View>
 
-          {/* Badge name */}
-          <Text
-            style={[styles.name, { color: theme.foreground }]}
-            numberOfLines={1}
-          >
-            {badge.name}
-          </Text>
+          <Text style={[styles.name, { color: theme.foreground }]}>{badge.name}</Text>
+          <Text style={[styles.description, { color: theme.mutedForeground }]}>{badge.description}</Text>
 
-          {/* Badge description */}
-          <Text
-            style={[styles.description, { color: theme.mutedForeground }]}
-            numberOfLines={2}
-          >
-            {badge.description}
-          </Text>
+          <TouchableOpacity onPress={onDismiss} style={[styles.dismissBtn, { borderColor: theme.border }]}>
+            <Text style={[styles.dismissText, { color: theme.mutedForeground }]}>Tap to dismiss</Text>
+          </TouchableOpacity>
         </Animated.View>
-      </Animated.View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    position: "absolute",
-    top: 60,
-    left: 0,
-    right: 0,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
     alignItems: "center",
     zIndex: 100,
-    paddingHorizontal: 16,
+    paddingHorizontal: 32,
   },
-  toast: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    borderRadius: 16,
-    borderWidth: 2,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+  card: {
     width: "100%",
-    maxWidth: 380,
+    maxWidth: 320,
+    borderRadius: 24,
+    borderWidth: 2,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 14,
   },
   emoji: {
-    fontSize: 40,
-  },
-  content: {
-    flex: 1,
+    fontSize: 52,
+    marginBottom: 12,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginBottom: 2,
+    gap: 5,
+    marginBottom: 8,
   },
   label: {
     fontSize: 11,
     fontWeight: "800",
     color: colors.brand.amber600,
     textTransform: "uppercase",
-    letterSpacing: 0.8,
+    letterSpacing: 1,
   },
   name: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 2,
+    fontSize: 20,
+    fontWeight: "900",
+    textAlign: "center",
+    marginBottom: 6,
   },
   description: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  dismissBtn: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  dismissText: {
     fontSize: 13,
-    lineHeight: 17,
+    fontWeight: "600",
   },
 });

@@ -264,7 +264,10 @@ export default function SwipeCard({
       <Animated.View style={[styles.card, cardAnimatedStyle]}>
         {/* Background image */}
         <Image
-          source={{ uri: deal.image_url }}
+          source={[
+            { uri: deal.image_url },
+            { uri: "https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png" },
+          ]}
           style={styles.image}
           contentFit="cover"
           transition={200}
