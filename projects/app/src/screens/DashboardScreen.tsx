@@ -14,6 +14,7 @@ import {
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight, ChevronDown, ChevronUp, Trash2 } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { colors } from "../theme/colors";
@@ -279,37 +280,39 @@ export default function DashboardScreen() {
                 backgroundColor: theme.card,
                 borderRadius: 16,
                 borderWidth: 1,
-                borderColor: colors.brand.traceRed + "40",
+                borderColor: "#1e3a5f",
                 marginBottom: 16,
                 overflow: "hidden",
               }}
             >
               {/* Header row — always visible */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setShowProfile((v) => !v)}
-                style={{
-                  backgroundColor: colors.brand.traceRed + "12",
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <Text style={{ fontSize: 30 }}>{personality.emoji || "🌍"}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>
-                    {personality.title || "Explorer"}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
-                    Lv {level}  ·  {earnedBadges.length}/{ALL_BADGES.length} badges earned
-                  </Text>
-                </View>
-                {showProfile
-                  ? <ChevronUp size={18} color={theme.mutedForeground} />
-                  : <ChevronDown size={18} color={theme.mutedForeground} />
-                }
+              <TouchableOpacity activeOpacity={0.8} onPress={() => setShowProfile((v) => !v)}>
+                <LinearGradient
+                  colors={["#0f172a", "#1e3a5f", "#1a4080"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 16,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 30 }}>{personality.emoji || "🌍"}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>
+                      {personality.title || "Explorer"}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 2 }}>
+                      Lv {level}  ·  {earnedBadges.length}/{ALL_BADGES.length} badges earned
+                    </Text>
+                  </View>
+                  {showProfile
+                    ? <ChevronUp size={18} color="rgba(255,255,255,0.6)" />
+                    : <ChevronDown size={18} color="rgba(255,255,255,0.6)" />
+                  }
+                </LinearGradient>
               </TouchableOpacity>
 
               {/* Expanded content */}
