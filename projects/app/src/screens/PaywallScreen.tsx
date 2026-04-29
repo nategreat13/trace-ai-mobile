@@ -243,8 +243,14 @@ export default function PaywallScreen() {
   const accent = selected === "business" ? colors.brand.amber500 : colors.brand.traceRed;
   const periodSuffix = billingPeriod === "annual" ? "year" : "month";
 
+  // Monthly business price is displayed as $19.99 regardless of what RevenueCat returns
+  const getDisplayPrice = (pkg: PurchasesPackage | null, tier: Tier, period: BillingPeriod): string => {
+    if (tier === "business" && period === "monthly") return "$19.99";
+    return pkg?.product.priceString ?? "";
+  };
+
   // Price label + per-period label for the CTA
-  const priceString = selectedPkg?.product.priceString ?? "";
+  const priceString = getDisplayPrice(selectedPkg, selected, billingPeriod);
 
   // Optional supporting line under a monthly annual card: "$X.XX/month billed annually"
   const getPerMonthFromAnnual = (pkg: PurchasesPackage | null): string | null => {
@@ -521,7 +527,7 @@ export default function PaywallScreen() {
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {businessDisplayPkg.product.priceString}
+                    {getDisplayPrice(businessDisplayPkg, "business", billingPeriod)}
                   </Text>
                   <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
                     /{billingPeriod === "annual" ? "year" : "month"}
@@ -656,7 +662,7 @@ export default function PaywallScreen() {
             ctaLabel = "You already have Business";
           } else if (hasPremium && selected === "business") {
             ctaLabel = `Upgrade to Business — ${priceString}/${periodSuffix}`;
-          } else if (trialEligible) {
+          } else if (trialEligible && billingPeriod === "annual") {
             ctaLabel = "Start 3-day free trial";
           } else {
             ctaLabel = `Subscribe for ${priceString}/${periodSuffix}`;
@@ -691,7 +697,7 @@ export default function PaywallScreen() {
                   )}
                 </LinearGradient>
               </TouchableOpacity>
-              {trialEligible && !subscribeDisabled && !hasPremium && (
+              {trialEligible && billingPeriod === "annual" && !subscribeDisabled && !hasPremium && (
                 <Text
                   style={{
                     textAlign: "center",
