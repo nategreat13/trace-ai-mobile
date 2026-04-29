@@ -77,7 +77,7 @@ export default function LoginScreen() {
                 ? require("../../assets/TraceLogoLight.png")
                 : require("../../assets/TraceLogoDark.png")
             }
-            style={{ width: 160, height: 50, resizeMode: "contain", marginBottom: 12 }}
+            style={{ width: 240, height: 75, resizeMode: "contain", marginBottom: 16 }}
           />
           <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
             Your next adventure starts with a swipe

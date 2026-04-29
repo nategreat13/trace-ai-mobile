@@ -125,14 +125,14 @@ export default function LandingScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Logo */}
-      <View style={{ alignItems: "center", paddingTop: 28 }}>
+      <View style={{ alignItems: "center", paddingTop: 36, paddingBottom: 8 }}>
         <Image
           source={
             scheme === "dark"
               ? require("../../assets/TraceLogoLight.png")
               : require("../../assets/TraceLogoDark.png")
           }
-          style={{ width: 140, height: 44, resizeMode: "contain" }}
+          style={{ width: 210, height: 66, resizeMode: "contain" }}
         />
       </View>
 
