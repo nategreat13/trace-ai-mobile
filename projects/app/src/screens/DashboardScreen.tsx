@@ -273,65 +273,57 @@ export default function DashboardScreen() {
               Dashboard
             </Text>
 
-            {/* Collapsible profile section */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setShowProfile((v) => !v)}
+            {/* Collapsible profile section — single unified card */}
+            <View
               style={{
                 backgroundColor: theme.card,
                 borderRadius: 16,
                 borderWidth: 1,
-                borderColor: theme.border,
-                paddingHorizontal: 16,
-                paddingVertical: 14,
-                marginBottom: showProfile ? 0 : 16,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
+                borderColor: colors.brand.traceRed + "40",
+                marginBottom: 16,
+                overflow: "hidden",
               }}
             >
-              <Text style={{ fontSize: 28 }}>{personality.emoji || "🌍"}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>
-                  {personality.title || "Explorer"}
-                </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
-                  ⚡ Lv {level}  ·  🏅 {earnedBadges.length}/{ALL_BADGES.length} badges
-                </Text>
-              </View>
-              {showProfile
-                ? <ChevronUp size={18} color={theme.mutedForeground} />
-                : <ChevronDown size={18} color={theme.mutedForeground} />
-              }
-            </TouchableOpacity>
+              {/* Header row — always visible */}
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setShowProfile((v) => !v)}
+                style={{
+                  backgroundColor: colors.brand.traceRed + "12",
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <Text style={{ fontSize: 30 }}>{personality.emoji || "🌍"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>
+                    {personality.title || "Explorer"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                    Lv {level}  ·  {earnedBadges.length}/{ALL_BADGES.length} badges earned
+                  </Text>
+                </View>
+                {showProfile
+                  ? <ChevronUp size={18} color={theme.mutedForeground} />
+                  : <ChevronDown size={18} color={theme.mutedForeground} />
+                }
+              </TouchableOpacity>
 
-            {showProfile && (
-              <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} style={{ marginBottom: 16 }}>
-                {/* Personality card */}
-                <View
-                  style={{
-                    backgroundColor: theme.card,
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: theme.border,
-                    padding: 18,
-                    marginTop: 8,
-                  }}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 16 }}>
-                    <Text style={{ fontSize: 40 }}>{personality.emoji || "🌍"}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 17, fontWeight: "800", color: theme.foreground, marginBottom: 3 }}>
-                        {personality.title || "Explorer"}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: theme.mutedForeground, lineHeight: 18 }}>
-                        {personality.description || "Ready for any adventure"}
-                      </Text>
-                    </View>
+              {/* Expanded content */}
+              {showProfile && (
+                <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)}>
+                  {/* Description */}
+                  <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 14, borderTopWidth: 1, borderTopColor: theme.border }}>
+                    <Text style={{ fontSize: 13, color: theme.mutedForeground, lineHeight: 19 }}>
+                      {personality.description || "Ready for any adventure"}
+                    </Text>
                   </View>
 
                   {/* Stats row */}
-                  <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 14, marginBottom: 14 }}>
+                  <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: theme.border, paddingVertical: 14 }}>
                     {[
                       { value: swipeCount, label: "Swipes" },
                       { value: streakDays, label: "Day streak" },
@@ -353,68 +345,70 @@ export default function DashboardScreen() {
                   </View>
 
                   {/* Level progress */}
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
-                      Level {level} Deal Hunter
-                    </Text>
-                    <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                      {25 - (swipeCount % 25)} to Lv {level + 1}
-                    </Text>
+                  <View style={{ paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 14 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
+                        Level {level} Deal Hunter
+                      </Text>
+                      <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                        {25 - (swipeCount % 25)} to Lv {level + 1}
+                      </Text>
+                    </View>
+                    <View style={{ height: 5, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
+                      <View
+                        style={{
+                          height: "100%",
+                          borderRadius: 999,
+                          backgroundColor: colors.brand.traceRed,
+                          width: `${Math.max(4, Math.round(progressInLevel * 100))}%`,
+                        }}
+                      />
+                    </View>
                   </View>
-                  <View style={{ height: 5, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
-                    <View
-                      style={{
-                        height: "100%",
-                        borderRadius: 999,
-                        backgroundColor: colors.brand.traceRed,
-                        width: `${Math.max(4, Math.round(progressInLevel * 100))}%`,
-                      }}
-                    />
-                  </View>
-                </View>
 
-                {/* Badges */}
-                <View style={{ marginTop: 10 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>Badges</Text>
-                    <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                      {earnedBadges.length}/{ALL_BADGES.length} earned
-                    </Text>
-                  </View>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {ALL_BADGES.map((badge) => {
-                      const earned = isBadgeEarned(badge);
-                      return (
-                        <TouchableOpacity
-                          key={badge.id}
-                          onPress={() => setSelectedBadge(badge)}
-                          activeOpacity={0.7}
-                          style={{
-                            alignItems: "center",
-                            width: "22%",
-                            paddingVertical: 10,
-                            paddingHorizontal: 4,
-                            borderRadius: 12,
-                            backgroundColor: earned ? theme.card : theme.muted,
-                            borderWidth: 1,
-                            borderColor: theme.border,
-                            opacity: earned ? 1 : 0.45,
-                          }}
-                        >
-                          <Text style={{ fontSize: 24 }}>{badge.emoji}</Text>
-                          <Text
-                            style={{ fontSize: 9, fontWeight: "600", color: theme.mutedForeground, textAlign: "center", marginTop: 5 }}
-                            numberOfLines={2}
+                  {/* Badges */}
+                  <View style={{ borderTopWidth: 1, borderTopColor: theme.border, padding: 16 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground }}>Badges</Text>
+                      <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                        {earnedBadges.length}/{ALL_BADGES.length} earned
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {ALL_BADGES.map((badge) => {
+                        const earned = isBadgeEarned(badge);
+                        return (
+                          <TouchableOpacity
+                            key={badge.id}
+                            onPress={() => setSelectedBadge(badge)}
+                            activeOpacity={0.7}
+                            style={{
+                              alignItems: "center",
+                              width: "22%",
+                              paddingVertical: 10,
+                              paddingHorizontal: 4,
+                              borderRadius: 12,
+                              backgroundColor: earned ? colors.brand.traceRed + "10" : theme.muted,
+                              borderWidth: 1,
+                              borderColor: earned ? colors.brand.traceRed + "30" : theme.border,
+                              opacity: earned ? 1 : 0.45,
+                            }}
                           >
-                            {badge.name}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                            <Text style={{ fontSize: 24 }}>{badge.emoji}</Text>
+                            <Text
+                              style={{ fontSize: 9, fontWeight: "600", color: theme.mutedForeground, textAlign: "center", marginTop: 5 }}
+                              numberOfLines={2}
+                            >
+                              {badge.name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
-              </Animated.View>
-            )}
+                </Animated.View>
+              )}
+            </View>
 
             {/* Tabs + clear all */}
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
