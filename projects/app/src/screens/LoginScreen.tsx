@@ -72,13 +72,12 @@ export default function LoginScreen() {
         {/* Logo */}
         <View style={{ alignItems: "center", marginBottom: 32 }}>
           <Image
-            source={
-              scheme === "dark"
-                ? require("../../assets/TraceLogoLight.png")
-                : require("../../assets/TraceLogoDark.png")
-            }
-            style={{ width: 240, height: 75, resizeMode: "contain", marginBottom: 16 }}
+            source={require("../../assets/Bluelogo.png")}
+            style={{ width: 56, height: 56, resizeMode: "contain", marginBottom: 10 }}
           />
+          <Text style={{ fontSize: 26, fontWeight: "900", color: theme.foreground, marginBottom: 6 }}>
+            Trace Travel
+          </Text>
           <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
             Your next adventure starts with a swipe
           </Text>
