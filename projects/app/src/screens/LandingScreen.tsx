@@ -125,7 +125,7 @@ export default function LandingScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Logo */}
-      <View style={{ alignItems: "center", paddingTop: 36, paddingBottom: 8 }}>
+      <View style={{ alignItems: "center", paddingTop: 16, paddingBottom: 4 }}>
         <Image
           source={
             scheme === "dark"
@@ -140,7 +140,7 @@ export default function LandingScreen() {
       <Text
         style={{
           paddingHorizontal: 32,
-          paddingTop: 24,
+          paddingTop: 12,
           fontSize: 34,
           fontWeight: "900",
           color: theme.foreground,
@@ -152,7 +152,7 @@ export default function LandingScreen() {
       </Text>
 
       {/* Card — centered in remaining space */}
-      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20, paddingVertical: 16 }}>
+      <View style={{ flex: 1, justifyContent: "center", paddingHorizontal: 20, paddingTop: 28, paddingBottom: 8 }}>
         {!isDeckDone && (
           <Animated.View style={{ height: 340, position: "relative", transform: [{ translateX: swipeHint }] }}>
             {visibleCards.map((deal, i, arr) => (
