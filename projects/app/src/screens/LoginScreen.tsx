@@ -74,8 +74,8 @@ export default function LoginScreen() {
           <Image
             source={
               scheme === "dark"
-                ? require("../../assets/TraceLogoDark.png")
-                : require("../../assets/TraceLogoLight.png")
+                ? require("../../assets/TraceLogoLight.png")
+                : require("../../assets/TraceLogoDark.png")
             }
             style={{ width: 160, height: 50, resizeMode: "contain", marginBottom: 12 }}
           />

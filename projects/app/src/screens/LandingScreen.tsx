@@ -129,8 +129,8 @@ export default function LandingScreen() {
         <Image
           source={
             scheme === "dark"
-              ? require("../../assets/TraceLogoDark.png")
-              : require("../../assets/TraceLogoLight.png")
+              ? require("../../assets/TraceLogoLight.png")
+              : require("../../assets/TraceLogoDark.png")
           }
           style={{ width: 140, height: 44, resizeMode: "contain" }}
         />
