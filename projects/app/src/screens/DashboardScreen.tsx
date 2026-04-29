@@ -15,7 +15,7 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronRight, Trash2, Lock } from "lucide-react-native";
+import { ChevronRight, ChevronDown, ChevronUp, Trash2, Lock } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -42,6 +42,7 @@ export default function DashboardScreen() {
   const [expandedDeal, setExpandedDeal] = useState<any | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -273,146 +274,161 @@ export default function DashboardScreen() {
               Dashboard
             </Text>
 
-            {/* Personality hero card */}
-            <LinearGradient
-              colors={scheme === "dark" ? ["#1c1c2e", "#16213e", "#0f3460"] : ["#0f172a", "#1e3a5f", "#1a4080"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ borderRadius: 24, marginBottom: 12, overflow: "hidden", padding: 22 }}
-            >
-              <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 10, fontWeight: "800", letterSpacing: 1.5, textTransform: "uppercase", marginBottom: 14 }}>
-                Travel Personality
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 20 }}>
-                <View
-                  style={{
-                    width: 72,
-                    height: 72,
-                    borderRadius: 20,
-                    backgroundColor: "rgba(255,255,255,0.12)",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.18)",
-                  }}
-                >
-                  <Text style={{ fontSize: 38 }}>{personality.emoji || "🌍"}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 22, fontWeight: "900", color: "#fff", marginBottom: 5, lineHeight: 26 }}>
-                    {personality.title || "Explorer"}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", lineHeight: 18 }}>
-                    {personality.description || "Ready for any adventure"}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Level bar */}
-              <View style={{ borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.12)", paddingTop: 16 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.8)" }}>
-                    ⚡ Level {level} Deal Hunter
-                  </Text>
-                  <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
-                    {25 - (swipeCount % 25)} to Lv {level + 1}
-                  </Text>
-                </View>
-                <View style={{ height: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.15)", overflow: "hidden" }}>
-                  <LinearGradient
-                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{
-                      height: "100%",
-                      borderRadius: 999,
-                      width: `${Math.max(4, Math.round(progressInLevel * 100))}%`,
-                    }}
-                  />
-                </View>
-              </View>
-            </LinearGradient>
-
-            {/* Stats row */}
-            <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-              {[
-                { emoji: "👆", value: swipeCount, label: "Swipes", color: "#e65100", bg: scheme === "dark" ? "#2a1500" : "#fff3e0" },
-                { emoji: "🔥", value: streakDays, label: "Streak", color: "#d97706", bg: scheme === "dark" ? "#251800" : "#fff8e1" },
-                { emoji: "❤️", value: deals.length, label: "Saved", color: colors.brand.traceRed, bg: scheme === "dark" ? "#250010" : "#fce4ec" },
-                { emoji: "🏅", value: `${earnedBadges.length}/${ALL_BADGES.length}`, label: "Badges", color: "#7c3aed", bg: scheme === "dark" ? "#1a0d2e" : "#f3e5f5" },
-              ].map(({ emoji, value, label, color, bg }) => (
-                <View key={label} style={{ flex: 1, backgroundColor: bg, borderRadius: 16, paddingVertical: 12, paddingHorizontal: 6, alignItems: "center" }}>
-                  <Text style={{ fontSize: 20 }}>{emoji}</Text>
-                  <Text style={{ fontSize: 18, fontWeight: "900", color, marginTop: 4 }}>{value}</Text>
-                  <Text style={{ fontSize: 10, fontWeight: "600", color, marginTop: 1, opacity: 0.8 }}>{label}</Text>
-                </View>
-              ))}
-            </View>
-
-            {/* Badges */}
-            <View
+            {/* Collapsible profile section */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setShowProfile((v) => !v)}
               style={{
                 backgroundColor: theme.card,
-                borderRadius: 20,
+                borderRadius: 16,
                 borderWidth: 1,
                 borderColor: theme.border,
-                padding: 16,
-                marginBottom: 16,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                marginBottom: showProfile ? 0 : 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
               }}
             >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>Badges</Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                  {earnedBadges.length} of {ALL_BADGES.length} earned
+              <Text style={{ fontSize: 28 }}>{personality.emoji || "🌍"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }}>
+                  {personality.title || "Explorer"}
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                  ⚡ Lv {level}  ·  🏅 {earnedBadges.length}/{ALL_BADGES.length} badges
                 </Text>
               </View>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-                {ALL_BADGES.map((badge) => {
-                  const earned = isBadgeEarned(badge);
-                  return (
-                    <TouchableOpacity
-                      key={badge.id}
-                      onPress={() => setSelectedBadge(badge)}
-                      activeOpacity={0.75}
+              {showProfile
+                ? <ChevronUp size={18} color={theme.mutedForeground} />
+                : <ChevronDown size={18} color={theme.mutedForeground} />
+              }
+            </TouchableOpacity>
+
+            {showProfile && (
+              <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(140)} style={{ marginBottom: 16 }}>
+                {/* Personality hero card */}
+                <LinearGradient
+                  colors={scheme === "dark" ? ["#1c1c2e", "#16213e", "#0f3460"] : ["#0f172a", "#1e3a5f", "#1a4080"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ borderRadius: 20, marginTop: 10, overflow: "hidden", padding: 20 }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 18 }}>
+                    <View
                       style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 18,
+                        backgroundColor: "rgba(255,255,255,0.12)",
                         alignItems: "center",
-                        width: "22%",
-                        paddingVertical: 12,
-                        paddingHorizontal: 4,
-                        borderRadius: 16,
-                        backgroundColor: earned
-                          ? colors.brand.traceRed + "14"
-                          : theme.muted,
-                        borderWidth: 1.5,
-                        borderColor: earned
-                          ? colors.brand.traceRed + "55"
-                          : theme.border,
+                        justifyContent: "center",
+                        borderWidth: 1,
+                        borderColor: "rgba(255,255,255,0.18)",
                       }}
                     >
-                      <Text style={{ fontSize: 28, opacity: earned ? 1 : 0.3 }}>{badge.emoji}</Text>
-                      <Text
-                        style={{
-                          fontSize: 9,
-                          fontWeight: "700",
-                          color: earned ? theme.foreground : theme.mutedForeground,
-                          textAlign: "center",
-                          marginTop: 6,
-                          opacity: earned ? 1 : 0.5,
-                        }}
-                        numberOfLines={2}
-                      >
-                        {badge.name}
+                      <Text style={{ fontSize: 34 }}>{personality.emoji || "🌍"}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff", marginBottom: 4, lineHeight: 24 }}>
+                        {personality.title || "Explorer"}
                       </Text>
-                      {earned ? (
-                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: colors.brand.traceRed, marginTop: 5 }} />
-                      ) : (
-                        <Lock size={9} color={theme.mutedForeground} style={{ marginTop: 5, opacity: 0.4 }} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                      <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 17 }}>
+                        {personality.description || "Ready for any adventure"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.12)", paddingTop: 14 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 7 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.8)" }}>
+                        ⚡ Level {level} Deal Hunter
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>
+                        {25 - (swipeCount % 25)} to Lv {level + 1}
+                      </Text>
+                    </View>
+                    <View style={{ height: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.15)", overflow: "hidden" }}>
+                      <LinearGradient
+                        colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{ height: "100%", borderRadius: 999, width: `${Math.max(4, Math.round(progressInLevel * 100))}%` }}
+                      />
+                    </View>
+                  </View>
+                </LinearGradient>
+
+                {/* Stats row */}
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                  {[
+                    { emoji: "👆", value: swipeCount, label: "Swipes", color: "#e65100", bg: scheme === "dark" ? "#2a1500" : "#fff3e0" },
+                    { emoji: "🔥", value: streakDays, label: "Streak", color: "#d97706", bg: scheme === "dark" ? "#251800" : "#fff8e1" },
+                    { emoji: "❤️", value: deals.length, label: "Saved", color: colors.brand.traceRed, bg: scheme === "dark" ? "#250010" : "#fce4ec" },
+                    { emoji: "🏅", value: `${earnedBadges.length}/${ALL_BADGES.length}`, label: "Badges", color: "#7c3aed", bg: scheme === "dark" ? "#1a0d2e" : "#f3e5f5" },
+                  ].map(({ emoji, value, label, color, bg }) => (
+                    <View key={label} style={{ flex: 1, backgroundColor: bg, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 4, alignItems: "center" }}>
+                      <Text style={{ fontSize: 18 }}>{emoji}</Text>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color, marginTop: 3 }}>{value}</Text>
+                      <Text style={{ fontSize: 9, fontWeight: "600", color, marginTop: 1, opacity: 0.8 }}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Badges */}
+                <View
+                  style={{
+                    backgroundColor: theme.card,
+                    borderRadius: 18,
+                    borderWidth: 1,
+                    borderColor: theme.border,
+                    padding: 14,
+                    marginTop: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "800", color: theme.foreground }}>Badges</Text>
+                    <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                      {earnedBadges.length} of {ALL_BADGES.length} earned
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {ALL_BADGES.map((badge) => {
+                      const earned = isBadgeEarned(badge);
+                      return (
+                        <TouchableOpacity
+                          key={badge.id}
+                          onPress={() => setSelectedBadge(badge)}
+                          activeOpacity={0.75}
+                          style={{
+                            alignItems: "center",
+                            width: "22%",
+                            paddingVertical: 10,
+                            paddingHorizontal: 4,
+                            borderRadius: 14,
+                            backgroundColor: earned ? colors.brand.traceRed + "14" : theme.muted,
+                            borderWidth: 1.5,
+                            borderColor: earned ? colors.brand.traceRed + "55" : theme.border,
+                          }}
+                        >
+                          <Text style={{ fontSize: 26, opacity: earned ? 1 : 0.3 }}>{badge.emoji}</Text>
+                          <Text
+                            style={{ fontSize: 9, fontWeight: "700", color: earned ? theme.foreground : theme.mutedForeground, textAlign: "center", marginTop: 5, opacity: earned ? 1 : 0.5 }}
+                            numberOfLines={2}
+                          >
+                            {badge.name}
+                          </Text>
+                          {earned
+                            ? <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.brand.traceRed, marginTop: 4 }} />
+                            : <Lock size={9} color={theme.mutedForeground} style={{ marginTop: 4, opacity: 0.4 }} />
+                          }
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </Animated.View>
+            )}
 
             {/* Tabs + clear all */}
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
