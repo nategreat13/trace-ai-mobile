@@ -6,7 +6,10 @@ const monorepoRoot = path.resolve(__dirname, "../..");
 const config = getDefaultConfig(__dirname);
 
 config.watchFolders = [monorepoRoot];
-config.resolver.blockList = [/projects\/web\/\.next\/.*/];
+config.resolver.blockList = [
+  /projects\/web\/\.next\/.*/,
+  /projects\/web\/node_modules\/.*/,
+];
 config.resolver.nodeModulesPaths = [
   path.resolve(__dirname, "node_modules"),
   path.resolve(monorepoRoot, "node_modules"),

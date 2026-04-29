@@ -16,7 +16,7 @@ interface Airport {
   state: string;
 }
 
-const AIRPORTS: Airport[] = [
+export const AIRPORTS: Airport[] = [
   { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", state: "GA" },
   { code: "AUS", name: "Austin-Bergstrom International", city: "Austin", state: "TX" },
   { code: "BDL", name: "Bradley International", city: "Hartford", state: "CT" },
