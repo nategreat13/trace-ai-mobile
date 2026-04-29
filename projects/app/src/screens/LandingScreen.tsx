@@ -132,7 +132,7 @@ export default function LandingScreen() {
               ? require("../../assets/TraceLogoLight.png")
               : require("../../assets/TraceLogoDark.png")
           }
-          style={{ width: 210, height: 66, resizeMode: "contain" }}
+          style={{ width: 300, height: 95, resizeMode: "contain" }}
         />
       </View>
 
