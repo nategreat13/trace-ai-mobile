@@ -280,7 +280,7 @@ export default function DashboardScreen() {
                 backgroundColor: theme.card,
                 borderRadius: 16,
                 borderWidth: 1,
-                borderColor: "#1e3a5f",
+                borderColor: "#2563eb",
                 marginBottom: 16,
                 overflow: "hidden",
               }}
@@ -288,7 +288,7 @@ export default function DashboardScreen() {
               {/* Header row — always visible */}
               <TouchableOpacity activeOpacity={0.8} onPress={() => setShowProfile((v) => !v)}>
                 <LinearGradient
-                  colors={["#0f172a", "#1e3a5f", "#1a4080"]}
+                  colors={["#1e3a8a", "#2563eb", "#3b82f6"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={{
