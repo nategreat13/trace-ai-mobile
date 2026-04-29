@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -70,17 +71,14 @@ export default function LoginScreen() {
       >
         {/* Logo */}
         <View style={{ alignItems: "center", marginBottom: 32 }}>
-          <Text style={{ fontSize: 40, marginBottom: 8 }}>✈️</Text>
-          <Text
-            style={{
-              fontSize: 28,
-              fontWeight: "800",
-              color: theme.foreground,
-              marginBottom: 4,
-            }}
-          >
-            Trace Travel
-          </Text>
+          <Image
+            source={
+              scheme === "dark"
+                ? require("../../assets/TraceLogoDark.png")
+                : require("../../assets/TraceLogoLight.png")
+            }
+            style={{ width: 160, height: 50, resizeMode: "contain", marginBottom: 12 }}
+          />
           <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
             Your next adventure starts with a swipe
           </Text>
