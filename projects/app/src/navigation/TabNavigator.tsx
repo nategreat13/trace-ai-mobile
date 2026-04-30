@@ -1,8 +1,8 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Compass, MapPin, Plane, Briefcase, User } from "lucide-react-native";
+import { Compass, MapPin, Briefcase, User } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColorScheme } from "react-native";
+import { useColorScheme, Image } from "react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import type { TabParamList } from "./types";
@@ -62,7 +62,13 @@ export default function TabNavigator() {
         component={DashboardScreen}
         options={{
           tabBarLabel: "Dashboard",
-          tabBarIcon: ({ color, size }) => <Plane color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => (
+            <Image
+              source={require("../../assets/Bluelogo.png")}
+              style={{ width: size, height: size, tintColor: color }}
+              resizeMode="contain"
+            />
+          ),
         }}
       />
       {!isBusinessUser && (
