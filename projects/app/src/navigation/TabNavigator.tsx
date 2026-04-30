@@ -62,10 +62,10 @@ export default function TabNavigator() {
         component={DashboardScreen}
         options={{
           tabBarLabel: "Dashboard",
-          tabBarIcon: ({ color, size }) => (
+          tabBarIcon: ({ size }) => (
             <Image
               source={require("../../assets/Bluelogo.png")}
-              style={{ width: size, height: size, tintColor: color }}
+              style={{ width: size, height: size }}
               resizeMode="contain"
             />
           ),
