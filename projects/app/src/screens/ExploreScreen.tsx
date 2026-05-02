@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,17 +12,18 @@ import {
   ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X } from "lucide-react-native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { fetchDeals } from "../services/dealsApi";
-import { createSwipeAction, saveDeal, getSwipeActions } from "../services/firestore";
+import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import { AIRPORTS } from "../components/onboarding/AirportInput";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -42,6 +43,8 @@ export default function ExploreScreen() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [pendingAlertDest, setPendingAlertDest] = useState<{ label: string; code?: string } | null>(null);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
@@ -103,6 +106,17 @@ export default function ExploreScreen() {
   useEffect(() => {
     loadDeals();
   }, [profile?.id]);
+
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setSearchTerm("");
+        setSearchFocused(false);
+        setPendingAlertDest(null);
+      };
+    }, [])
+  );
 
   const { filteredDeals, dealVariants } = useMemo(() => {
     let result = deals;
@@ -271,22 +285,44 @@ export default function ExploreScreen() {
     filters.months.length > 0 ||
     filters.dealTypes.length > 0;
 
-  // For free users: show 4 normal + 3 blurred
-  const displayDeals = isPremium ? filteredDeals : filteredDeals.slice(0, 7);
-  const freeVisibleCount = 4;
+  const handleCreateAlert = async (dest: { label: string; code?: string }) => {
+    if (!user) return;
+    await createDealAlert({
+      userId: user.uid,
+      destination: dest.label,
+      month: null,
+      status: "active",
+    });
+    setPendingAlertDest(null);
+    navigation.navigate("MainTabs", {
+      screen: "Dashboard",
+      params: { tab: "alerts", alertSaved: true },
+    });
+  };
 
-  const renderDeal = ({ item: baseDeal, index }: { item: Deal; index: number }) => {
+  const FREE_NORMAL = 3;
+  const FREE_BLURRED = 5;
+
+  type ListItem = Deal | { type: "paywall" };
+
+  const listData: ListItem[] = useMemo(() => {
+    if (isPremium) return filteredDeals;
+    const normal = filteredDeals.slice(0, FREE_NORMAL);
+    const blurred = filteredDeals.slice(FREE_NORMAL, FREE_NORMAL + FREE_BLURRED);
+    if (filteredDeals.length <= FREE_NORMAL) return normal;
+    return [...normal, { type: "paywall" as const }, ...blurred];
+  }, [filteredDeals, isPremium]);
+
+  const renderDeal = (baseDeal: Deal, isBlurred: boolean) => {
     const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
     const cheapestIdx = variants.reduce((best, v, i) => (v.price || 0) < (variants[best].price || 0) ? i : best, 0);
     const selectedIdx = selectedMonthIndex[baseDeal.destination] ?? cheapestIdx;
     const deal = variants[selectedIdx] ?? baseDeal;
     const isSaved = savedDealIds.has(deal.id);
-    const isBlurred = !isPremium && index >= freeVisibleCount;
 
     return (
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={() => { if (isBlurred) { navigation.navigate("Paywall"); } else { setExpandedDeal(deal); } }}
+      <View
+        key={deal.id}
         style={{
           backgroundColor: theme.card,
           borderRadius: 16,
@@ -294,92 +330,96 @@ export default function ExploreScreen() {
           borderColor: theme.border,
           overflow: "hidden",
           marginBottom: 12,
-          opacity: isBlurred ? 0.3 : 1,
         }}
       >
-        <View style={{ position: "relative", height: 200 }}>
-          <Image
-            source={{ uri: deal.image_url }}
-            style={{ width: "100%", height: 200 }}
-            contentFit="cover"
-          />
-          {/* Rich multi-stop gradient for depth */}
-          <LinearGradient
-            colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.15)", "rgba(0,0,0,0.55)", "rgba(0,0,0,0.92)"]}
-            locations={[0, 0.35, 0.65, 1]}
-            style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "100%" }}
-          />
-          {deal.discount_pct > 0 && (
-            <LinearGradient
-              colors={["#00D665", "#00B84D"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{
-                position: "absolute",
-                top: 10,
-                left: 10,
-                borderRadius: 8,
-                paddingHorizontal: 9,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ color: "#fff", fontSize: 12, fontWeight: "800" }}>
-                {deal.discount_pct}% OFF
-              </Text>
-            </LinearGradient>
-          )}
-          {!isBlurred && (
-            <TouchableOpacity
-              onPress={() => handleSave(deal)}
-              style={{
-                position: "absolute",
-                top: 10,
-                right: 10,
-                backgroundColor: isSaved ? "#fff" : "rgba(0,0,0,0.45)",
-                borderRadius: 999,
-                padding: 8,
-              }}
-            >
-              {isSaved ? (
-                <BookmarkCheck color={colors.brand.traceRed} size={18} fill={colors.brand.traceRed} />
-              ) : (
-                <Bookmark color="#fff" size={18} />
-              )}
-            </TouchableOpacity>
-          )}
-          {/* Destination & price overlaid on image */}
-          <View style={{ position: "absolute", bottom: 12, left: 14, right: 14 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff", flex: 1, textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }} numberOfLines={1}>
-                {deal.destination}
-              </Text>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={{ fontSize: 22, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
-                  ${deal.price}
-                </Text>
-                {deal.original_price > 0 && (
-                  <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", textDecorationLine: "line-through" }}>
-                    ${deal.original_price}
-                  </Text>
-                )}
+        {/* Image */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => isBlurred ? navigation.navigate("Paywall") : setExpandedDeal(deal)}
+        >
+          <View style={{ position: "relative", height: 200 }}>
+            <Image
+              source={{ uri: deal.image_url }}
+              style={{ width: "100%", height: 200 }}
+              contentFit="cover"
+            />
+            {isBlurred ? (
+              /* Dark overlay + lock badge on image */
+              <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.62)", justifyContent: "center", alignItems: "center", gap: 10 }}>
+                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.15)", justifyContent: "center", alignItems: "center", borderWidth: 1.5, borderColor: "rgba(255,255,255,0.35)" }}>
+                  <Text style={{ fontSize: 22 }}>🔒</Text>
+                </View>
+                <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff", letterSpacing: 0.3 }}>Premium Deal</Text>
+                <View style={{ borderWidth: 1.5, borderColor: "rgba(255,255,255,0.6)", borderRadius: 999, paddingHorizontal: 18, paddingVertical: 7 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Unlock Access →</Text>
+                </View>
               </View>
-            </View>
-            {deal.vibe_description && (
-              <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 }} numberOfLines={1}>
-                {deal.vibe_description}
-              </Text>
+            ) : (
+              <>
+                <LinearGradient
+                  colors={["rgba(0,0,0,0.0)", "rgba(0,0,0,0.15)", "rgba(0,0,0,0.55)", "rgba(0,0,0,0.92)"]}
+                  locations={[0, 0.35, 0.65, 1]}
+                  style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "100%" }}
+                />
+                {deal.discount_pct > 0 && (
+                  <LinearGradient
+                    colors={deal.discount_pct >= 50 ? ["#FF8C00", "#FF4500"] : ["#00D665", "#00B84D"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ position: "absolute", top: 10, left: 10, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4 }}
+                  >
+                    <Text style={{ color: "#fff", fontSize: 12, fontWeight: "800" }}>
+                      {deal.discount_pct >= 50 ? "🔥 " : ""}{deal.discount_pct}% OFF
+                    </Text>
+                  </LinearGradient>
+                )}
+                <TouchableOpacity
+                  onPress={() => handleSave(deal)}
+                  style={{ position: "absolute", top: 10, right: 10, backgroundColor: isSaved ? "#fff" : "rgba(0,0,0,0.45)", borderRadius: 999, padding: 8 }}
+                >
+                  {isSaved
+                    ? <BookmarkCheck color={colors.brand.traceRed} size={18} fill={colors.brand.traceRed} />
+                    : <Bookmark color="#fff" size={18} />}
+                </TouchableOpacity>
+                <View style={{ position: "absolute", bottom: 12, left: 14, right: 14 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }} numberOfLines={1}>
+                        {deal.destination}
+                      </Text>
+                      {deal.vibe_description && (
+                        <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 2 }} numberOfLines={1}>
+                          {deal.vibe_description}
+                        </Text>
+                      )}
+                      {deal.duration && (
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 5 }}>
+                          <View style={{ backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+                            <Text style={{ fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.9)" }}>✈ {deal.duration}</Text>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={{ fontSize: 22, fontWeight: "900", color: "#fff", textShadowColor: "rgba(0,0,0,0.6)", textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
+                        ${deal.price}
+                      </Text>
+                      {deal.original_price > 0 && (
+                        <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", textDecorationLine: "line-through" }}>
+                          ${deal.original_price}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                </View>
+              </>
             )}
           </View>
-        </View>
-        <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
-          {deal.duration && (
-            <Text style={{ fontSize: 11, color: theme.mutedForeground, marginBottom: 8 }}>
-              ✈️ {deal.duration}
-            </Text>
-          )}
-          {/* Month selector pills */}
+        </TouchableOpacity>
+
+        {!isBlurred && <View style={{ paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 }}>
           {variants.length > 0 && (
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 10 }}>
               {variants.map((v, i) => {
                 const isSelected = i === selectedIdx;
                 return isSelected ? (
@@ -391,47 +431,96 @@ export default function ExploreScreen() {
                     style={{ borderRadius: 999 }}
                   >
                     <TouchableOpacity
-                      onPress={() => !isBlurred && setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
+                      onPress={() => setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
                       style={{ paddingHorizontal: 12, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 5 }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>
-                        {v.travel_window || `Option ${i + 1}`}
-                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>{v.travel_window || `Option ${i + 1}`}</Text>
                       <View style={{ width: 1, height: 12, backgroundColor: "rgba(255,255,255,0.4)" }} />
-                      <Text style={{ fontSize: 12, fontWeight: "900", color: "#fff" }}>
-                        ${v.price}
-                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: "900", color: "#fff" }}>${v.price}</Text>
                     </TouchableOpacity>
                   </LinearGradient>
                 ) : (
                   <TouchableOpacity
                     key={v.id}
-                    onPress={() => !isBlurred && setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 7,
-                      borderRadius: 999,
-                      backgroundColor: theme.muted,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 5,
-                    }}
+                    onPress={() => setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
+                    style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: theme.muted, flexDirection: "row", alignItems: "center", gap: 5 }}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: theme.mutedForeground }}>
-                      {v.travel_window || `Option ${i + 1}`}
-                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: theme.mutedForeground }}>{v.travel_window || `Option ${i + 1}`}</Text>
                     <View style={{ width: 1, height: 12, backgroundColor: theme.border }} />
-                    <Text style={{ fontSize: 12, fontWeight: "800", color: theme.foreground }}>
-                      ${v.price}
-                    </Text>
+                    <Text style={{ fontSize: 12, fontWeight: "800", color: theme.foreground }}>${v.price}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
           )}
-        </View>
-      </TouchableOpacity>
+
+          {/* Subtle "View deal" pill */}
+          <View style={{ alignItems: "center" }}>
+            <TouchableOpacity
+              onPress={() => setExpandedDeal(deal)}
+              style={{
+                borderWidth: 1,
+                borderColor: colors.brand.traceRed,
+                borderRadius: 999,
+                paddingHorizontal: 18,
+                paddingVertical: 6,
+              }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.traceRed }}>View deal →</Text>
+            </TouchableOpacity>
+          </View>
+        </View>}
+      </View>
     );
+  };
+
+  const renderPaywall = () => (
+    <View
+      style={{
+        backgroundColor: theme.card,
+        borderRadius: 16,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: theme.border,
+        alignItems: "center",
+        marginBottom: 12,
+      }}
+    >
+      <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground, marginBottom: 8 }}>
+        🔓 Unlock Full Access
+      </Text>
+      <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginBottom: 20 }}>
+        Get access to all {filteredDeals.length}+ deals with premium features
+      </Text>
+      <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, width: "100%" }}>
+        {[
+          { emoji: "♾️", label: "Unlimited\nSwipes" },
+          { emoji: "🔍", label: "Full\nExplore" },
+          { emoji: "🔔", label: "Deal\nAlerts" },
+        ].map((b, i) => (
+          <View key={i} style={{ flex: 1, alignItems: "center", padding: 12, backgroundColor: theme.muted, borderRadius: 12 }}>
+            <Text style={{ fontSize: 24, marginBottom: 4 }}>{b.emoji}</Text>
+            <Text style={{ fontSize: 11, fontWeight: "600", color: theme.mutedForeground, textAlign: "center" }}>{b.label}</Text>
+          </View>
+        ))}
+      </View>
+      <LinearGradient
+        colors={[colors.brand.traceRed, colors.brand.tracePink]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ borderRadius: 12, width: "100%" }}
+      >
+        <TouchableOpacity onPress={() => navigation.navigate("Paywall")} style={{ paddingVertical: 14, alignItems: "center" }}>
+          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
+        </TouchableOpacity>
+      </LinearGradient>
+    </View>
+  );
+
+  const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
+    if ("type" in item && item.type === "paywall") return renderPaywall();
+    const isBlurred = !isPremium && index > FREE_NORMAL;
+    return renderDeal(item as Deal, isBlurred);
   };
 
   if (loading) {
@@ -445,20 +534,31 @@ export default function ExploreScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
       {/* Header */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: theme.border }}>
+      <LinearGradient
+        colors={[
+          scheme === "dark" ? "rgba(255,101,91,0.18)" : "rgba(255,101,91,0.10)",
+          "transparent",
+        ]}
+        style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: theme.border }}
+      >
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <Text style={{ fontSize: 24, fontWeight: "900", color: theme.foreground }}>Explore Deals</Text>
+          <Text style={{ fontSize: 24, fontWeight: "900", color: colors.brand.traceRed }}>Explore Deals</Text>
           {profile?.homeAirport && (
-            <View style={{ backgroundColor: theme.muted, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }}>
-              <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>From {profile.homeAirport}</Text>
-            </View>
+            <LinearGradient
+              colors={[colors.brand.traceRed, colors.brand.tracePink]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4 }}
+            >
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>✈ {profile.homeAirport}</Text>
+            </LinearGradient>
           )}
         </View>
         <Text style={{ fontSize: 12, color: theme.mutedForeground }}>Browse and save flights that match your vibe</Text>
-      </View>
+      </LinearGradient>
 
       {/* Search + Filter button */}
-      <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: searchFocused && searchTerm.length > 0 ? 0 : 12, zIndex: 20, elevation: 20 }}>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <View
             style={{
@@ -476,9 +576,16 @@ export default function ExploreScreen() {
               placeholder="Search destinations..."
               placeholderTextColor={theme.mutedForeground}
               value={searchTerm}
-              onChangeText={setSearchTerm}
+              onChangeText={(val) => { setSearchTerm(val); setPendingAlertDest(null); }}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
               style={{ flex: 1, paddingVertical: 12, fontSize: 14, color: theme.foreground }}
             />
+            {searchTerm.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchTerm("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X color={theme.mutedForeground} size={16} />
+              </TouchableOpacity>
+            )}
           </View>
           <TouchableOpacity
             onPress={() => setShowFilters(true)}
@@ -497,6 +604,96 @@ export default function ExploreScreen() {
             />
           </TouchableOpacity>
         </View>
+
+        {/* Destination suggestions */}
+        {searchFocused && searchTerm.length > 0 && (() => {
+          const q = searchTerm.toLowerCase();
+          const homeCode = profile?.homeAirport?.toUpperCase();
+
+          // Airport matches: code, city, or name
+          const airportMatches = AIRPORTS.filter((a) =>
+            a.code.toLowerCase().includes(q) ||
+            a.city.toLowerCase().includes(q) ||
+            a.name.toLowerCase().includes(q)
+          );
+
+          // Deal destination matches (unique strings)
+          const dealDestMatches = deals
+            .map((d) => d.destination)
+            .filter((dest, i, arr) => dest && arr.indexOf(dest) === i)
+            .filter((dest) => dest.toLowerCase().includes(q));
+
+          // Build unified suggestion list: airport entries first, then pure deal dest strings not already covered
+          type Suggestion = { label: string; sub?: string; isAirport: boolean; isHome: boolean };
+          const seen = new Set<string>();
+          const suggestions: Suggestion[] = [];
+
+          airportMatches.forEach((a) => {
+            const label = `${a.city}, ${a.state}`;
+            if (!seen.has(label)) {
+              seen.add(label);
+              suggestions.push({ label, sub: `${a.code} · ${a.name.split(" ").slice(0, 3).join(" ")}`, isAirport: true, isHome: a.code === homeCode });
+            }
+          });
+
+          dealDestMatches.forEach((dest) => {
+            if (!seen.has(dest)) {
+              seen.add(dest);
+              suggestions.push({ label: dest, isAirport: false, isHome: false });
+            }
+          });
+
+          // Sort: home airport first, then airports, then deal-only
+          suggestions.sort((a, b) => {
+            if (a.isHome !== b.isHome) return a.isHome ? -1 : 1;
+            if (a.isAirport !== b.isAirport) return a.isAirport ? -1 : 1;
+            return 0;
+          });
+
+          const visible = suggestions.slice(0, 6);
+          if (!visible.length) return null;
+
+          return (
+            <View
+              style={{
+                backgroundColor: theme.card,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: theme.border,
+                marginTop: 6,
+                marginBottom: 8,
+                overflow: "hidden",
+              }}
+            >
+              {visible.map((s, index) => (
+                <TouchableOpacity
+                  key={s.label}
+                  onPress={() => { setSearchTerm(s.label); setSearchFocused(false); setPendingAlertDest({ label: s.label }); }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: theme.border,
+                    gap: 10,
+                  }}
+                >
+                  <Search color={s.isHome ? colors.brand.traceRed : theme.mutedForeground} size={14} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, color: theme.foreground }} numberOfLines={1}>{s.label}</Text>
+                    {s.sub && (
+                      <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 1 }} numberOfLines={1}>{s.sub}</Text>
+                    )}
+                  </View>
+                  {s.isHome && (
+                    <Text style={{ fontSize: 10, color: colors.brand.traceRed, fontWeight: "700" }}>HOME</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          );
+        })()}
       </View>
 
       {/* Active filter tags */}
@@ -506,23 +703,6 @@ export default function ExploreScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}
         >
-          {(searchTerm || filters.search) && (
-            <TouchableOpacity
-              onPress={() => removeFilter("search")}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-                backgroundColor: theme.muted,
-                borderRadius: 999,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-              }}
-            >
-              <Text style={{ fontSize: 12, color: theme.foreground }}>🔍 {searchTerm || filters.search}</Text>
-              <X size={12} color={theme.mutedForeground} />
-            </TouchableOpacity>
-          )}
           {filters.cabinClass === "business" && (
             <TouchableOpacity
               onPress={() => removeFilter("cabinClass")}
@@ -608,16 +788,40 @@ export default function ExploreScreen() {
       {/* Deal count */}
       <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
         <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
-          Showing {Math.min(displayDeals.length, isPremium ? displayDeals.length : freeVisibleCount)} deal{displayDeals.length !== 1 ? "s" : ""}
-          {!isPremium && filteredDeals.length > freeVisibleCount && ` of ${filteredDeals.length}`}
+          {isPremium
+            ? `Showing ${filteredDeals.length} deal${filteredDeals.length !== 1 ? "s" : ""}`
+            : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
         </Text>
       </View>
 
       {/* Deals list */}
+      {pendingAlertDest && filteredDeals.length > 0 && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => handleCreateAlert(pendingAlertDest)}
+            style={{
+              flexDirection: "row", alignItems: "center", gap: 10,
+              backgroundColor: colors.brand.traceRed + "12",
+              borderWidth: 1, borderColor: colors.brand.traceRed + "40",
+              borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11,
+            }}
+            activeOpacity={0.7}
+          >
+            <BellRing size={15} color={colors.brand.traceRed} />
+            <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: colors.brand.traceRed }}>
+              Get alerted for {pendingAlertDest.label}
+            </Text>
+            <TouchableOpacity onPress={() => setPendingAlertDest(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <X size={14} color={colors.brand.traceRed} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <FlatList
-        data={displayDeals}
-        renderItem={renderDeal}
-        keyExtractor={(item) => item.id}
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={(item) => ("type" in item ? "paywall" : item.id)}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
         refreshControl={
           <RefreshControl
@@ -630,78 +834,157 @@ export default function ExploreScreen() {
           />
         }
         ListFooterComponent={
-          !isPremium && filteredDeals.length > freeVisibleCount ? (
-            <View
-              style={{
-                backgroundColor: theme.card,
-                borderRadius: 16,
-                padding: 24,
-                borderWidth: 1,
-                borderColor: theme.border,
-                alignItems: "center",
-                marginTop: 4,
-              }}
-            >
-              <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground, marginBottom: 8 }}>
-                🔓 Unlock Full Access
-              </Text>
-              <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginBottom: 20 }}>
-                Get access to all {filteredDeals.length}+ deals with premium features
-              </Text>
-
-              {/* Benefits grid */}
-              <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, width: "100%" }}>
-                {[
-                  { emoji: "♾️", label: "Unlimited\nSwipes" },
-                  { emoji: "🔍", label: "Full\nExplore" },
-                  { emoji: "🔔", label: "Deal\nAlerts" },
-                ].map((b, i) => (
-                  <View
-                    key={i}
-                    style={{
-                      flex: 1,
-                      alignItems: "center",
-                      padding: 12,
-                      backgroundColor: theme.muted,
-                      borderRadius: 12,
-                    }}
-                  >
-                    <Text style={{ fontSize: 24, marginBottom: 4 }}>{b.emoji}</Text>
-                    <Text style={{ fontSize: 11, fontWeight: "600", color: theme.mutedForeground, textAlign: "center" }}>
-                      {b.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-
-              <LinearGradient
-                colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ borderRadius: 12, width: "100%" }}
-              >
-                <TouchableOpacity
-                  onPress={() => navigation.navigate("Paywall")}
-                  style={{
-                    paddingVertical: 14,
-                    alignItems: "center",
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
-                </TouchableOpacity>
-              </LinearGradient>
-            </View>
+          !isPremium && filteredDeals.length > FREE_NORMAL ? (
+            <Text style={{ textAlign: "center", fontSize: 12, color: theme.mutedForeground, paddingVertical: 16, paddingHorizontal: 24 }}>
+              {filteredDeals.length - FREE_NORMAL}+ more deals available with Premium
+            </Text>
           ) : null
         }
-        ListEmptyComponent={
-          <View style={{ alignItems: "center", paddingVertical: 48 }}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>🔍</Text>
-            <Text style={{ fontSize: 18, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>No deals found</Text>
-            <Text style={{ fontSize: 14, color: theme.mutedForeground }}>
-              {searchTerm ? `No deals for "${searchTerm}" right now` : "No deals match your filters"}
-            </Text>
-          </View>
-        }
+        ListEmptyComponent={() => {
+          if (!searchTerm) {
+            return (
+              <View style={{ alignItems: "center", paddingVertical: 48 }}>
+                <Text style={{ fontSize: 48, marginBottom: 16 }}>🔍</Text>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>No deals found</Text>
+                <Text style={{ fontSize: 14, color: theme.mutedForeground }}>No deals match your filters</Text>
+              </View>
+            );
+          }
+
+          // If a dropdown suggestion was already picked, use it directly
+          if (pendingAlertDest) {
+            return (
+              <View style={{ paddingVertical: 24 }}>
+                <View style={{ alignItems: "center", marginBottom: 24 }}>
+                  <Text style={{ fontSize: 40, marginBottom: 12 }}>✈️</Text>
+                  <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, marginBottom: 6 }}>
+                    No deals for "{pendingAlertDest.label}" right now
+                  </Text>
+                  <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center" }}>
+                    Get notified the moment one pops up on our radar
+                  </Text>
+                </View>
+                <LinearGradient
+                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={{ borderRadius: 12, marginHorizontal: 0 }}
+                >
+                  <TouchableOpacity
+                    onPress={() => handleCreateAlert(pendingAlertDest)}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 14, gap: 8 }}
+                  >
+                    <BellRing size={16} color="#fff" />
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
+                      Alert me for {pendingAlertDest.label}
+                    </Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              </View>
+            );
+          }
+
+          // Build validated suggestions from AIRPORTS list + unique deal destinations
+          // Strip ", Region" suffix so "New York, NY" still matches city "New York"
+          const cityQuery = searchTerm.split(",")[0].trim().toLowerCase();
+          const airportMatches = AIRPORTS.filter((a) => {
+            const q = cityQuery;
+            return a.city.toLowerCase().includes(q) || a.code.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+          }).slice(0, 5).map((a) => ({ label: `${a.city}, ${a.state}`, code: a.code }));
+
+          const dealDestMatches = deals
+            .map((d) => d.destination)
+            .filter((dest, i, arr) => dest && arr.indexOf(dest) === i)
+            .filter((dest) => dest.toLowerCase().includes(cityQuery))
+            .slice(0, 4)
+            .map((dest) => ({ label: dest, code: undefined }));
+
+          const allSuggestions = [
+            ...dealDestMatches,
+            ...airportMatches.filter((a) => !dealDestMatches.some((d) => d.label.toLowerCase().includes(a.label.split(",")[0].toLowerCase()))),
+          ];
+
+          return (
+            <View style={{ paddingVertical: 24 }}>
+              <View style={{ alignItems: "center", marginBottom: 24 }}>
+                <Text style={{ fontSize: 40, marginBottom: 12 }}>✈️</Text>
+                <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, marginBottom: 6 }}>
+                  No deals for "{searchTerm}" right now
+                </Text>
+                <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center" }}>
+                  Get notified the moment one pops up on our radar
+                </Text>
+              </View>
+
+              {allSuggestions.length > 0 && (
+                <View style={{ backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, padding: 16 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground, marginBottom: 12 }}>
+                    Select a destination to track:
+                  </Text>
+                  <View style={{ gap: 8 }}>
+                    {allSuggestions.map((dest) => {
+                      const isSelected = pendingAlertDest?.label === dest.label;
+                      return (
+                        <TouchableOpacity
+                          key={dest.label}
+                          onPress={() => setPendingAlertDest(isSelected ? null : dest)}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingHorizontal: 14,
+                            paddingVertical: 11,
+                            borderRadius: 12,
+                            borderWidth: 1.5,
+                            borderColor: isSelected ? colors.brand.traceRed : theme.border,
+                            backgroundColor: isSelected ? colors.brand.traceRed + "10" : theme.muted,
+                            gap: 10,
+                          }}
+                        >
+                          <Search size={14} color={isSelected ? colors.brand.traceRed : theme.mutedForeground} />
+                          <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: isSelected ? colors.brand.traceRed : theme.foreground }}>
+                            {dest.label}
+                          </Text>
+                          {dest.code && (
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: isSelected ? colors.brand.traceRed : theme.mutedForeground }}>
+                              {dest.code}
+                            </Text>
+                          )}
+                          {isSelected && <Bell size={14} color={colors.brand.traceRed} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {pendingAlertDest && (
+                    <LinearGradient
+                      colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ borderRadius: 12, marginTop: 14 }}
+                    >
+                      <TouchableOpacity
+                        onPress={() => handleCreateAlert(pendingAlertDest)}
+                        style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 13, gap: 8 }}
+                      >
+                        <BellRing size={16} color="#fff" />
+                        <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
+                          Alert me for {pendingAlertDest.label}
+                        </Text>
+                      </TouchableOpacity>
+                    </LinearGradient>
+                  )}
+                </View>
+              )}
+
+              {allSuggestions.length === 0 && (
+                <View style={{ alignItems: "center" }}>
+                  <Text style={{ fontSize: 13, color: theme.mutedForeground }}>
+                    No matching destinations found. Try a city or airport code.
+                  </Text>
+                </View>
+              )}
+            </View>
+          );
+        }}
       />
 
       {/* Filters modal */}

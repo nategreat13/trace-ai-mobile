@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -10,12 +10,17 @@ import {
   Alert,
   Linking,
   Modal,
+  Animated as RNAnimated,
+  PanResponder,
 } from "react-native";
+import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { TabParamList } from "../navigation/types";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronRight, ChevronDown, ChevronUp, Trash2 } from "lucide-react-native";
+import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +30,7 @@ import {
   deleteSavedDeal,
   deleteSwipeAction,
   getDealAlerts,
+  deleteDealAlert,
 } from "../services/firestore";
 import { ALL_BADGES } from "../lib/constants";
 
@@ -32,6 +38,7 @@ export default function DashboardScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile } = useAuth();
+  const route = useRoute<RouteProp<TabParamList, "Dashboard">>();
 
   const [deals, setDeals] = useState<any[]>([]);
   const [swipes, setSwipes] = useState<any[]>([]);
@@ -39,6 +46,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<"saved" | "alerts">("saved");
+  const [alertSavedToast, setAlertSavedToast] = useState(false);
   const [expandedDeal, setExpandedDeal] = useState<any | null>(null);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
@@ -66,6 +74,17 @@ export default function DashboardScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const params = route.params;
+    if (!params) return;
+    if (params.tab) setTab(params.tab);
+    if (params.alertSaved) {
+      loadData();
+      setAlertSavedToast(true);
+      setTimeout(() => setAlertSavedToast(false), 3500);
+    }
+  }, [route.params]);
 
   const handleDeleteDeal = async (dealId: string) => {
     setDeletingIds((prev) => new Set(prev).add(dealId));
@@ -171,19 +190,71 @@ export default function DashboardScreen() {
         }}
       >
         <TouchableOpacity activeOpacity={0.85} onPress={() => setExpandedDeal(savedDealToDeal(item))}>
-          {item.imageUrl && (
-            <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 120 }} contentFit="cover" />
-          )}
-          <View style={{ padding: 12 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontSize: 16, fontWeight: "800", color: theme.foreground, flex: 1 }} numberOfLines={1}>{item.destination}</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
-                <ChevronRight size={16} color={theme.mutedForeground} />
-              </View>
+          {item.imageUrl ? (
+            <View style={{ position: "relative" }}>
+              <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 160 }} contentFit="cover" />
+              {/* Discount badge */}
+              {item.discountPct > 0 && (
+                <View style={{
+                  position: "absolute", top: 10, left: 10,
+                  backgroundColor: item.discountPct >= 50 ? "#FF8C00" : "#16a34a",
+                  borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "800" }}>
+                    -{Math.round(item.discountPct)}%
+                  </Text>
+                </View>
+              )}
+              {/* Duration pill */}
+              {item.duration && (
+                <View style={{
+                  position: "absolute", bottom: 10, right: 10,
+                  backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>{item.duration}</Text>
+                </View>
+              )}
             </View>
-            {item.vibeDescription && (
+          ) : null}
+          <View style={{ padding: 12 }}>
+            {/* Origin → Destination */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 4 }}>
+              {item.origin ? (
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, fontWeight: "600" }}>
+                  {item.origin} → {item.destination}
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }} numberOfLines={1}>{item.destination}</Text>
+              )}
+            </View>
+            {/* Price row */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+                <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
+                {item.originalPrice > 0 && item.originalPrice !== item.price && (
+                  <Text style={{ fontSize: 13, color: theme.mutedForeground, textDecorationLine: "line-through" }}>
+                    ${item.originalPrice}
+                  </Text>
+                )}
+              </View>
+              <ChevronRight size={16} color={theme.mutedForeground} />
+            </View>
+            {/* Travel window */}
+            {item.travelWindow && (
               <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4 }} numberOfLines={1}>
+                📅 {item.travelWindow}
+              </Text>
+            )}
+            {/* Airline */}
+            {item.airlines && (
+              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }} numberOfLines={1}>
+                ✈️ {item.airlines}
+              </Text>
+            )}
+            {/* Vibe */}
+            {item.vibeDescription && (
+              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4, fontStyle: "italic" }} numberOfLines={2}>
                 {item.vibeDescription}
               </Text>
             )}
@@ -210,46 +281,96 @@ export default function DashboardScreen() {
     );
   };
 
-  const renderAlert = ({ item }: { item: any }) => (
-    <View
-      style={{
-        backgroundColor: theme.card,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.border,
-        padding: 16,
-        marginBottom: 8,
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <View>
-        <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>{item.destination}</Text>
-        {item.month && (
-          <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>{item.month}</Text>
-        )}
-      </View>
-      <View
-        style={{
-          backgroundColor: item.status === "matched" ? "#dcfce7" : theme.muted,
-          borderRadius: 999,
-          paddingHorizontal: 10,
-          paddingVertical: 4,
-        }}
-      >
-        <Text
+  const SwipeableAlert = ({ item }: { item: any }) => {
+    const translateX = useRef(new RNAnimated.Value(0)).current;
+    const DELETE_THRESHOLD = -80;
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 5 && Math.abs(g.dx) > Math.abs(g.dy),
+        onPanResponderMove: (_, g) => {
+          if (g.dx < 0) translateX.setValue(g.dx);
+        },
+        onPanResponderRelease: (_, g) => {
+          if (g.dx < DELETE_THRESHOLD) {
+            RNAnimated.timing(translateX, { toValue: -500, duration: 220, useNativeDriver: true }).start(async () => {
+              await deleteDealAlert(item.id);
+              setAlerts((prev) => prev.filter((a) => a.id !== item.id));
+            });
+          } else {
+            RNAnimated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+          }
+        },
+      })
+    ).current;
+
+    const deleteOpacity = translateX.interpolate({ inputRange: [-120, -40], outputRange: [1, 0], extrapolate: "clamp" });
+
+    return (
+      <View style={{ marginBottom: 8, overflow: "hidden", borderRadius: 12 }}>
+        {/* Red delete background */}
+        <RNAnimated.View
           style={{
-            fontSize: 11,
-            fontWeight: "600",
-            color: item.status === "matched" ? "#16a34a" : theme.mutedForeground,
+            position: "absolute", top: 0, bottom: 0, right: 0, left: 0,
+            backgroundColor: "#ef4444",
+            borderRadius: 12,
+            alignItems: "flex-end",
+            justifyContent: "center",
+            paddingRight: 20,
+            opacity: deleteOpacity,
           }}
         >
-          {item.status === "matched" ? "Matched!" : "Active"}
-        </Text>
+          <Trash2 size={20} color="#fff" />
+        </RNAnimated.View>
+
+        <RNAnimated.View
+          style={{ transform: [{ translateX }] }}
+          {...panResponder.panHandlers}
+        >
+          <View
+            style={{
+              backgroundColor: theme.card,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: 16,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>{item.destination}</Text>
+              {item.month && (
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>{item.month}</Text>
+              )}
+              <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 4 }}>Swipe left to delete</Text>
+            </View>
+            <View
+              style={{
+                backgroundColor: item.status === "matched" ? "#dcfce7" : theme.muted,
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "600",
+                  color: item.status === "matched" ? "#16a34a" : theme.mutedForeground,
+                }}
+              >
+                {item.status === "matched" ? "Matched!" : "Active"}
+              </Text>
+            </View>
+          </View>
+        </RNAnimated.View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const renderAlert = ({ item }: { item: any }) => <SwipeableAlert item={item} />;
 
   const isBadgeEarned = (badge: (typeof ALL_BADGES)[number]) =>
     earnedBadges.some((b) => b.id === badge.id);
@@ -559,6 +680,22 @@ export default function DashboardScreen() {
           })()}
         </TouchableOpacity>
       </Modal>
+
+      {alertSavedToast && (
+        <View style={{
+          position: "absolute", bottom: 24, left: 24, right: 24,
+          backgroundColor: colors.brand.traceRed,
+          borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18,
+          flexDirection: "row", alignItems: "center", gap: 10,
+          shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2, shadowRadius: 8, elevation: 8,
+        }}>
+          <BellRing size={18} color="#fff" />
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700", flex: 1 }}>
+            Alert saved! We'll notify you when a deal pops up.
+          </Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

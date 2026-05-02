@@ -3,6 +3,8 @@ export interface UserProfile {
   userId: string;
   email: string;
   displayName: string;
+  firstName?: string;
+  lastName?: string;
   homeAirport: string;
   destinationPreference: "domestic" | "international" | "both";
   dealTypes: string[];

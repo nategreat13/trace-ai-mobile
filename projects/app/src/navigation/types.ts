@@ -3,7 +3,7 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 export type TabParamList = {
   SwipeDeck: undefined;
   Explore: undefined;
-  Dashboard: undefined;
+  Dashboard: { tab?: "saved" | "alerts"; alertSaved?: boolean } | undefined;
   Upgrade: undefined;
   Profile: undefined;
 };

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  TextInput,
   ScrollView,
   Modal,
   StyleSheet,
@@ -12,7 +11,6 @@ import {
 } from "react-native";
 import {
   X,
-  Search,
   Users,
   Sparkles,
   Compass,
@@ -31,19 +29,14 @@ export interface ExploreFilterState {
   destination: "domestic" | "international" | "both";
 }
 
+const MONTHS_IN_ORDER = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+const currentMonthIdx = new Date().getMonth();
 const ALL_MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  ...MONTHS_IN_ORDER.slice(currentMonthIdx),
+  ...MONTHS_IN_ORDER.slice(0, currentMonthIdx),
 ];
 
 const DEAL_TYPES = [
@@ -167,41 +160,6 @@ export default function ExploreFilters({
           contentContainerStyle={styles.scrollContentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Search */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: theme.foreground }]}>
-              Search
-            </Text>
-            <View
-              style={[
-                styles.searchBar,
-                { backgroundColor: theme.muted, borderColor: theme.border },
-              ]}
-            >
-              <Search size={16} color={theme.mutedForeground} />
-              <TextInput
-                style={[styles.searchInput, { color: theme.foreground }]}
-                placeholder="Search destinations..."
-                placeholderTextColor={theme.mutedForeground}
-                value={localFilters.search}
-                onChangeText={(text) =>
-                  setLocalFilters((prev) => ({ ...prev, search: text }))
-                }
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {localFilters.search.length > 0 && (
-                <TouchableOpacity
-                  onPress={() =>
-                    setLocalFilters((prev) => ({ ...prev, search: "" }))
-                  }
-                >
-                  <X size={16} color={theme.mutedForeground} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-
           {/* Cabin Class */}
           <View style={styles.section}>
             <Text style={[styles.sectionLabel, { color: theme.foreground }]}>
@@ -465,20 +423,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 10,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    padding: 0,
   },
   sortRow: {
     flexDirection: "row",
