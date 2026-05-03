@@ -616,7 +616,10 @@ export default function ExpandedDeal({
 
             {/* Experiences */}
             {deal.experiences && deal.experiences.length > 0 && (
-              <DealExperiences experiences={deal.experiences} />
+              <DealExperiences
+                experiences={deal.experiences}
+                month={deal.travel_window?.split(" ")[0]}
+              />
             )}
 
             {/* Interesting Facts */}

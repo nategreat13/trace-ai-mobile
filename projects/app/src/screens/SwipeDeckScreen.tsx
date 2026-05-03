@@ -18,6 +18,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Crown, X, Heart, Undo2 } from "lucide-react-native";
@@ -96,6 +97,126 @@ function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.l
   );
 }
 
+function DailyLimitView({
+  theme,
+  scheme,
+  maxSwipes,
+  onUpgrade,
+  onExplore,
+}: {
+  theme: typeof colors.light | typeof colors.dark;
+  scheme: "light" | "dark" | null | undefined;
+  maxSwipes: number;
+  onUpgrade: () => void;
+  onExplore: () => void;
+}) {
+  const [timeLeft, setTimeLeft] = React.useState(() => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000));
+  });
+
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      setTimeLeft(Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const hours = Math.floor(timeLeft / 3600);
+  const minutes = Math.floor((timeLeft % 3600) / 60);
+  const seconds = timeLeft % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const bg = scheme === "dark" ? "rgba(10,10,18," : "rgba(255,255,255,";
+
+  return (
+    <Animated.View
+      entering={FadeIn.duration(500)}
+      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, borderRadius: 20, overflow: "hidden" }}
+    >
+      {/* Gradient fade — deal peeks through the top */}
+      <LinearGradient
+        colors={[
+          `${bg}0.0)`,
+          `${bg}0.15)`,
+          `${bg}0.7)`,
+          `${bg}0.97)`,
+        ]}
+        locations={[0, 0.28, 0.52, 0.72]}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+
+      {/* Content anchored to the bottom */}
+      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 20 }}>
+        <View style={{ alignItems: "center", marginBottom: 16 }}>
+          <Text style={{ fontSize: 32, marginBottom: 8 }}>🌙</Text>
+          <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 6 }}>
+            Out of swipes for today
+          </Text>
+          <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 18 }}>
+            Free members get {maxSwipes} swipes/day
+          </Text>
+        </View>
+
+        {/* Countdown pill */}
+        <View style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+          borderRadius: 14,
+          paddingVertical: 12,
+          marginBottom: 14,
+          borderWidth: 1,
+          borderColor: theme.border,
+        }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>Resets in</Text>
+          <Text style={{ fontSize: 18, fontWeight: "900", color: theme.foreground, letterSpacing: 1, fontVariant: ["tabular-nums"] }}>
+            {pad(hours)}:{pad(minutes)}:{pad(seconds)}
+          </Text>
+        </View>
+
+        {/* Upgrade CTA */}
+        <TouchableOpacity
+          onPress={onUpgrade}
+          activeOpacity={0.85}
+          style={{ borderRadius: 14, overflow: "hidden", marginBottom: 10 }}
+        >
+          <LinearGradient
+            colors={[colors.brand.traceRed, colors.brand.tracePink]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ paddingVertical: 14, alignItems: "center" }}
+          >
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Unlock Unlimited Swipes</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* Secondary */}
+        <TouchableOpacity
+          onPress={onExplore}
+          style={{
+            backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+            borderRadius: 14,
+            paddingVertical: 13,
+            alignItems: "center",
+            borderWidth: 1,
+            borderColor: theme.border,
+          }}
+        >
+          <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "600" }}>Browse Explore Instead</Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
@@ -109,7 +230,7 @@ export default function SwipeDeckScreen() {
 
   const [deckMode, setDeckMode] = useState<"economy" | "business">("economy");
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted">("swiping");
+  const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted" | "daily_limit">("swiping");
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
@@ -190,6 +311,13 @@ export default function SwipeDeckScreen() {
     reload();
   }, [activeDeals.length, currentIndex, loading, deckPhase]);
 
+  // Transition to daily limit screen when a free user hits 0 swipes
+  useEffect(() => {
+    if (!isPremium && swipesLeft <= 0 && deckPhase === "swiping") {
+      setDeckPhase("daily_limit");
+    }
+  }, [swipesLeft, isPremium, deckPhase]);
+
   // When the expansion reload finishes: decide if we have new deals or are truly done
   useEffect(() => {
     if (deckPhase !== "expanding" || loading) return;
@@ -224,7 +352,7 @@ export default function SwipeDeckScreen() {
 
       if (!isPremium && swipesLeft <= 0) {
         logEvent("daily_limit_hit", { swipes_left: 0 });
-        navigation.navigate("Paywall");
+        setDeckPhase("daily_limit");
         return;
       }
 
@@ -385,7 +513,7 @@ export default function SwipeDeckScreen() {
 
   const handleButtonSwipe = (action: "left" | "right" | "super") => {
     if (!isPremium && swipesLeft <= 0) {
-      navigation.navigate("Paywall");
+      setDeckPhase("daily_limit");
       return;
     }
     setTriggerSwipe(action);
@@ -564,6 +692,16 @@ export default function SwipeDeckScreen() {
         <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8, position: "relative" }}>
           {/* Card stack */}
           <View style={{ flex: 1, position: "relative" }}>
+            {/* Daily limit overlay — sits on top of the last deal card */}
+            {deckPhase === "daily_limit" && (
+              <DailyLimitView
+                theme={theme}
+                scheme={scheme}
+                maxSwipes={MAX_DAILY_SWIPES}
+                onUpgrade={() => navigation.navigate("Paywall")}
+                onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
+              />
+            )}
             {deckMode === "business" && (
               <View
                 style={{

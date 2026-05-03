@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   useColorScheme,
   RefreshControl,
   Linking,
@@ -22,6 +21,7 @@ import { fetchDeals } from "../services/dealsApi";
 import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
+import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { AIRPORTS } from "../components/onboarding/AirportInput";
 import type { Deal } from "@trace/shared";
@@ -287,6 +287,7 @@ export default function ExploreScreen() {
 
   const handleCreateAlert = async (dest: { label: string; code?: string }) => {
     if (!user) return;
+    if (!isPremium) { navigation.navigate("Paywall"); return; }
     await createDealAlert({
       userId: user.uid,
       destination: dest.label,
@@ -307,10 +308,34 @@ export default function ExploreScreen() {
 
   const listData: ListItem[] = useMemo(() => {
     if (isPremium) return filteredDeals;
-    const normal = filteredDeals.slice(0, FREE_NORMAL);
-    const blurred = filteredDeals.slice(FREE_NORMAL, FREE_NORMAL + FREE_BLURRED);
-    if (filteredDeals.length <= FREE_NORMAL) return normal;
-    return [...normal, { type: "paywall" as const }, ...blurred];
+
+    // Curate free sample: 2 cheapest domestic + 1 cheapest international
+    const domestic = filteredDeals
+      .filter((d) => d.domestic_or_international?.toLowerCase().includes("domestic"))
+      .sort((a, b) => (a.price || 0) - (b.price || 0));
+    const international = filteredDeals
+      .filter((d) => d.domestic_or_international?.toLowerCase().includes("international"))
+      .sort((a, b) => (a.price || 0) - (b.price || 0));
+
+    const picks: Deal[] = [
+      ...domestic.slice(0, 2),
+      ...international.slice(0, 1),
+    ];
+
+    // Fall back to cheapest deals if we couldn't fill all 3 slots
+    if (picks.length < FREE_NORMAL) {
+      const pickIds = new Set(picks.map((d) => d.id));
+      const fallback = filteredDeals.filter((d) => !pickIds.has(d.id));
+      picks.push(...fallback.slice(0, FREE_NORMAL - picks.length));
+    }
+
+    const pickIds = new Set(picks.map((d) => d.id));
+    const blurred = filteredDeals
+      .filter((d) => !pickIds.has(d.id))
+      .slice(0, FREE_BLURRED);
+
+    if (filteredDeals.length <= picks.length) return picks;
+    return [...picks, { type: "paywall" as const }, ...blurred];
   }, [filteredDeals, isPremium]);
 
   const renderDeal = (baseDeal: Deal, isBlurred: boolean) => {
@@ -454,21 +479,6 @@ export default function ExploreScreen() {
             </View>
           )}
 
-          {/* Subtle "View deal" pill */}
-          <View style={{ alignItems: "center" }}>
-            <TouchableOpacity
-              onPress={() => setExpandedDeal(deal)}
-              style={{
-                borderWidth: 1,
-                borderColor: colors.brand.traceRed,
-                borderRadius: 999,
-                paddingHorizontal: 18,
-                paddingVertical: 6,
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.traceRed }}>View deal →</Text>
-            </TouchableOpacity>
-          </View>
         </View>}
       </View>
     );
@@ -525,8 +535,8 @@ export default function ExploreScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }} edges={["top", "left", "right"]}>
-        <ActivityIndicator size="large" color={colors.brand.traceRed} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
+        <TraceLoader />
       </SafeAreaView>
     );
   }
@@ -811,6 +821,11 @@ export default function ExploreScreen() {
             <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: colors.brand.traceRed }}>
               Get alerted for {pendingAlertDest.label}
             </Text>
+            {!isPremium && (
+              <View style={{ backgroundColor: colors.brand.traceRed, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
+                <Text style={{ fontSize: 10, fontWeight: "800", color: "#fff" }}>Premium</Text>
+              </View>
+            )}
             <TouchableOpacity onPress={() => setPendingAlertDest(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <X size={14} color={colors.brand.traceRed} />
             </TouchableOpacity>
@@ -875,7 +890,7 @@ export default function ExploreScreen() {
                   >
                     <BellRing size={16} color="#fff" />
                     <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-                      Alert me for {pendingAlertDest.label}
+                      {isPremium ? `Alert me for ${pendingAlertDest.label}` : "Upgrade to get alerts"}
                     </Text>
                   </TouchableOpacity>
                 </LinearGradient>
@@ -967,7 +982,7 @@ export default function ExploreScreen() {
                       >
                         <BellRing size={16} color="#fff" />
                         <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-                          Alert me for {pendingAlertDest.label}
+                          {isPremium ? `Alert me for ${pendingAlertDest.label}` : "Upgrade to get alerts"}
                         </Text>
                       </TouchableOpacity>
                     </LinearGradient>
@@ -993,6 +1008,11 @@ export default function ExploreScreen() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           onClose={() => setShowFilters(false)}
+          isBusiness={profile?.subscriptionStatus === "business"}
+          onUpgradeBusiness={() => {
+            setShowFilters(false);
+            navigation.navigate("Paywall");
+          }}
         />
       )}
 

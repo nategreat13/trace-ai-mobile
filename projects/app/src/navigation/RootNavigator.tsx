@@ -1,7 +1,8 @@
 import React from "react";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import TraceLoader from "../components/TraceLoader";
 import type { RootStackParamList } from "./types";
 
 import LandingScreen from "../screens/LandingScreen";
@@ -20,8 +21,8 @@ export default function RootNavigator() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#FF655B" />
+      <View style={{ flex: 1 }}>
+        <TraceLoader />
       </View>
     );
   }

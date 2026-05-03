@@ -17,6 +17,8 @@ import {
   Zap,
   Mountain,
   Heart,
+  Crown,
+  Lock,
 } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
@@ -70,12 +72,16 @@ interface ExploreFiltersProps {
   filters: ExploreFilterState;
   onFiltersChange: (filters: ExploreFilterState) => void;
   onClose: () => void;
+  isBusiness?: boolean;
+  onUpgradeBusiness?: () => void;
 }
 
 export default function ExploreFilters({
   filters,
   onFiltersChange,
   onClose,
+  isBusiness = false,
+  onUpgradeBusiness,
 }: ExploreFiltersProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -160,45 +166,80 @@ export default function ExploreFilters({
           contentContainerStyle={styles.scrollContentContainer}
           showsVerticalScrollIndicator={false}
         >
-          {/* Cabin Class */}
+          {/* Cabin Class — business only */}
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: theme.foreground }]}>
-              Cabin Class
-            </Text>
-            <View style={styles.sortRow}>
-              {CABIN_OPTIONS.map((opt) => {
-                const isActive = localFilters.cabinClass === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    onPress={() =>
-                      setLocalFilters((prev) => ({
-                        ...prev,
-                        cabinClass: opt.value,
-                      }))
-                    }
-                    style={[
-                      styles.sortChip,
-                      isActive
-                        ? { backgroundColor: colors.brand.amber500 }
-                        : { backgroundColor: theme.muted },
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.sortChipText,
-                        isActive
-                          ? { color: "#ffffff" }
-                          : { color: theme.mutedForeground },
-                      ]}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
+              <Text style={[styles.sectionLabel, { color: theme.foreground, marginBottom: 0 }]}>
+                Cabin Class
+              </Text>
+              {!isBusiness && (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: colors.brand.amber100, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Crown size={10} color={colors.brand.amber600} />
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: colors.brand.amber600 }}>Business</Text>
+                </View>
+              )}
             </View>
+            {isBusiness ? (
+              <View style={styles.sortRow}>
+                {CABIN_OPTIONS.map((opt) => {
+                  const isActive = localFilters.cabinClass === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() =>
+                        setLocalFilters((prev) => ({
+                          ...prev,
+                          cabinClass: opt.value,
+                        }))
+                      }
+                      style={[
+                        styles.sortChip,
+                        isActive
+                          ? { backgroundColor: colors.brand.amber500 }
+                          : { backgroundColor: theme.muted },
+                      ]}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.sortChipText,
+                          isActive
+                            ? { color: "#ffffff" }
+                            : { color: theme.mutedForeground },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={onUpgradeBusiness}
+                activeOpacity={0.75}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: theme.muted,
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 13,
+                  borderWidth: 1,
+                  borderColor: colors.brand.amber500 + "40",
+                }}
+              >
+                <Lock size={14} color={colors.brand.amber600} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: theme.foreground }}>Filter by cabin class</Text>
+                  <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 1 }}>Upgrade to Business to unlock</Text>
+                </View>
+                <View style={{ backgroundColor: colors.brand.amber500, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#fff" }}>Upgrade →</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Destination */}

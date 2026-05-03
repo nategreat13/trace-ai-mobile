@@ -7,6 +7,7 @@ import {
   Alert,
   ScrollView,
   Share,
+  Image as RNImage,
   useColorScheme,
   Modal,
   Platform,
@@ -132,9 +133,11 @@ export default function ProfileScreen() {
 
   const handleShare = async () => {
     try {
+      const logo = RNImage.resolveAssetSource(require("../../assets/Bluelogo.png"));
       await Share.share({
-        message:
-          "✈️ Check out Trace — it uses AI to find insane flight deals. Swipe through the best deals and save your favorites! https://swipe-ai.base44.app",
+        title: "Trace — AI Flight Deals",
+        message: "✈️ Check out Trace — it uses AI to find insane flight deals. Swipe through the best deals and save your favorites!",
+        url: logo.uri,
       });
     } catch {}
   };

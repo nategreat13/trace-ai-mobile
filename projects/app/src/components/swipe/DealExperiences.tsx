@@ -10,9 +10,10 @@ interface Experience {
 
 interface DealExperiencesProps {
   experiences: Experience[];
+  month?: string;
 }
 
-export default function DealExperiences({ experiences }: DealExperiencesProps) {
+export default function DealExperiences({ experiences, month }: DealExperiencesProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
@@ -21,7 +22,7 @@ export default function DealExperiences({ experiences }: DealExperiencesProps) {
   return (
     <View>
       <Text style={[styles.heading, { color: theme.foreground }]}>
-        Top Experiences
+        Top Experiences{month ? ` in ${month}` : ""}
       </Text>
       <View style={styles.list}>
         {experiences.map((exp, i) => (

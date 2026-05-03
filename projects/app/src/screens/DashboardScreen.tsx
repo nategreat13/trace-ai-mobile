@@ -4,7 +4,6 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
-  ActivityIndicator,
   useColorScheme,
   RefreshControl,
   Alert,
@@ -13,15 +12,17 @@ import {
   Animated as RNAnimated,
   PanResponder,
 } from "react-native";
-import { useRoute } from "@react-navigation/native";
+import { useRoute, useNavigation } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
-import type { TabParamList } from "../navigation/types";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { TabParamList, RootStackParamList } from "../navigation/types";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -37,12 +38,14 @@ import { ALL_BADGES } from "../lib/constants";
 export default function DashboardScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile } = useAuth();
+  const { user, profile, isPremium } = useAuth();
   const route = useRoute<RouteProp<TabParamList, "Dashboard">>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [deals, setDeals] = useState<any[]>([]);
   const [swipes, setSwipes] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [showAlertsUpgrade, setShowAlertsUpgrade] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<"saved" | "alerts">("saved");
@@ -131,8 +134,8 @@ export default function DashboardScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }} edges={["top", "left", "right"]}>
-        <ActivityIndicator size="large" color={colors.brand.traceRed} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
+        <TraceLoader />
       </SafeAreaView>
     );
   }
@@ -552,18 +555,26 @@ export default function DashboardScreen() {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setTab("alerts")}
+                  onPress={() => isPremium ? setTab("alerts") : setShowAlertsUpgrade(true)}
                   style={{
                     flex: 1,
                     paddingVertical: 10,
                     borderRadius: 10,
                     backgroundColor: tab === "alerts" ? theme.card : "transparent",
                     alignItems: "center",
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    gap: 5,
                   }}
                 >
                   <Text style={{ fontSize: 14, fontWeight: "600", color: tab === "alerts" ? colors.brand.traceRed : theme.mutedForeground }}>
                     Alerts
                   </Text>
+                  {!isPremium && (
+                    <View style={{ backgroundColor: colors.brand.traceRed, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                      <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>PRO</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               </View>
               {tab === "saved" && deals.length > 0 && (
@@ -696,6 +707,48 @@ export default function DashboardScreen() {
           </Text>
         </View>
       )}
+
+      {/* Alerts upgrade modal */}
+      <Modal visible={showAlertsUpgrade} transparent animationType="fade" onRequestClose={() => setShowAlertsUpgrade(false)}>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "flex-end" }}
+          activeOpacity={1}
+          onPress={() => setShowAlertsUpgrade(false)}
+        >
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={{ backgroundColor: theme.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: theme.border, alignSelf: "center", marginBottom: 24 }} />
+              <Text style={{ fontSize: 28, textAlign: "center", marginBottom: 12 }}>🔔</Text>
+              <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+                Deal Alerts is a Premium Feature
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", lineHeight: 20, marginBottom: 28 }}>
+                Upgrade to get notified the moment a deal drops for your saved destinations — before anyone else.
+              </Text>
+              <TouchableOpacity
+                onPress={() => { setShowAlertsUpgrade(false); navigation.navigate("Paywall"); }}
+                activeOpacity={0.85}
+                style={{ borderRadius: 14, overflow: "hidden", marginBottom: 12 }}
+              >
+                <LinearGradient
+                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ paddingVertical: 15, alignItems: "center" }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Upgrade to Premium</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowAlertsUpgrade(false)}
+                style={{ paddingVertical: 13, alignItems: "center" }}
+              >
+                <Text style={{ fontSize: 14, color: theme.mutedForeground, fontWeight: "600" }}>Maybe later</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
