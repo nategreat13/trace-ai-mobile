@@ -15,6 +15,9 @@ import { db } from "../services/firebase";
  */
 
 export type AnalyticsEventName =
+  // Lifecycle
+  | "app_open"
+  | "login"
   // Pre-signup
   | "landing_viewed"
   | "airport_changed"

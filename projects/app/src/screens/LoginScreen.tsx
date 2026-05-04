@@ -43,6 +43,7 @@ export default function LoginScreen() {
         logEvent("signup_completed", { method: "email" });
       } else {
         await login(email.trim(), password);
+        logEvent("login", { method: "email" });
       }
     } catch (error: any) {
       const msg = error?.message || "Authentication failed";
