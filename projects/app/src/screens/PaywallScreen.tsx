@@ -124,7 +124,10 @@ export default function PaywallScreen() {
       product_id: selectedPkg.product.identifier,
     });
 
-    const info = await purchase(selectedPkg);
+    const info = await purchase(selectedPkg, {
+      tier: selected,
+      billing: billingPeriod,
+    });
     if (!info) return;
 
     // Derive the welcome screen from the tier the user just bought, NOT from

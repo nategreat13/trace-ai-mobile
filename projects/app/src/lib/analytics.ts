@@ -48,7 +48,11 @@ export type AnalyticsEventName =
   | "paywall_dismissed"
   | "paywall_legal_tapped"
   // Subscription (client-side intent only — source of truth is RC webhook)
-  | "purchase_initiated";
+  | "purchase_initiated"
+  | "purchase_completed"
+  | "purchase_failed"
+  | "purchase_canceled"
+  | "trial_started";
 
 let currentUserId: string | null = null;
 

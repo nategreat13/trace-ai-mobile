@@ -12,6 +12,18 @@ import {
   restorePurchases,
   hasEntitlement,
 } from "../services/iap";
+import { logEvent } from "../lib/analytics";
+
+/**
+ * Optional context the caller can pass to `purchase()` so analytics events
+ * (purchase_completed / failed / canceled / trial_started) are tagged with
+ * the tier and billing period the user selected. Falls back to inferring
+ * from the product identifier if omitted.
+ */
+interface PurchaseContext {
+  tier?: "premium" | "business";
+  billing?: "monthly" | "annual";
+}
 
 interface UseIAPResult {
   offerings: PurchasesOfferings | null;
@@ -23,7 +35,10 @@ interface UseIAPResult {
   loading: boolean;
   purchasing: boolean;
   error: string | null;
-  purchase: (pkg: PurchasesPackage) => Promise<CustomerInfo | null>;
+  purchase: (
+    pkg: PurchasesPackage,
+    context?: PurchaseContext
+  ) => Promise<CustomerInfo | null>;
   restore: () => Promise<CustomerInfo | null>;
 }
 
@@ -90,22 +105,80 @@ export function useIAP(): UseIAPResult {
   const businessAnnualPackage = findPackage("trace_business_annual");
   const businessMonthlyPackage = findPackage("trace_business_monthly");
 
-  const purchase = useCallback(async (pkg: PurchasesPackage) => {
-    setPurchasing(true);
-    setError(null);
-    try {
-      const info = await purchasePackage(pkg);
-      return info;
-    } catch (err: any) {
-      if (err.userCancelled) {
+  const purchase = useCallback(
+    async (pkg: PurchasesPackage, context: PurchaseContext = {}) => {
+      const productId = pkg.product.identifier;
+      // Infer tier/billing from product id if the caller didn't pass them
+      // (e.g. "trace_premium_monthly" → tier=premium, billing=monthly).
+      const inferredTier: "premium" | "business" | undefined = productId.includes(
+        "business"
+      )
+        ? "business"
+        : productId.includes("premium")
+        ? "premium"
+        : undefined;
+      const inferredBilling: "monthly" | "annual" | undefined = productId.includes(
+        "annual"
+      )
+        ? "annual"
+        : productId.includes("monthly")
+        ? "monthly"
+        : undefined;
+      const baseProps = {
+        tier: context.tier ?? inferredTier ?? null,
+        billing: context.billing ?? inferredBilling ?? null,
+        product_id: productId,
+      };
+
+      setPurchasing(true);
+      setError(null);
+      try {
+        const info = await purchasePackage(pkg);
+
+        // Detect whether this purchase activated a free trial. RC marks the
+        // active entitlement's periodType as "TRIAL" while the trial is in
+        // effect; we use that to fire `trial_started` in addition to
+        // `purchase_completed`.
+        const tierKey = baseProps.tier as "premium" | "business" | null;
+        const activeEntitlement = tierKey
+          ? info.entitlements.active[tierKey]
+          : undefined;
+        const isTrial = activeEntitlement?.periodType === "TRIAL";
+
+        logEvent("purchase_completed", {
+          ...baseProps,
+          price: pkg.product.price ?? null,
+          currency: pkg.product.currencyCode ?? null,
+          is_trial: isTrial,
+        });
+
+        if (isTrial) {
+          logEvent("trial_started", {
+            ...baseProps,
+            price: pkg.product.price ?? null,
+            currency: pkg.product.currencyCode ?? null,
+          });
+        }
+
+        return info;
+      } catch (err: any) {
+        if (err.userCancelled) {
+          logEvent("purchase_canceled", baseProps);
+          return null;
+        }
+        logEvent("purchase_failed", {
+          ...baseProps,
+          error_code: err?.code ?? null,
+          error_message: err?.message ?? null,
+        });
+        setError(err.message || "Purchase failed");
         return null;
+      } finally {
+        setPurchasing(false);
       }
-      setError(err.message || "Purchase failed");
-      return null;
-    } finally {
-      setPurchasing(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   const restore = useCallback(async () => {
     setPurchasing(true);
