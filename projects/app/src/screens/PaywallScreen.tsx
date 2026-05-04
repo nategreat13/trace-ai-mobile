@@ -243,14 +243,8 @@ export default function PaywallScreen() {
   const accent = selected === "business" ? colors.brand.amber500 : colors.brand.traceRed;
   const periodSuffix = billingPeriod === "annual" ? "year" : "month";
 
-  // Monthly business price is displayed as $19.99 regardless of what RevenueCat returns
-  const getDisplayPrice = (pkg: PurchasesPackage | null, tier: Tier, period: BillingPeriod): string => {
-    if (tier === "business" && period === "monthly") return "$19.99";
-    return pkg?.product.priceString ?? "";
-  };
-
   // Price label + per-period label for the CTA
-  const priceString = getDisplayPrice(selectedPkg, selected, billingPeriod);
+  const priceString = selectedPkg?.product.priceString ?? "";
 
   // Optional supporting line under a monthly annual card: "$X.XX/month billed annually"
   const getPerMonthFromAnnual = (pkg: PurchasesPackage | null): string | null => {
@@ -527,7 +521,7 @@ export default function PaywallScreen() {
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
                   <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {getDisplayPrice(businessDisplayPkg, "business", billingPeriod)}
+                    {businessDisplayPkg?.product.priceString ?? ""}
                   </Text>
                   <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
                     /{billingPeriod === "annual" ? "year" : "month"}
