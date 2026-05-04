@@ -10,7 +10,7 @@ export default function TermsPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
-      <p className="text-gray-500 mb-10">Last updated: April 15, 2026</p>
+      <p className="text-gray-500 mb-10">Last updated: May 4, 2026</p>
 
       <div className="space-y-8 text-gray-700 leading-relaxed">
         <section>
@@ -192,8 +192,60 @@ export default function TermsPage() {
           </h2>
           <p>
             These Terms shall be governed by and construed in accordance with the
-            laws of the United States, without regard to conflict of law
-            principles.
+            laws of the State of Delaware, without regard to conflict of law
+            principles. Any dispute arising out of or relating to these Terms
+            shall be brought exclusively in the state or federal courts located
+            in Delaware, and you consent to the personal jurisdiction of those
+            courts.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Acknowledgment Regarding Apple
+          </h2>
+          <p>
+            You and Trace acknowledge that these Terms are entered into between
+            you and Trace only, and not with Apple Inc. (&quot;Apple&quot;), and
+            that Apple is not responsible for the App or its content. Apple has
+            no obligation to provide any maintenance or support services for the
+            App. In the event the App fails to conform to any applicable
+            warranty, you may notify Apple, and Apple will refund the purchase
+            price (if any) for the App to you; to the maximum extent permitted
+            by applicable law, Apple has no other warranty obligation whatsoever
+            with respect to the App. Apple is not responsible for addressing any
+            claims by you or any third party relating to the App, including
+            product liability claims, claims that the App fails to conform to
+            any applicable legal or regulatory requirement, or claims arising
+            under consumer protection or similar legislation. Apple is not
+            responsible for the investigation, defense, settlement, or discharge
+            of any third-party intellectual property infringement claim relating
+            to the App. You represent and warrant that you are not located in a
+            country subject to a U.S. Government embargo or designated as a
+            &quot;terrorist supporting&quot; country, and that you are not
+            listed on any U.S. Government list of prohibited or restricted
+            parties. Apple and its subsidiaries are third-party beneficiaries of
+            these Terms, and upon your acceptance of these Terms, Apple will
+            have the right (and will be deemed to have accepted the right) to
+            enforce these Terms against you as a third-party beneficiary
+            thereof.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Acknowledgment Regarding Google
+          </h2>
+          <p>
+            If you downloaded the App from the Google Play Store, you
+            acknowledge that these Terms are between you and Trace only, and
+            not with Google LLC (&quot;Google&quot;). Google is not responsible
+            for the App or its content, and has no obligation to provide
+            support or maintenance for the App. Google is a third-party
+            beneficiary of these Terms with respect to your use of the App
+            obtained through the Google Play Store, and upon your acceptance
+            of these Terms, Google will have the right to enforce these Terms
+            against you as a third-party beneficiary thereof.
           </p>
         </section>
 
