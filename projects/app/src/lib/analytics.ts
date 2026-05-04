@@ -50,12 +50,24 @@ export type AnalyticsEventName =
   | "paywall_restore_tapped"
   | "paywall_dismissed"
   | "paywall_legal_tapped"
-  // Subscription (client-side intent only — source of truth is RC webhook)
+  // Subscription — client-side (user-action funnel)
   | "purchase_initiated"
   | "purchase_completed"
   | "purchase_failed"
   | "purchase_canceled"
-  | "trial_started";
+  | "trial_started"
+  // Subscription — server-side (emitted by the RevenueCat webhook;
+  // included here so the dashboard schema is aware of every event name).
+  // Names mirror RC event types but use snake_case past-tense for
+  // consistency with the rest of the schema.
+  | "subscription_started"
+  | "trial_started_server"
+  | "subscription_renewed"
+  | "subscription_uncanceled"
+  | "subscription_changed"
+  | "subscription_canceled"
+  | "subscription_expired"
+  | "billing_issue";
 
 let currentUserId: string | null = null;
 

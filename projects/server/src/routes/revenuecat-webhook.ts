@@ -1,10 +1,40 @@
 import { Router } from "express";
+import * as admin from "firebase-admin";
 import { getDb } from "../firebase";
 import { fanOutConversion } from "../lib/ad-conversions";
 
 export const revenuecatWebhookRoutes = Router();
 
 type Tier = "premium" | "business";
+
+/**
+ * Mirror of the client-side `logEvent` helper. Writes to the same `events`
+ * collection so the analytics dashboard can query lifecycle events
+ * (renewals, cancellations, expirations, billing issues) alongside the
+ * client-side funnel events. Fire-and-forget — never throw.
+ */
+async function logAnalyticsEvent(
+  name: string,
+  userId: string,
+  props: Record<string, unknown>
+): Promise<void> {
+  // Strip undefined so Firestore doesn't reject the doc
+  const cleanProps: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(props)) {
+    if (v !== undefined) cleanProps[k] = v;
+  }
+  try {
+    await getDb().collection("events").add({
+      name,
+      userId,
+      props: cleanProps,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      source: "revenuecat_webhook",
+    });
+  } catch (err) {
+    console.warn("[RC Webhook] Failed to log analytics event:", name, err);
+  }
+}
 
 /**
  * Derive the user's effective tier from an RC event's `entitlement_ids` array.
@@ -90,6 +120,16 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
     const profileDoc = profileQuery.docs[0];
     const profileRef = profileDoc.ref;
 
+    // Common props for every analytics event we emit from this webhook
+    const baseEventProps = {
+      tier: tierFromEntitlements(entitlement_ids) ?? tierFromProductId(product_id),
+      product_id: product_id ?? null,
+      price: typeof price_in_purchased_currency === "number" ? price_in_purchased_currency : null,
+      currency: currency ?? null,
+      expiration_at_ms: expiration_at_ms ?? null,
+      period_type: period_type ?? null,
+    };
+
     switch (type) {
       case "INITIAL_PURCHASE":
       case "RENEWAL":
@@ -132,6 +172,26 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
             productId: product_id ?? undefined,
           });
         }
+
+        // Analytics
+        if (type === "INITIAL_PURCHASE") {
+          const isTrial = period_type === "TRIAL";
+          await logAnalyticsEvent(
+            isTrial ? "trial_started_server" : "subscription_started",
+            app_user_id,
+            { ...baseEventProps, tier }
+          );
+        } else if (type === "RENEWAL") {
+          await logAnalyticsEvent("subscription_renewed", app_user_id, {
+            ...baseEventProps,
+            tier,
+          });
+        } else {
+          await logAnalyticsEvent("subscription_uncanceled", app_user_id, {
+            ...baseEventProps,
+            tier,
+          });
+        }
         break;
       }
 
@@ -161,6 +221,13 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         }
         await profileRef.update(updates);
         console.log("[RC Webhook] PRODUCT_CHANGE applied:", tier);
+
+        await logAnalyticsEvent("subscription_changed", app_user_id, {
+          ...baseEventProps,
+          tier,
+          from_product: product_id ?? null,
+          to_product: new_product_id ?? null,
+        });
         break;
       }
 
@@ -171,6 +238,7 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           "[RC Webhook] User cancelled (access continues until expiration):",
           app_user_id
         );
+        await logAnalyticsEvent("subscription_canceled", app_user_id, baseEventProps);
         break;
       }
 
@@ -180,12 +248,14 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           trialEndDate: null,
         });
         console.log("[RC Webhook] Subscription expired, reset to free");
+        await logAnalyticsEvent("subscription_expired", app_user_id, baseEventProps);
         break;
       }
 
       case "BILLING_ISSUE": {
         // Leave active — RC will retry and send RENEWAL or EXPIRATION later
         console.log("[RC Webhook] Billing issue for user:", app_user_id);
+        await logAnalyticsEvent("billing_issue", app_user_id, baseEventProps);
         break;
       }
 
