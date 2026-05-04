@@ -192,10 +192,10 @@ export default function TermsPage() {
           </h2>
           <p>
             These Terms shall be governed by and construed in accordance with the
-            laws of the State of Delaware, without regard to conflict of law
+            laws of the State of Utah, without regard to conflict of law
             principles. Any dispute arising out of or relating to these Terms
             shall be brought exclusively in the state or federal courts located
-            in Delaware, and you consent to the personal jurisdiction of those
+            in Utah, and you consent to the personal jurisdiction of those
             courts.
           </p>
         </section>
