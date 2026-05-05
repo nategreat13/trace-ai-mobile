@@ -17,7 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
-import { fetchDeals } from "../services/dealsApi";
+import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
@@ -59,7 +59,15 @@ export default function ExploreScreen() {
     if (!profile) return;
     try {
       const airportCode = profile.homeAirport || "LAX";
-      const apiDeals = await fetchDeals(airportCode);
+      const isBusinessMember = profile.subscriptionStatus === "business";
+      const [apiDeals, premiumApiDeals] = await Promise.all([
+        fetchDeals(airportCode),
+        isBusinessMember ? fetchPremiumDeals(airportCode) : Promise.resolve([]),
+      ]);
+      // Business class deals are only shown to business members
+      const allApiDeals = isBusinessMember
+        ? [...apiDeals, ...premiumApiDeals]
+        : apiDeals.filter((d) => !d.is_business_class);
 
       // Filter to 6-month window
       const now = new Date();
@@ -70,7 +78,7 @@ export default function ExploreScreen() {
         "july", "august", "september", "october", "november", "december",
       ];
 
-      const filtered = apiDeals.filter((deal) => {
+      const filtered = allApiDeals.filter((deal) => {
         if (!deal.dateString) return true;
         let dealDate: Date;
         if (deal.dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
@@ -417,11 +425,18 @@ export default function ExploreScreen() {
                           {deal.vibe_description}
                         </Text>
                       )}
-                      {deal.duration && (
-                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 5 }}>
-                          <View style={{ backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
-                            <Text style={{ fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.9)" }}>✈ {deal.duration}</Text>
-                          </View>
+                      {(deal.duration || deal.is_business_class) && (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                          {deal.is_business_class && (
+                            <View style={{ backgroundColor: colors.brand.amber500, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ fontSize: 11, fontWeight: "800", color: "#fff" }}>👑 Business</Text>
+                            </View>
+                          )}
+                          {deal.duration && (
+                            <View style={{ backgroundColor: "rgba(0,0,0,0.45)", borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 }}>
+                              <Text style={{ fontSize: 11, fontWeight: "600", color: "rgba(255,255,255,0.9)" }}>✈ {deal.duration}</Text>
+                            </View>
+                          )}
                         </View>
                       )}
                     </View>
@@ -567,8 +582,8 @@ export default function ExploreScreen() {
         <Text style={{ fontSize: 12, color: theme.mutedForeground }}>Browse and save flights that match your vibe</Text>
       </LinearGradient>
 
-      {/* Search + Filter button */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: searchFocused && searchTerm.length > 0 ? 0 : 12, zIndex: 20, elevation: 20 }}>
+      {/* Search + Filter button + active filter tags */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: hasActiveFilters ? 0 : (searchFocused && searchTerm.length > 0 ? 0 : 12), zIndex: 20, elevation: 20 }}>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <View
             style={{
@@ -704,30 +719,29 @@ export default function ExploreScreen() {
             </View>
           );
         })()}
-      </View>
 
-      {/* Active filter tags */}
-      {hasActiveFilters && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}
-        >
+        {/* Active filter tags */}
+        {hasActiveFilters && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
+          >
           {filters.cabinClass === "business" && (
             <TouchableOpacity
               onPress={() => removeFilter("cabinClass")}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 4,
-                backgroundColor: colors.brand.amber100,
+                gap: 6,
+                backgroundColor: colors.brand.amber500,
                 borderRadius: 999,
                 paddingHorizontal: 12,
                 paddingVertical: 6,
               }}
             >
-              <Text style={{ fontSize: 12, color: colors.brand.amber600 }}>👑 Business Class</Text>
-              <X size={12} color={colors.brand.amber600} />
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>👑 Business Class</Text>
+              <X size={12} color="#fff" />
             </TouchableOpacity>
           )}
           {filters.destination !== "both" && (
@@ -792,8 +806,9 @@ export default function ExploreScreen() {
               </TouchableOpacity>
             </LinearGradient>
           ))}
-        </ScrollView>
-      )}
+          </ScrollView>
+        )}
+      </View>
 
       {/* Deal count */}
       <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
@@ -1030,6 +1045,7 @@ export default function ExploreScreen() {
           }}
         />
       )}
+
 
     </SafeAreaView>
   );

@@ -318,6 +318,14 @@ export default function SwipeDeckScreen() {
     }
   }, [swipesLeft, isPremium, deckPhase]);
 
+  // When isPremium becomes true, unlock swipes and exit the daily limit screen
+  useEffect(() => {
+    if (isPremium) {
+      setSwipesLeft(UNLIMITED_SWIPES);
+      setDeckPhase((prev) => (prev === "daily_limit" ? "swiping" : prev));
+    }
+  }, [isPremium]);
+
   // When the expansion reload finishes: decide if we have new deals or are truly done
   useEffect(() => {
     if (deckPhase !== "expanding" || loading) return;
@@ -707,7 +715,7 @@ export default function SwipeDeckScreen() {
                 style={{
                   position: "absolute",
                   top: 12,
-                  left: 12,
+                  right: 12,
                   zIndex: 20,
                   flexDirection: "row",
                   alignItems: "center",

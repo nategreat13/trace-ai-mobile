@@ -21,27 +21,30 @@ export default function DealQuickTips({ tips }: DealQuickTipsProps) {
         styles.container,
         {
           backgroundColor: scheme === "dark"
-            ? "rgba(245,158,11,0.1)"
-            : "rgba(245,158,11,0.08)",
+            ? "rgba(245,158,11,0.10)"
+            : "rgba(245,158,11,0.07)",
           borderColor: scheme === "dark"
-            ? "rgba(245,158,11,0.3)"
-            : "rgba(245,158,11,0.25)",
+            ? "rgba(245,158,11,0.28)"
+            : "rgba(245,158,11,0.22)",
         },
       ]}
     >
       <View style={styles.headerRow}>
-        <Zap size={20} color={colors.brand.amber500} />
+        <View style={[styles.iconWrap, { backgroundColor: colors.brand.amber500 }]}>
+          <Zap size={14} color="#ffffff" fill="#ffffff" />
+        </View>
         <Text style={[styles.heading, { color: theme.foreground }]}>
           Quick Tips
         </Text>
       </View>
+
       <View style={styles.list}>
         {tips.map((tip, i) => (
           <View key={i} style={styles.tipRow}>
-            <Text style={styles.bullet}>{"\u2022"}</Text>
-            <Text style={[styles.tipText, { color: theme.mutedForeground }]}>
-              {tip}
-            </Text>
+            <View style={[styles.checkWrap, { backgroundColor: "rgba(245,158,11,0.20)" }]}>
+              <Text style={[styles.checkMark, { color: colors.brand.amber500 }]}>✓</Text>
+            </View>
+            <Text style={[styles.tipText, { color: theme.mutedForeground }]}>{tip}</Text>
           </View>
         ))}
       </View>
@@ -52,32 +55,46 @@ export default function DealQuickTips({ tips }: DealQuickTipsProps) {
 const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
-    padding: 20,
-    borderWidth: 2,
+    padding: 18,
+    borderWidth: 1.5,
   },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
+  },
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
   },
   heading: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "800",
   },
   list: {
-    gap: 8,
+    gap: 10,
   },
   tipRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    gap: 10,
   },
-  bullet: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.brand.amber500,
+  checkWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 1,
+    flexShrink: 0,
+  },
+  checkMark: {
+    fontSize: 11,
+    fontWeight: "900",
   },
   tipText: {
     fontSize: 13,

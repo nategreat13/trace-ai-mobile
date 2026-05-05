@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, TextInput, Alert, useColorScheme } from "react-native";
+import { View, Text, Alert, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -36,8 +36,6 @@ export default function OnboardingScreen() {
   );
 
   const [data, setData] = useState({
-    firstName: "",
-    lastName: "",
     homeAirport: "",
     destinationPreference: "both" as "domestic" | "international" | "both",
     dealTypes: [] as string[],
@@ -50,8 +48,6 @@ export default function OnboardingScreen() {
       setExistingProfileId(profile.id);
       setData((d) => ({
         ...d,
-        firstName: profile.firstName || "",
-        lastName: profile.lastName || "",
         homeAirport: profile.homeAirport || "LAX",
         destinationPreference: profile.destinationPreference || "both",
         dealTypes: profile.dealTypes || [],
@@ -110,9 +106,6 @@ export default function OnboardingScreen() {
       if (profile?.id) {
         // Existing profile — update preferences
         const updates: Record<string, any> = {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          displayName: `${data.firstName} ${data.lastName}`.trim() || "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -128,9 +121,7 @@ export default function OnboardingScreen() {
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
-          firstName: data.firstName,
-          lastName: data.lastName,
-          displayName: `${data.firstName} ${data.lastName}`.trim() || "Travel Explorer",
+          displayName: "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -175,50 +166,6 @@ export default function OnboardingScreen() {
   };
 
   const steps = [
-    {
-      title: "What's your name?",
-      subtitle: "Help us personalize your experience",
-      canProceed: !!data.firstName.trim() && !!data.lastName.trim(),
-      content: (
-        <View style={{ gap: 12 }}>
-          <TextInput
-            value={data.firstName}
-            onChangeText={(val) => setData({ ...data, firstName: val })}
-            placeholder="First name"
-            placeholderTextColor={theme.mutedForeground}
-            autoCapitalize="words"
-            autoFocus
-            style={{
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-              borderWidth: 1,
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              fontSize: 16,
-              color: theme.foreground,
-            }}
-          />
-          <TextInput
-            value={data.lastName}
-            onChangeText={(val) => setData({ ...data, lastName: val })}
-            placeholder="Last name"
-            placeholderTextColor={theme.mutedForeground}
-            autoCapitalize="words"
-            style={{
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-              borderWidth: 1,
-              borderRadius: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 14,
-              fontSize: 16,
-              color: theme.foreground,
-            }}
-          />
-        </View>
-      ),
-    },
     {
       title: "What's your home airport?",
       subtitle: "Choose your home airport",

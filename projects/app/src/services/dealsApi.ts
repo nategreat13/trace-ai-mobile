@@ -32,5 +32,8 @@ export async function fetchPremiumDeals(airportCode: string): Promise<Deal[]> {
   if (!response.ok) throw new Error("Failed to fetch premium deals");
   const json = await response.json();
   const apiDeals = Array.isArray(json) ? json : json.deals || [];
+  if (__DEV__ && apiDeals.length > 0) {
+    console.log("[premiumDeals] first deal keys:", Object.keys(apiDeals[0]));
+  }
   return apiDeals.map(mapApiPremiumDealToLocal);
 }

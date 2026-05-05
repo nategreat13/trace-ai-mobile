@@ -32,9 +32,8 @@ import DealTravelTips from "./DealTravelTips";
 import DealBudgetPreview from "./DealBudgetPreview";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.5;
+const HERO_HEIGHT = SCREEN_HEIGHT * 0.65;
 
-// ── Props ───────────────────────────────────────────────────────────────────
 interface ExpandedDealProps {
   deal: Deal;
   visible: boolean;
@@ -46,7 +45,6 @@ interface ExpandedDealProps {
 
 type FitLevel = { color: "green" | "yellow" | "red" };
 
-// ── Helper: score how well a deal matches the user's profile ─────────────────
 function getDealFitLevel(deal: Deal, profile: any): FitLevel {
   const preferredTypes: string[] = profile.dealTypes || [];
   const destPref: string = profile.destinationPreference || "both";
@@ -72,7 +70,6 @@ type Segment = { text: string; bold?: boolean };
 const b = (text: string): Segment => ({ text, bold: true });
 const t = (text: string): Segment => ({ text });
 
-// ── Helper: generate personalized AI fit summary from local profile data ─────
 function generateFitSummary(deal: Deal, profile: any): Segment[] {
   const preferredTypes: string[] = profile.dealTypes || [];
   const destPref: string = profile.destinationPreference || "both";
@@ -105,7 +102,6 @@ function generateFitSummary(deal: Deal, profile: any): Segment[] {
   };
   const offerDesc = typeOffers[deal.deal_type || ""] || "a solid travel experience";
 
-  // ── Sentence 1 segments ──────────────────────────────────────────────────
   let s1: Segment[];
   if (typeMatch && destMatch) {
     if (vibe) {
@@ -133,7 +129,6 @@ function generateFitSummary(deal: Deal, profile: any): Segment[] {
     }
   }
 
-  // ── Sentence 2 segments ──────────────────────────────────────────────────
   let s2: Segment[];
   if (deal.discount_pct >= 40) {
     s2 = [t(" At "), b(`${deal.discount_pct}% off`), t(", the price alone makes this hard to ignore.")];
@@ -150,30 +145,27 @@ function generateFitSummary(deal: Deal, profile: any): Segment[] {
   return [...s1, ...s2];
 }
 
-// ── Helper: parse travel_tips / interesting_facts string[] into objects ──────
 function parseStringArray(
   items: string[] | undefined
 ): { title: string; description: string }[] {
   if (!items || items.length === 0) return [];
   return items.map((item) => {
-    // Try splitting on colon or dash for title/description
     const colonIdx = item.indexOf(":");
     const dashIdx = item.indexOf(" - ");
     if (colonIdx > 0 && colonIdx < 60) {
-      return {
-        title: item.slice(0, colonIdx).trim(),
-        description: item.slice(colonIdx + 1).trim(),
-      };
+      return { title: item.slice(0, colonIdx).trim(), description: item.slice(colonIdx + 1).trim() };
     }
     if (dashIdx > 0 && dashIdx < 60) {
-      return {
-        title: item.slice(0, dashIdx).trim(),
-        description: item.slice(dashIdx + 3).trim(),
-      };
+      return { title: item.slice(0, dashIdx).trim(), description: item.slice(dashIdx + 3).trim() };
     }
-    // No clear separator -- use the whole string as description
     return { title: "", description: item };
   });
+}
+
+function getDealTier(discountPct: number): { label: string; bg: string } | null {
+  if (discountPct >= 40) return { label: "🔥 Hot Deal", bg: colors.brand.traceRed };
+  if (discountPct >= 20) return { label: "✨ Good Deal", bg: colors.brand.amber500 };
+  return null;
 }
 
 export default function ExpandedDeal({
@@ -188,7 +180,6 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
 
-  const firstName = (userProfile?.displayName || "").split(" ")[0] || null;
   const fitData = useMemo(
     () =>
       userProfile && deal
@@ -199,9 +190,9 @@ export default function ExpandedDeal({
 
   if (!deal) return null;
 
-  // Parse string-based arrays into structured objects for sub-components
   const travelTipObjects = parseStringArray(deal.travel_tips);
   const factObjects = parseStringArray(deal.interesting_facts);
+  const dealTier = getDealTier(deal.discount_pct);
 
   return (
     <Modal
@@ -221,7 +212,7 @@ export default function ExpandedDeal({
           showsVerticalScrollIndicator={false}
           bounces
         >
-          {/* ── Hero Image ────────────────────────────────────────────── */}
+          {/* ── Hero ────────────────────────────────────────────────────── */}
           <View style={styles.heroContainer}>
             <Image
               source={{ uri: deal.image_url }}
@@ -230,38 +221,54 @@ export default function ExpandedDeal({
               transition={200}
             />
             <LinearGradient
-              colors={[
-                "transparent",
-                "rgba(17,24,39,0.3)",
-                "rgba(17,24,39,0.9)",
-              ]}
-              locations={[0, 0.5, 1]}
+              colors={["transparent", "rgba(10,10,15,0.35)", "rgba(10,10,15,0.92)"]}
+              locations={[0.3, 0.6, 1]}
               style={StyleSheet.absoluteFillObject}
             />
 
-            {/* Close button */}
             <TouchableOpacity
               onPress={onClose}
               style={[styles.closeButton, { top: insets.top + 12 }]}
               activeOpacity={0.8}
             >
-              <X size={22} color="#1a1a1a" strokeWidth={2.5} />
+              <X size={20} color="#1a1a1a" strokeWidth={2.5} />
             </TouchableOpacity>
 
-            {/* Destination overlay */}
             <View style={styles.heroOverlay}>
-              <View style={styles.routeBadge}>
-                <Text style={styles.routeText}>
-                  {deal.origin} {"\u2192"} {deal.destination_code}
-                </Text>
+              {/* Route + deal tier row */}
+              <View style={styles.heroTopRow}>
+                <View style={styles.routeBadge}>
+                  <Text style={styles.routeText}>
+                    {deal.origin} {"→"} {deal.destination_code}
+                  </Text>
+                </View>
+                {!!dealTier && (
+                  <View style={[styles.dealTierBadge, { backgroundColor: dealTier.bg }]}>
+                    <Text style={styles.dealTierText}>{dealTier.label}</Text>
+                  </View>
+                )}
               </View>
-              <Text style={styles.destinationText}>{deal.destination}</Text>
+
+              {/* Destination name */}
+              <Text style={styles.destinationText} numberOfLines={2}>
+                {deal.destination}
+              </Text>
+
+              {/* Price row */}
+              {deal.price > 0 && (
+                <View style={styles.heroPriceRow}>
+                  <Text style={styles.heroPriceText}>${deal.price}</Text>
+                  {deal.original_price > 0 && deal.original_price !== deal.price && (
+                    <Text style={styles.heroOriginalPrice}>${deal.original_price}</Text>
+                  )}
+                </View>
+              )}
+
+              {/* Travel window */}
               {!!deal.travel_window && (
                 <View style={styles.travelWindowRow}>
-                  <Clock size={14} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.travelWindowText}>
-                    {deal.travel_window}
-                  </Text>
+                  <Clock size={13} color="rgba(255,255,255,0.65)" />
+                  <Text style={styles.travelWindowText}>{deal.travel_window}</Text>
                 </View>
               )}
             </View>
@@ -269,229 +276,99 @@ export default function ExpandedDeal({
 
           {/* ── Content ───────────────────────────────────────────────── */}
           <View style={styles.contentContainer}>
-            {/* Price Card */}
-            <View
-              style={[
-                styles.priceCard,
-                { backgroundColor: theme.card, borderColor: theme.border },
-              ]}
-            >
-              <View style={styles.priceRow}>
-                <View>
-                  <Text
-                    style={[styles.priceLabel, { color: theme.mutedForeground }]}
-                  >
-                    Sale Price
-                  </Text>
-                  <Text style={[styles.priceValue, { color: theme.foreground }]}>
-                    ${deal.price}
-                  </Text>
-                  {deal.original_price > 0 && deal.original_price !== deal.price && (
-                    <Text
-                      style={[
-                        styles.originalPrice,
-                        { color: theme.mutedForeground },
-                      ]}
-                    >
-                      ${deal.original_price}
-                    </Text>
-                  )}
-                </View>
-                {deal.discount_pct > 0 && (
-                  <View style={styles.discountBadge}>
-                    <Text style={styles.discountText}>
-                      {deal.discount_pct}% OFF
-                    </Text>
-                  </View>
-                )}
+
+            {/* Booking tip strip */}
+            {!!deal.best_time_to_book && (
+              <View
+                style={[
+                  styles.bookTipStrip,
+                  {
+                    backgroundColor: scheme === "dark"
+                      ? "rgba(245,158,11,0.12)"
+                      : "rgba(245,158,11,0.08)",
+                    borderColor: scheme === "dark"
+                      ? "rgba(245,158,11,0.30)"
+                      : "rgba(245,158,11,0.22)",
+                  },
+                ]}
+              >
+                <Text style={styles.bookTipIcon}>⏰</Text>
+                <Text style={[styles.bookTipText, { color: theme.foreground }]}>
+                  {deal.best_time_to_book}
+                </Text>
               </View>
-              {!!deal.best_time_to_book && (
-                <View
-                  style={[styles.bookTipRow, { borderTopColor: theme.border }]}
-                >
-                  <Text
-                    style={[styles.bookTipText, { color: theme.mutedForeground }]}
-                  >
-                    {deal.best_time_to_book}
-                  </Text>
-                </View>
-              )}
-            </View>
+            )}
 
             {/* Flight Details */}
-            {(deal.origin ||
-              deal.destination_code ||
-              deal.duration ||
-              deal.layover_info) && (
+            {(deal.origin || deal.destination_code || deal.duration || deal.layover_info) && (
               <View
                 style={[
                   styles.flightCard,
                   { backgroundColor: theme.card, borderColor: theme.border },
                 ]}
               >
-                {/* Header */}
-                <View
-                  style={[
-                    styles.flightHeader,
-                    { borderBottomColor: theme.border },
-                  ]}
-                >
-                  <Plane size={14} color={theme.mutedForeground} />
-                  <Text
-                    style={[
-                      styles.flightHeaderText,
-                      { color: theme.mutedForeground },
-                    ]}
-                  >
+                <View style={[styles.sectionHeaderRow, { marginBottom: 0, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+                  <Plane size={13} color={theme.mutedForeground} />
+                  <Text style={[styles.sectionHeaderText, { color: theme.mutedForeground, fontSize: 11, letterSpacing: 1.5 }]}>
                     FLIGHT DETAILS
                   </Text>
                 </View>
 
-                {/* Route row */}
                 {(deal.origin || deal.destination_code) && (
-                  <View
-                    style={[
-                      styles.routeRow,
-                      { borderBottomColor: theme.border },
-                    ]}
-                  >
+                  <View style={[styles.routeRow, { borderBottomColor: theme.border }]}>
                     <View style={styles.routeEndpoint}>
-                      <Text
-                        style={[
-                          styles.routeCode,
-                          { color: theme.foreground },
-                        ]}
-                      >
-                        {deal.origin || "\u2014"}
+                      <Text style={[styles.routeCode, { color: theme.foreground }]}>
+                        {deal.origin || "—"}
                       </Text>
-                      <Text
-                        style={[
-                          styles.routeSubLabel,
-                          { color: theme.mutedForeground },
-                        ]}
-                      >
+                      <Text style={[styles.routeSubLabel, { color: theme.mutedForeground }]}>
                         Origin
                       </Text>
                     </View>
 
                     <View style={styles.routeMiddle}>
                       <View style={styles.routeLine}>
-                        <View
-                          style={[
-                            styles.dashedLine,
-                            { borderBottomColor: theme.border },
-                          ]}
-                        />
-                        <Plane
-                          size={14}
-                          color={colors.brand.traceRed}
-                        />
-                        <View
-                          style={[
-                            styles.dashedLine,
-                            { borderBottomColor: theme.border },
-                          ]}
-                        />
+                        <View style={[styles.dashedLine, { borderBottomColor: theme.border }]} />
+                        <Plane size={14} color={colors.brand.traceRed} />
+                        <View style={[styles.dashedLine, { borderBottomColor: theme.border }]} />
                       </View>
                       {!!deal.duration && (
-                        <Text
-                          style={[
-                            styles.durationText,
-                            { color: theme.mutedForeground },
-                          ]}
-                        >
+                        <Text style={[styles.durationText, { color: theme.mutedForeground }]}>
                           {deal.duration}
                         </Text>
                       )}
                     </View>
 
                     <View style={styles.routeEndpoint}>
-                      <Text
-                        style={[
-                          styles.routeCode,
-                          { color: theme.foreground },
-                        ]}
-                      >
+                      <Text style={[styles.routeCode, { color: theme.foreground }]}>
                         {deal.destination_code ||
                           deal.destination?.slice(0, 3).toUpperCase() ||
-                          "\u2014"}
+                          "—"}
                       </Text>
-                      <Text
-                        style={[
-                          styles.routeSubLabel,
-                          { color: theme.mutedForeground },
-                        ]}
-                      >
+                      <Text style={[styles.routeSubLabel, { color: theme.mutedForeground }]}>
                         Destination
                       </Text>
                     </View>
                   </View>
                 )}
 
-                {/* Meta rows */}
                 {!!deal.travel_window && (
-                  <View
-                    style={[
-                      styles.metaRow,
-                      { borderBottomColor: theme.border },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.metaLabel,
-                        { color: theme.mutedForeground },
-                      ]}
-                    >
-                      Travel window
-                    </Text>
-                    <Text
-                      style={[styles.metaValue, { color: theme.foreground }]}
-                    >
-                      {deal.travel_window}
-                    </Text>
+                  <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Travel window</Text>
+                    <Text style={[styles.metaValue, { color: theme.foreground }]}>{deal.travel_window}</Text>
                   </View>
                 )}
                 {!!deal.layover_info && (
-                  <View
-                    style={[
-                      styles.metaRow,
-                      { borderBottomColor: theme.border },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.metaLabel,
-                        { color: theme.mutedForeground },
-                      ]}
-                    >
-                      Layovers
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metaValue,
-                        { color: theme.foreground, textAlign: "right", flex: 1 },
-                      ]}
-                    >
+                  <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Layovers</Text>
+                    <Text style={[styles.metaValue, { color: theme.foreground, textAlign: "right", flex: 1 }]}>
                       {deal.layover_info}
                     </Text>
                   </View>
                 )}
                 {!!deal.price_will_last && (
                   <View style={styles.metaRow}>
-                    <Text
-                      style={[
-                        styles.metaLabel,
-                        { color: theme.mutedForeground },
-                      ]}
-                    >
-                      Price valid
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metaValue,
-                        { color: theme.foreground, textAlign: "right", flex: 1 },
-                      ]}
-                    >
+                    <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Price valid</Text>
+                    <Text style={[styles.metaValue, { color: theme.foreground, textAlign: "right", flex: 1 }]}>
                       {deal.price_will_last}
                     </Text>
                   </View>
@@ -499,24 +376,24 @@ export default function ExpandedDeal({
               </View>
             )}
 
-            {/* Personal AI fit — just below flight details */}
+            {/* Personal AI Fit */}
             {!!userProfile && !!fitData && (() => {
               const fc =
                 fitData.level.color === "green"
                   ? {
-                      gradient: ["rgba(22,163,74,0.22)", "rgba(5,150,105,0.10)", "rgba(16,185,129,0.03)"] as const,
-                      border: "rgba(22,163,74,0.30)",
+                      gradient: ["rgba(22,163,74,0.20)", "rgba(5,150,105,0.08)", "rgba(16,185,129,0.02)"] as const,
+                      border: "rgba(22,163,74,0.28)",
                       accent: "#16a34a",
                     }
                   : fitData.level.color === "yellow"
                   ? {
-                      gradient: ["rgba(202,138,4,0.22)", "rgba(234,179,8,0.10)", "rgba(249,115,22,0.03)"] as const,
-                      border: "rgba(202,138,4,0.30)",
+                      gradient: ["rgba(202,138,4,0.20)", "rgba(234,179,8,0.08)", "rgba(249,115,22,0.02)"] as const,
+                      border: "rgba(202,138,4,0.28)",
                       accent: "#b45309",
                     }
                   : {
-                      gradient: ["rgba(255,101,91,0.22)", "rgba(236,72,153,0.10)", "rgba(139,92,246,0.03)"] as const,
-                      border: "rgba(255,101,91,0.30)",
+                      gradient: ["rgba(255,101,91,0.20)", "rgba(236,72,153,0.08)", "rgba(139,92,246,0.02)"] as const,
+                      border: "rgba(255,101,91,0.28)",
                       accent: colors.brand.traceRed,
                     };
 
@@ -525,26 +402,15 @@ export default function ExpandedDeal({
                   colors={fc.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={[
-                    styles.fitCard,
-                    { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 },
-                  ]}
+                  style={[styles.fitCard, { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 }]}
                 >
-                  <View style={styles.fitShine} />
-
                   <View style={styles.fitHeader}>
                     <View style={[styles.fitIconWrap, { backgroundColor: fc.accent }]}>
-                      <Sparkles size={13} color="#ffffff" />
+                      <Sparkles size={12} color="#ffffff" />
                     </View>
-                    <Text style={[styles.fitLabel, { color: fc.accent }]}>
-                      {firstName ? `AI Fit for ${firstName}` : "Your AI Fit"}
-                    </Text>
+                    <Text style={[styles.fitLabel, { color: fc.accent }]}>Your AI Fit</Text>
                   </View>
-
-                  <Animated.Text
-                    entering={FadeIn.duration(400)}
-                    style={[styles.fitText, { color: theme.foreground }]}
-                  >
+                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.foreground }]}>
                     {fitData.segments.map((seg, i) =>
                       seg.bold
                         ? <Text key={i} style={styles.fitTextBold}>{seg.text}</Text>
@@ -567,79 +433,54 @@ export default function ExpandedDeal({
                 style={[
                   styles.aiCard,
                   {
-                    backgroundColor: scheme === "dark"
-                      ? "rgba(139,92,246,0.08)"
-                      : "rgba(139,92,246,0.05)",
-                    borderColor: scheme === "dark"
-                      ? "rgba(139,92,246,0.25)"
-                      : "rgba(139,92,246,0.15)",
+                    backgroundColor: scheme === "dark" ? "rgba(139,92,246,0.08)" : "rgba(139,92,246,0.05)",
+                    borderColor: scheme === "dark" ? "rgba(139,92,246,0.25)" : "rgba(139,92,246,0.15)",
                   },
                 ]}
               >
-                <View style={styles.aiHeader}>
+                <View style={styles.sectionHeaderRow}>
                   <View style={styles.aiIconWrap}>
-                    <Sparkles size={16} color="#ffffff" />
+                    <Sparkles size={14} color="#ffffff" />
                   </View>
-                  <Text
-                    style={[
-                      styles.aiLabel,
-                      {
-                        color: scheme === "dark" ? "#a78bfa" : "#7c3aed",
-                      },
-                    ]}
-                  >
+                  <Text style={[styles.aiLabel, { color: scheme === "dark" ? "#a78bfa" : "#7c3aed" }]}>
                     AI Insight
                   </Text>
                 </View>
                 {!!deal.ai_insight && (
-                  <Text
-                    style={[
-                      styles.aiText,
-                      { color: theme.foreground },
-                    ]}
-                  >
-                    {deal.ai_insight}
-                  </Text>
+                  <Text style={[styles.aiText, { color: theme.foreground }]}>{deal.ai_insight}</Text>
                 )}
                 {!!deal.vibe_description && (
-                  <Text
-                    style={[
-                      styles.vibeText,
-                      { color: theme.mutedForeground },
-                    ]}
-                  >
-                    {deal.vibe_description}
-                  </Text>
+                  <Text style={[styles.vibeText, { color: theme.mutedForeground }]}>{deal.vibe_description}</Text>
                 )}
               </View>
             )}
+          </View>
 
-            {/* Experiences */}
-            {deal.experiences && deal.experiences.length > 0 && (
+          {/* ── Horizontal sections (full-bleed) ──────────────────────── */}
+          {deal.experiences && deal.experiences.length > 0 && (
+            <View style={styles.fullBleedSection}>
               <DealExperiences
                 experiences={deal.experiences}
                 month={deal.travel_window?.split(" ")[0]}
               />
-            )}
+            </View>
+          )}
 
-            {/* Interesting Facts */}
+          {/* ── Padded sections ───────────────────────────────────────── */}
+          <View style={styles.contentContainer}>
             {deal.interesting_facts && deal.interesting_facts.length > 0 && (
               <DealInterestingFacts facts={factObjects} />
             )}
-
-            {/* Quick Tips */}
             {deal.quick_tips && deal.quick_tips.length > 0 && (
               <DealQuickTips tips={deal.quick_tips} />
             )}
-
-            {/* Travel Tips */}
             {deal.travel_tips && deal.travel_tips.length > 0 && (
               <DealTravelTips tips={travelTipObjects} />
             )}
           </View>
         </ScrollView>
 
-        {/* ── Bottom action buttons ───────────────────────────────────── */}
+        {/* ── Bottom action bar ─────────────────────────────────────── */}
         <View
           style={[
             styles.bottomBar,
@@ -654,25 +495,13 @@ export default function ExpandedDeal({
             <TouchableOpacity
               onPress={onSave}
               activeOpacity={0.8}
-              style={[
-                styles.saveButton,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                },
-              ]}
+              style={[styles.saveButton, { backgroundColor: theme.card, borderColor: theme.border }]}
             >
               <Bookmark size={16} color={theme.foreground} />
-              <Text style={[styles.saveButtonText, { color: theme.foreground }]}>
-                Save
-              </Text>
+              <Text style={[styles.saveButtonText, { color: theme.foreground }]}>Save</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={onBook}
-              activeOpacity={0.8}
-              style={styles.bookButton}
-            >
+            <TouchableOpacity onPress={onBook} activeOpacity={0.8} style={styles.bookButton}>
               <LinearGradient
                 colors={[colors.brand.traceRed, colors.brand.tracePink]}
                 start={{ x: 0, y: 0 }}
@@ -690,19 +519,12 @@ export default function ExpandedDeal({
   );
 }
 
-// ── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
 
-  // ── Hero ────────────────────────────────────────────────────────────────
+  // ── Hero ──────────────────────────────────────────────────────────────────
   heroContainer: {
     height: HERO_HEIGHT,
     width: "100%",
@@ -734,30 +556,70 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 24,
+    paddingBottom: 28,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
   },
   routeBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.9)",
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.30)",
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 20,
-    marginBottom: 8,
   },
   routeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#1a1a1a",
+    color: "#ffffff",
+    letterSpacing: 0.5,
+  },
+  dealTierBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  dealTierText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#ffffff",
+    letterSpacing: 0.3,
   },
   destinationText: {
-    fontSize: 44,
+    fontSize: 48,
     fontWeight: "900",
     color: "#ffffff",
-    marginBottom: 8,
-    letterSpacing: -0.5,
-    lineHeight: 48,
-    textShadowColor: "rgba(0,0,0,0.8)",
+    letterSpacing: -1,
+    lineHeight: 52,
+    marginBottom: 6,
+    textShadowColor: "rgba(0,0,0,0.6)",
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    textShadowRadius: 10,
+  },
+  heroPriceRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 10,
+    marginBottom: 10,
+  },
+  heroPriceText: {
+    fontSize: 40,
+    fontWeight: "900",
+    color: "#ffffff",
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  heroOriginalPrice: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.50)",
+    textDecorationLine: "line-through",
   },
   travelWindowRow: {
     flexDirection: "row",
@@ -765,68 +627,52 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   travelWindowText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.9)",
+    color: "rgba(255,255,255,0.75)",
   },
 
-  // ── Content ─────────────────────────────────────────────────────────────
+  // ── Content containers ────────────────────────────────────────────────────
   contentContainer: {
     padding: 20,
-    gap: 20,
+    gap: 18,
+  },
+  fullBleedSection: {
+    paddingTop: 4,
+    paddingBottom: 4,
   },
 
-  // ── Price card ──────────────────────────────────────────────────────────
-  priceCard: {
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  priceRow: {
+  // ── Booking tip strip ─────────────────────────────────────────────────────
+  bookTipStrip: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-  priceLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  priceValue: {
-    fontSize: 40,
-    fontWeight: "900",
-  },
-  originalPrice: {
-    fontSize: 13,
-    textDecorationLine: "line-through",
-    marginTop: 4,
-  },
-  discountBadge: {
-    backgroundColor: "rgba(0,214,101,0.15)",
+    alignItems: "center",
+    gap: 8,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  discountText: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#15803d",
+  bookTipIcon: { fontSize: 14 },
+  bookTipText: { fontSize: 13, lineHeight: 18, flex: 1 },
+
+  // ── Section header ────────────────────────────────────────────────────────
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
   },
-  bookTipRow: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
+  sectionHeaderBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
   },
-  bookTipText: {
-    fontSize: 12,
+  sectionHeaderText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
 
-  // ── Flight card ─────────────────────────────────────────────────────────
+  // ── Flight card ───────────────────────────────────────────────────────────
   flightCard: {
     borderRadius: 16,
     overflow: "hidden",
@@ -837,39 +683,17 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
-  flightHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-  },
-  flightHeaderText: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.5,
-  },
   routeRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderBottomWidth: 1,
   },
-  routeEndpoint: {
-    alignItems: "center",
-  },
-  routeCode: {
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  routeSubLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    marginTop: 2,
-  },
+  routeEndpoint: { alignItems: "center" },
+  routeCode: { fontSize: 24, fontWeight: "900" },
+  routeSubLabel: { fontSize: 11, fontWeight: "500", marginTop: 2 },
   routeMiddle: {
     flex: 1,
     alignItems: "center",
@@ -887,10 +711,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderStyle: "dashed",
   },
-  durationText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
+  durationText: { fontSize: 11, fontWeight: "600" },
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -900,29 +721,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
-  metaLabel: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  metaValue: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  metaLabel: { fontSize: 13, fontWeight: "500" },
+  metaValue: { fontSize: 13, fontWeight: "600" },
 
-  // ── Personal fit card ───────────────────────────────────────────────────
+  // ── Personal fit card ─────────────────────────────────────────────────────
   fitCard: {
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
     overflow: "hidden",
-  },
-  fitShine: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.25)",
   },
   fitHeader: {
     flexDirection: "row",
@@ -931,9 +738,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   fitIconWrap: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -943,30 +750,19 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 1,
   },
-  fitText: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
-  fitTextBold: {
-    fontWeight: "800",
-  },
+  fitText: { fontSize: 14, lineHeight: 22 },
+  fitTextBold: { fontWeight: "800" },
 
-  // ── AI Insight card ─────────────────────────────────────────────────────
+  // ── AI Insight card ───────────────────────────────────────────────────────
   aiCard: {
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
   },
-  aiHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 12,
-  },
   aiIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#8b5cf6",
@@ -977,17 +773,10 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
-  aiText: {
-    fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 8,
-  },
-  vibeText: {
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  aiText: { fontSize: 14, lineHeight: 21, marginBottom: 8 },
+  vibeText: { fontSize: 13, lineHeight: 19 },
 
-  // ── Bottom bar ──────────────────────────────────────────────────────────
+  // ── Bottom bar ────────────────────────────────────────────────────────────
   bottomBar: {
     position: "absolute",
     bottom: 0,
@@ -997,39 +786,28 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
   },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
+  buttonRow: { flexDirection: "row", gap: 12 },
   saveButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 14,
     borderWidth: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-  },
+  saveButtonText: { fontSize: 15, fontWeight: "700" },
   bookButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 12,
+    flex: 2,
+    height: 50,
+    borderRadius: 14,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowColor: colors.brand.traceRed,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   bookGradient: {
     flex: 1,
@@ -1038,9 +816,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
-  bookButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
+  bookButtonText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
 });

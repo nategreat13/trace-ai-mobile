@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet, useColorScheme } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeInUp } from "react-native-reanimated";
 import { colors } from "../../theme/colors";
 
 interface Fact {
@@ -15,37 +15,42 @@ interface DealInterestingFactsProps {
 export default function DealInterestingFacts({ facts }: DealInterestingFactsProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+  const accentColor = scheme === "dark" ? "#a78bfa" : "#7c3aed";
 
   if (!facts || facts.length === 0) return null;
 
   return (
     <View>
-      <Text style={[styles.heading, { color: theme.foreground }]}>
-        Interesting Facts
-      </Text>
-      <View style={styles.list}>
+      <View style={styles.headerRow}>
+        <View style={[styles.headerBar, { backgroundColor: accentColor }]} />
+        <Text style={[styles.heading, { color: theme.foreground }]}>
+          Did You Know?
+        </Text>
+      </View>
+
+      <View>
         {facts.map((fact, i) => (
           <Animated.View
             key={i}
-            entering={FadeInDown.delay(i * 100).duration(400)}
+            entering={FadeInUp.delay(i * 90).duration(400)}
             style={[
-              styles.card,
-              {
-                backgroundColor: scheme === "dark"
-                  ? "rgba(139,92,246,0.1)"
-                  : "rgba(139,92,246,0.08)",
-                borderColor: scheme === "dark"
-                  ? "rgba(139,92,246,0.25)"
-                  : "rgba(139,92,246,0.2)",
-              },
+              styles.factRow,
+              i < facts.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border },
             ]}
           >
-            <Text style={[styles.title, { color: theme.foreground }]}>
-              {fact.title}
+            <Text style={[styles.number, { color: accentColor }]}>
+              {String(i + 1).padStart(2, "0")}
             </Text>
-            <Text style={[styles.description, { color: theme.mutedForeground }]}>
-              {fact.description}
-            </Text>
+            <View style={styles.factContent}>
+              {!!fact.title && (
+                <Text style={[styles.factTitle, { color: theme.foreground }]}>
+                  {fact.title}
+                </Text>
+              )}
+              <Text style={[styles.factDesc, { color: theme.mutedForeground }]}>
+                {fact.description}
+              </Text>
+            </View>
           </Animated.View>
         ))}
       </View>
@@ -54,25 +59,45 @@ export default function DealInterestingFacts({ facts }: DealInterestingFactsProp
 }
 
 const styles = StyleSheet.create({
-  heading: {
-    fontSize: 20,
-    fontWeight: "800",
-    marginBottom: 12,
-  },
-  list: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 10,
+    marginBottom: 16,
   },
-  card: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 2,
+  headerBar: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
   },
-  title: {
-    fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 6,
+  heading: {
+    fontSize: 18,
+    fontWeight: "800",
   },
-  description: {
+  factRow: {
+    flexDirection: "row",
+    gap: 16,
+    paddingVertical: 18,
+  },
+  number: {
+    fontSize: 30,
+    fontWeight: "900",
+    lineHeight: 34,
+    width: 42,
+    letterSpacing: -1.5,
+    opacity: 0.85,
+  },
+  factContent: {
+    flex: 1,
+    paddingTop: 4,
+    gap: 5,
+  },
+  factTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
+  factDesc: {
     fontSize: 13,
     lineHeight: 19,
   },

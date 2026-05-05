@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { View } from "react-native";
+import { Image } from "expo-image";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,16 +10,14 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 
-const LOGOS = [
-  require("../../assets/Bluelogo.png"),
-  require("../../assets/TraceLogoLight.png"),
-  require("../../assets/TraceLogoDark.png"),
-];
+const ICON = require("../../assets/android-icon-monochrome.png");
+
+const COLORS = ["#FF655B", "#FD297B", "#00D665", "#8b5cf6", "#F59E0B"];
 
 let loadCount = 0;
 
 export default function TraceLoader({ size = 72 }: { size?: number }) {
-  const logoIndex = useRef(loadCount % LOGOS.length);
+  const colorIndex = useRef(loadCount % COLORS.length);
 
   useEffect(() => {
     loadCount += 1;
@@ -53,10 +52,14 @@ export default function TraceLoader({ size = 72 }: { size?: number }) {
 
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Animated.Image
-        source={LOGOS[logoIndex.current]}
-        style={[{ width: size, height: size, resizeMode: "contain" }, animStyle]}
-      />
+      <Animated.View style={animStyle}>
+        <Image
+          source={ICON}
+          style={{ width: size, height: size }}
+          contentFit="contain"
+          tintColor={COLORS[colorIndex.current]}
+        />
+      </Animated.View>
     </View>
   );
 }
