@@ -6,6 +6,8 @@ import {
   getRetentionCohorts,
   getAdSpend,
   getUserCount,
+  getPurchaseFlowFunnel,
+  getLoginCount,
 } from "@/lib/analytics-queries";
 import AnalyticsDashboardClient from "./dashboard-client";
 
@@ -14,19 +16,30 @@ export const revalidate = 0;
 
 export default async function AnalyticsPage() {
   // Kick off all the queries in parallel
-  const [summary, signupsByDay, eventCounts, funnel, retention, adSpend, userCount] =
-    await Promise.all([
-      getSubscriptionSummary().catch((e) => {
-        console.error("[analytics] RC summary failed:", e);
-        return null;
-      }),
-      getSignupsByDay(30).catch(() => []),
-      getEventCountsByName(30).catch(() => []),
-      getFunnelCounts(30).catch(() => null),
-      getRetentionCohorts(8).catch(() => []),
-      getAdSpend().catch(() => []),
-      getUserCount().catch(() => 0),
-    ]);
+  const [
+    summary,
+    signupsByDay,
+    eventCounts,
+    funnel,
+    retention,
+    adSpend,
+    userCount,
+    purchaseFlow,
+    loginCount,
+  ] = await Promise.all([
+    getSubscriptionSummary().catch((e) => {
+      console.error("[analytics] RC summary failed:", e);
+      return null;
+    }),
+    getSignupsByDay(30).catch(() => []),
+    getEventCountsByName(30).catch(() => []),
+    getFunnelCounts(30).catch(() => null),
+    getRetentionCohorts(8).catch(() => []),
+    getAdSpend().catch(() => []),
+    getUserCount().catch(() => 0),
+    getPurchaseFlowFunnel(30).catch(() => null),
+    getLoginCount(30).catch(() => 0),
+  ]);
 
   return (
     <AnalyticsDashboardClient
@@ -37,6 +50,8 @@ export default async function AnalyticsPage() {
       retention={retention}
       adSpend={adSpend}
       userCount={userCount}
+      purchaseFlow={purchaseFlow}
+      loginCount={loginCount}
     />
   );
 }

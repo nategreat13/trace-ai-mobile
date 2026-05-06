@@ -22,6 +22,15 @@ type FunnelData = {
   paywallViewed: number;
   purchaseCompleted: number;
 };
+type PurchaseFlowData = {
+  paywallViewed: number;
+  paywallCtaTapped: number;
+  purchaseInitiated: number;
+  purchaseCompleted: number;
+  purchaseCanceled: number;
+  purchaseFailed: number;
+  failuresByCode: Array<{ code: string; count: number }>;
+};
 type RetentionRow = {
   weekStart: string;
   size: number;
@@ -39,6 +48,8 @@ interface Props {
   retention: RetentionRow[];
   adSpend: AdSpendRow[];
   userCount: number;
+  purchaseFlow: PurchaseFlowData | null;
+  loginCount: number;
 }
 
 function dollars(cents: number) {
@@ -85,6 +96,8 @@ export default function AnalyticsDashboardClient({
   retention,
   adSpend,
   userCount,
+  purchaseFlow,
+  loginCount,
 }: Props) {
   const signupsTotal30 = signupsByDay.reduce((acc, r) => acc + r.count, 0);
 
@@ -130,7 +143,7 @@ export default function AnalyticsDashboardClient({
             <StatCard
               label="Total users"
               value={userCount.toLocaleString()}
-              sub={`${signupsTotal30} signups in last 30d`}
+              sub={`${signupsTotal30} signups · ${loginCount.toLocaleString()} logins (30d)`}
             />
             <StatCard
               label="Trial conversions (30d)"
@@ -243,6 +256,149 @@ export default function AnalyticsDashboardClient({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* Purchase flow */}
+        {purchaseFlow && (
+          <Section title="Purchase flow (last 30 days)">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {/* Step funnel */}
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  Drop-off through the upgrade flow
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { name: "Paywall viewed", value: purchaseFlow.paywallViewed },
+                    { name: "Subscribe button tapped", value: purchaseFlow.paywallCtaTapped },
+                    { name: "Purchase initiated (StoreKit shown)", value: purchaseFlow.purchaseInitiated },
+                    { name: "Purchase completed", value: purchaseFlow.purchaseCompleted },
+                  ].map((step, i, arr) => {
+                    const top = arr[0].value || 1;
+                    const pct = Math.round((step.value / top) * 100);
+                    const prev = i > 0 ? arr[i - 1].value : null;
+                    const dropoff =
+                      prev && prev > 0
+                        ? Math.round(((prev - step.value) / prev) * 100)
+                        : null;
+                    return (
+                      <div key={step.name}>
+                        <div className="flex justify-between items-baseline mb-1">
+                          <span className="text-sm font-medium text-gray-700">
+                            {step.name}
+                          </span>
+                          <span className="text-sm tabular-nums">
+                            <span className="font-semibold text-gray-900">
+                              {step.value.toLocaleString()}
+                            </span>
+                            <span className="text-gray-400 ml-2">{pct}%</span>
+                            {dropoff != null && i > 0 && (
+                              <span
+                                className={`ml-2 text-xs ${
+                                  dropoff > 50 ? "text-red-600" : "text-gray-400"
+                                }`}
+                              >
+                                -{dropoff}%
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-rose-500 rounded-full transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Drop-off split: of the initiated purchases that didn't
+                    complete, how many were user-canceled vs failed errors? */}
+                {purchaseFlow.purchaseInitiated > 0 && (
+                  <div className="mt-6 pt-5 border-t border-gray-100 grid grid-cols-3 gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+                        Completed
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                        {purchaseFlow.purchaseCompleted.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {Math.round(
+                          (purchaseFlow.purchaseCompleted /
+                            purchaseFlow.purchaseInitiated) *
+                            100
+                        )}
+                        % of initiated
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+                        Canceled
+                      </div>
+                      <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                        {purchaseFlow.purchaseCanceled.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        User dismissed StoreKit
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wider text-gray-500 mb-1">
+                        Failed
+                      </div>
+                      <div
+                        className={`text-2xl font-bold tabular-nums ${
+                          purchaseFlow.purchaseFailed > 0
+                            ? "text-red-600"
+                            : "text-gray-900"
+                        }`}
+                      >
+                        {purchaseFlow.purchaseFailed.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        StoreKit / RC error
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Top failure reasons */}
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                  Top failure reasons
+                </h3>
+                {purchaseFlow.failuresByCode.length === 0 ? (
+                  <p className="text-sm text-gray-400">
+                    No purchase failures in the last 30 days.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {purchaseFlow.failuresByCode.map((row) => (
+                      <li
+                        key={row.code}
+                        className="flex justify-between items-baseline text-sm"
+                      >
+                        <span className="font-mono text-xs text-gray-700 break-all">
+                          {row.code}
+                        </span>
+                        <span className="font-semibold text-gray-900 tabular-nums ml-3">
+                          {row.count}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-xs text-gray-400 mt-4">
+                  Grouped by RevenueCat error_code. A spike in any single code
+                  is a signal of a SKU misconfiguration or platform issue.
+                </p>
               </div>
             </div>
           </Section>

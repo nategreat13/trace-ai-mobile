@@ -35,7 +35,6 @@ export type AnalyticsEventName =
   // Engagement
   | "swipe"
   | "deal_saved"
-  | "deal_alert_created"
   | "deal_book_tapped"
   | "deal_expanded"
   | "screen_view"

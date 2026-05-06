@@ -229,3 +229,100 @@ export async function getUserCount(): Promise<number> {
   const snap = await db.collection("userProfiles").count().get();
   return snap.data().count;
 }
+
+/**
+ * Returns the in-app purchase flow drop-off, plus the breakdown of failed/
+ * canceled purchases. The order from `paywall_viewed` to `purchase_completed`
+ * tells us where users abandon the upgrade flow:
+ *
+ *   paywall_viewed
+ *   └─ paywall_cta_tapped
+ *      └─ purchase_initiated   (Subscribe button hit, StoreKit dialog shown)
+ *         ├─ purchase_completed  (success)
+ *         ├─ purchase_canceled   (user dismissed StoreKit dialog)
+ *         └─ purchase_failed     (StoreKit/RC error — bug signal)
+ *
+ * `failuresByCode` groups purchase_failed events by props.error_code so we
+ * can spot a regression like "all Premium-monthly purchases failing".
+ */
+export async function getPurchaseFlowFunnel(days = 30): Promise<{
+  paywallViewed: number;
+  paywallCtaTapped: number;
+  purchaseInitiated: number;
+  purchaseCompleted: number;
+  purchaseCanceled: number;
+  purchaseFailed: number;
+  failuresByCode: Array<{ code: string; count: number }>;
+}> {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  async function countEvent(name: string): Promise<number> {
+    const snap = await db
+      .collection("events")
+      .where("timestamp", ">=", since)
+      .where("name", "==", name)
+      .count()
+      .get();
+    return snap.data().count;
+  }
+
+  // Pull failure docs (not just count) so we can aggregate by error_code.
+  // Last 30 days of failures should be a small payload — if this collection
+  // grows large, paginate or move to an aggregated counters doc.
+  const failedSnap = await db
+    .collection("events")
+    .where("timestamp", ">=", since)
+    .where("name", "==", "purchase_failed")
+    .select("props")
+    .get();
+
+  const codeBuckets: Record<string, number> = {};
+  failedSnap.forEach((doc) => {
+    const props = (doc.data().props ?? {}) as Record<string, unknown>;
+    const code = typeof props.error_code === "string" || typeof props.error_code === "number"
+      ? String(props.error_code)
+      : "unknown";
+    codeBuckets[code] = (codeBuckets[code] ?? 0) + 1;
+  });
+
+  const [paywallViewed, paywallCtaTapped, purchaseInitiated, purchaseCompleted, purchaseCanceled] =
+    await Promise.all([
+      countEvent("paywall_viewed"),
+      countEvent("paywall_cta_tapped"),
+      countEvent("purchase_initiated"),
+      countEvent("purchase_completed"),
+      countEvent("purchase_canceled"),
+    ]);
+
+  return {
+    paywallViewed,
+    paywallCtaTapped,
+    purchaseInitiated,
+    purchaseCompleted,
+    purchaseCanceled,
+    purchaseFailed: failedSnap.size,
+    failuresByCode: Object.entries(codeBuckets)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([code, count]) => ({ code, count })),
+  };
+}
+
+/**
+ * Returns the count of `login` events in the last N days. Pairs with
+ * `getSignupsByDay` so the dashboard can show new vs returning users.
+ */
+export async function getLoginCount(days = 30): Promise<number> {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const snap = await db
+    .collection("events")
+    .where("timestamp", ">=", since)
+    .where("name", "==", "login")
+    .count()
+    .get();
+  return snap.data().count;
+}
