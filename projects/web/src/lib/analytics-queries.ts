@@ -326,3 +326,108 @@ export async function getLoginCount(days = 30): Promise<number> {
     .get();
   return snap.data().count;
 }
+
+type TierBreakdown = { total: number; premium: number; business: number; unknown: number };
+
+/**
+ * Aggregates a lifecycle event by `props.tier`. Pulls all matching docs in
+ * the window (we don't have a pre-aggregated counter doc yet) — fine while
+ * we're sub-100k events/day.
+ */
+async function tierBreakdown(
+  db: Firestore,
+  name: string,
+  since: Date
+): Promise<TierBreakdown> {
+  const snap = await db
+    .collection("events")
+    .where("timestamp", ">=", since)
+    .where("name", "==", name)
+    .select("props")
+    .get();
+
+  const out: TierBreakdown = { total: 0, premium: 0, business: 0, unknown: 0 };
+  snap.forEach((doc) => {
+    out.total++;
+    const props = (doc.data().props ?? {}) as Record<string, unknown>;
+    const tier = props.tier;
+    if (tier === "premium") out.premium++;
+    else if (tier === "business") out.business++;
+    else out.unknown++;
+  });
+  return out;
+}
+
+/**
+ * Subscription lifecycle stats for the last N days, sourced from the
+ * RevenueCat webhook events. This surfaces what RC's summary tucks under
+ * a single "churn" number — namely:
+ *
+ *   - voluntary churn  (subscription_canceled)  → user turned off auto-renew
+ *   - involuntary churn (subscription_expired)  → billing failed / period ended
+ *
+ * These behave very differently and warrant separate countermeasures
+ * (winback campaigns vs payment retries).
+ */
+export async function getSubscriptionLifecycle(days = 30): Promise<{
+  renewed: TierBreakdown;
+  voluntaryChurn: TierBreakdown;
+  involuntaryChurn: TierBreakdown;
+  billingIssues: TierBreakdown;
+  changed: TierBreakdown;
+  uncanceled: TierBreakdown;
+}> {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  const [renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled] =
+    await Promise.all([
+      tierBreakdown(db, "subscription_renewed", since),
+      tierBreakdown(db, "subscription_canceled", since),
+      tierBreakdown(db, "subscription_expired", since),
+      tierBreakdown(db, "billing_issue", since),
+      tierBreakdown(db, "subscription_changed", since),
+      tierBreakdown(db, "subscription_uncanceled", since),
+    ]);
+
+  return { renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled };
+}
+
+/**
+ * Daily count of `purchase_failed` events. Lets the dashboard show a
+ * sparkline so a sudden spike (e.g. a SKU misconfiguration like the
+ * Premium-monthly receipt bug) is obvious at a glance.
+ */
+export async function getPurchaseFailuresByDay(
+  days = 30
+): Promise<Array<{ date: string; count: number }>> {
+  const db = getDb();
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  since.setHours(0, 0, 0, 0);
+
+  const snap = await db
+    .collection("events")
+    .where("timestamp", ">=", since)
+    .where("name", "==", "purchase_failed")
+    .select("timestamp")
+    .get();
+
+  const buckets: Record<string, number> = {};
+  for (let i = 0; i < days; i++) {
+    const d = new Date(since);
+    d.setDate(d.getDate() + i);
+    buckets[d.toISOString().slice(0, 10)] = 0;
+  }
+
+  snap.forEach((doc) => {
+    const ts: any = doc.data().timestamp;
+    const date = ts?.toDate?.()?.toISOString().slice(0, 10);
+    if (date && buckets[date] !== undefined) buckets[date]++;
+  });
+
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, count]) => ({ date, count }));
+}

@@ -31,6 +31,16 @@ type PurchaseFlowData = {
   purchaseFailed: number;
   failuresByCode: Array<{ code: string; count: number }>;
 };
+type TierBreakdown = { total: number; premium: number; business: number; unknown: number };
+type SubscriptionLifecycleData = {
+  renewed: TierBreakdown;
+  voluntaryChurn: TierBreakdown;
+  involuntaryChurn: TierBreakdown;
+  billingIssues: TierBreakdown;
+  changed: TierBreakdown;
+  uncanceled: TierBreakdown;
+};
+type FailureDayRow = { date: string; count: number };
 type RetentionRow = {
   weekStart: string;
   size: number;
@@ -50,6 +60,8 @@ interface Props {
   userCount: number;
   purchaseFlow: PurchaseFlowData | null;
   loginCount: number;
+  subscriptionLifecycle: SubscriptionLifecycleData | null;
+  purchaseFailuresByDay: FailureDayRow[];
 }
 
 function dollars(cents: number) {
@@ -98,6 +110,8 @@ export default function AnalyticsDashboardClient({
   userCount,
   purchaseFlow,
   loginCount,
+  subscriptionLifecycle,
+  purchaseFailuresByDay,
 }: Props) {
   const signupsTotal30 = signupsByDay.reduce((acc, r) => acc + r.count, 0);
 
@@ -172,6 +186,76 @@ export default function AnalyticsDashboardClient({
             />
           </div>
         </Section>
+
+        {/* Subscription lifecycle (server-side from RC webhook) */}
+        {subscriptionLifecycle && (
+          <Section title="Subscription lifecycle (last 30 days)">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <StatCard
+                label="Renewals"
+                value={subscriptionLifecycle.renewed.total.toLocaleString()}
+                sub={`${subscriptionLifecycle.renewed.premium} premium · ${subscriptionLifecycle.renewed.business} business`}
+              />
+              <StatCard
+                label="Voluntary churn"
+                value={subscriptionLifecycle.voluntaryChurn.total.toLocaleString()}
+                sub="Auto-renew turned off"
+              />
+              <StatCard
+                label="Involuntary churn"
+                value={subscriptionLifecycle.involuntaryChurn.total.toLocaleString()}
+                sub="Billing failed / expired"
+              />
+              <StatCard
+                label="Billing issues"
+                value={subscriptionLifecycle.billingIssues.total.toLocaleString()}
+                sub="In retry — may recover"
+              />
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                Lifecycle events by tier
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-gray-600 text-left">
+                    <tr>
+                      <th className="py-2 pr-4 font-medium">Event</th>
+                      <th className="py-2 pr-4 font-medium text-right">Premium</th>
+                      <th className="py-2 pr-4 font-medium text-right">Business</th>
+                      <th className="py-2 pr-4 font-medium text-right">Unknown</th>
+                      <th className="py-2 font-medium text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { name: "Renewed", row: subscriptionLifecycle.renewed },
+                      { name: "Voluntary churn (canceled)", row: subscriptionLifecycle.voluntaryChurn },
+                      { name: "Involuntary churn (expired)", row: subscriptionLifecycle.involuntaryChurn },
+                      { name: "Billing issue", row: subscriptionLifecycle.billingIssues },
+                      { name: "Plan changed (up/downgrade)", row: subscriptionLifecycle.changed },
+                      { name: "Reactivated", row: subscriptionLifecycle.uncanceled },
+                    ].map(({ name, row }) => (
+                      <tr key={name} className="border-t border-gray-100">
+                        <td className="py-2 pr-4 text-gray-700">{name}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums">{row.premium}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums">{row.business}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-gray-400">{row.unknown}</td>
+                        <td className="py-2 text-right font-semibold text-gray-900 tabular-nums">{row.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                Voluntary churn = user turned off auto-renew (winback opportunity).
+                Involuntary churn = billing failed at renewal (payment retry opportunity).
+                Different signals, different responses.
+              </p>
+            </div>
+          </Section>
+        )}
 
         {/* Signups over time */}
         <Section title="Signups (last 30 days)">
@@ -394,6 +478,41 @@ export default function AnalyticsDashboardClient({
                       </li>
                     ))}
                   </ul>
+                )}
+                {purchaseFailuresByDay.length > 0 && (
+                  <div className="mt-5 pt-4 border-t border-gray-100">
+                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">
+                      Failures over time
+                    </div>
+                    <div className="h-20">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={purchaseFailuresByDay}>
+                          <defs>
+                            <linearGradient id="failGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#dc2626" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="#dc2626" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "white",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: 8,
+                              fontSize: 11,
+                            }}
+                            labelFormatter={(d) => d}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="#dc2626"
+                            fill="url(#failGradient)"
+                            strokeWidth={1.5}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 )}
                 <p className="text-xs text-gray-400 mt-4">
                   Grouped by RevenueCat error_code. A spike in any single code

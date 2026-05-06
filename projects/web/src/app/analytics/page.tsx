@@ -8,6 +8,8 @@ import {
   getUserCount,
   getPurchaseFlowFunnel,
   getLoginCount,
+  getSubscriptionLifecycle,
+  getPurchaseFailuresByDay,
 } from "@/lib/analytics-queries";
 import AnalyticsDashboardClient from "./dashboard-client";
 
@@ -26,6 +28,8 @@ export default async function AnalyticsPage() {
     userCount,
     purchaseFlow,
     loginCount,
+    subscriptionLifecycle,
+    purchaseFailuresByDay,
   ] = await Promise.all([
     getSubscriptionSummary().catch((e) => {
       console.error("[analytics] RC summary failed:", e);
@@ -39,6 +43,8 @@ export default async function AnalyticsPage() {
     getUserCount().catch(() => 0),
     getPurchaseFlowFunnel(30).catch(() => null),
     getLoginCount(30).catch(() => 0),
+    getSubscriptionLifecycle(30).catch(() => null),
+    getPurchaseFailuresByDay(30).catch(() => []),
   ]);
 
   return (
@@ -52,6 +58,8 @@ export default async function AnalyticsPage() {
       userCount={userCount}
       purchaseFlow={purchaseFlow}
       loginCount={loginCount}
+      subscriptionLifecycle={subscriptionLifecycle}
+      purchaseFailuresByDay={purchaseFailuresByDay}
     />
   );
 }
