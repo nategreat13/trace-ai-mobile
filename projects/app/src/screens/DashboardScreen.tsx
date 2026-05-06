@@ -12,7 +12,7 @@ import {
   Animated as RNAnimated,
   PanResponder,
 } from "react-native";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { TabParamList, RootStackParamList } from "../navigation/types";
@@ -74,9 +74,15 @@ export default function DashboardScreen() {
     }
   }, [user?.uid]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Reload every time the Dashboard tab gains focus. Using useFocusEffect
+  // (instead of a one-shot useEffect) is required because tab screens stay
+  // mounted across tab switches — without this, deals saved on another
+  // tab don't appear here until pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   useEffect(() => {
     const params = route.params;
