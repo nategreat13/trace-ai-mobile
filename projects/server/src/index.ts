@@ -11,3 +11,6 @@ export const api = onRequest(
   { invoker: "public", secrets: [revenuecatWebhookSecret] },
   app
 );
+
+// Firestore trigger: posts a Slack notification on each new signup.
+export { onUserProfileCreated } from "./triggers/user-signup";
