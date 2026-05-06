@@ -368,7 +368,7 @@ export default function SwipeDeckScreen() {
         const savedCount = allSwipes.filter((s) => s.action === "super").length;
         if (savedCount >= MAX_SAVES) {
           logEvent("daily_limit_hit", { reason: "max_saves" });
-          navigation.navigate("Paywall");
+          navigation.navigate("Paywall", { entryPoint: "swipe_max_saves" });
           return;
         }
       }
@@ -570,7 +570,7 @@ export default function SwipeDeckScreen() {
           )}
         </View>
         {!isPremium && (
-          <TouchableOpacity onPress={() => navigation.navigate("Paywall")}>
+          <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_header_crown" })}>
             <Crown color={colors.brand.amber500} size={24} />
           </TouchableOpacity>
         )}
@@ -706,7 +706,7 @@ export default function SwipeDeckScreen() {
                 theme={theme}
                 scheme={scheme}
                 maxSwipes={MAX_DAILY_SWIPES}
-                onUpgrade={() => navigation.navigate("Paywall")}
+                onUpgrade={() => navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit" })}
                 onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
               />
             )}
@@ -769,7 +769,7 @@ export default function SwipeDeckScreen() {
           {!isPremium && swipesLeft > 0 && swipesLeft <= 3 && (
             <Animated.View entering={FadeIn.duration(300)}>
               <TouchableOpacity
-                onPress={() => navigation.navigate("Paywall")}
+                onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_low_swipes_warning" })}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -796,7 +796,7 @@ export default function SwipeDeckScreen() {
           {!isPremium && allSwipes.filter((s) => s.action === "super").length === MAX_SAVES - 1 && (
             <Animated.View entering={FadeIn.duration(300)}>
               <TouchableOpacity
-                onPress={() => navigation.navigate("Paywall")}
+                onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_one_save_left" })}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",

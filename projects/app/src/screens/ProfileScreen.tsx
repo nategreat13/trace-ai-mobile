@@ -445,7 +445,7 @@ export default function ProfileScreen() {
                       : "https://play.google.com/store/account/subscriptions"
                   );
                 } else {
-                  navigation.navigate("Paywall");
+                  navigation.navigate("Paywall", { entryPoint: "profile_subscription_row" });
                 }
               }}
               style={{

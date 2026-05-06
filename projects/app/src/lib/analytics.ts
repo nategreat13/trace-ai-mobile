@@ -1,5 +1,8 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { Platform } from "react-native";
+import * as Updates from "expo-updates";
 import { db } from "../services/firebase";
+import { getSessionId } from "./session";
 
 /**
  * Lightweight analytics wrapper — writes events to Firestore's `events`
@@ -12,6 +15,11 @@ import { db } from "../services/firebase";
  *    beyond the Firebase UID that is already on every event.
  *  - Currently guest (no user) events are still logged, but `userId` is the
  *    string "guest" so we can filter them out server-side.
+ *  - Every event is auto-stamped with universal context (platform, app
+ *    version, OS version, locale, session id, experiments slot) so we can
+ *    slice any event by any of these dimensions later. This is computed
+ *    once per call instead of once per process so changing locale or
+ *    backgrounded-then-resumed sessions are picked up correctly.
  */
 
 export type AnalyticsEventName =
@@ -78,15 +86,52 @@ export function setAnalyticsUser(userId: string | null) {
   currentUserId = userId;
 }
 
+/**
+ * Universal context attached to every event. Computed at call time rather
+ * than at module load so values like locale and session_id stay correct
+ * as the user moves through the app.
+ *
+ * `app_version` uses `Updates.runtimeVersion` (set in app.json's
+ * `expo.runtimeVersion`) since we don't have `expo-constants` installed.
+ * In this codebase runtimeVersion and the marketing version are kept in
+ * sync, so this is a faithful proxy. If/when expo-application is added,
+ * swap in `Application.nativeApplicationVersion` for the binary version.
+ *
+ * `country` is parsed out of the locale string (e.g. "en-US" → "US").
+ * Falls back to null when only the language is available (e.g. "en").
+ */
+function getBaseProps(): Record<string, string | null> {
+  let locale: string | null = null;
+  try {
+    locale = Intl.DateTimeFormat().resolvedOptions().locale ?? null;
+  } catch {
+    locale = null;
+  }
+  const country =
+    locale && locale.includes("-") ? locale.split("-")[1] : null;
+
+  return {
+    platform: Platform.OS,
+    os_version: String(Platform.Version ?? ""),
+    app_version: (Updates.runtimeVersion as string | undefined) ?? null,
+    locale,
+    country,
+    session_id: getSessionId(),
+  };
+}
+
 export function logEvent(
   name: AnalyticsEventName,
   props: Record<string, string | number | boolean | null | undefined> = {}
 ): void {
   // Strip undefined so Firestore doesn't reject the doc
-  const cleanProps: Record<string, unknown> = {};
+  const cleanProps: Record<string, unknown> = { ...getBaseProps() };
   for (const [k, v] of Object.entries(props)) {
     if (v !== undefined) cleanProps[k] = v;
   }
+  // Reserved slot for A/B test variants. Empty for now; populating it
+  // later requires no schema migration on the events collection.
+  if (!("experiments" in cleanProps)) cleanProps.experiments = {};
 
   addDoc(collection(db, "events"), {
     name,

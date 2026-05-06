@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, Alert, useColorScheme } from "react-native";
+import { View, Text, Alert, useColorScheme, Platform } from "react-native";
+import * as Updates from "expo-updates";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -117,7 +118,20 @@ export default function OnboardingScreen() {
         await updateUserProfile(profile.id, updates);
         setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
       } else {
-        // Brand new user — create profile
+        // Brand new user — create profile. Stamp first-touch cohort
+        // metadata (platform, app version, country) at creation time so
+        // we can later slice "Q2 2026 iOS users from US" without needing
+        // to backfill anything.
+        let locale: string | null = null;
+        try {
+          locale = Intl.DateTimeFormat().resolvedOptions().locale ?? null;
+        } catch {
+          locale = null;
+        }
+        const country =
+          locale && locale.includes("-") ? locale.split("-")[1] : undefined;
+        const now = new Date();
+
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
@@ -141,6 +155,16 @@ export default function OnboardingScreen() {
           dashboardTutorialShown: false,
           aiLearningShown: false,
           profilePictureUrl: null,
+          firstSeenAt: now,
+          firstPlatform:
+            Platform.OS === "ios" || Platform.OS === "android" || Platform.OS === "web"
+              ? Platform.OS
+              : undefined,
+          firstAppVersion: (Updates.runtimeVersion as string | undefined) ?? undefined,
+          country,
+          lastSeenAt: now,
+          lifetimeRevenueCents: 0,
+          everUsedFreeTrial: false,
         });
         const newProfile = await getUserProfile(user.uid);
         if (newProfile) setProfile(newProfile);

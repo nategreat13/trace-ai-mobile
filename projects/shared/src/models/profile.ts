@@ -25,6 +25,21 @@ export interface UserProfile {
   aiLearningShown: boolean;
   profilePictureUrl: string | null;
   createdAt: Date;
+  // Activity / cohort metadata. firstSeenAt, firstPlatform, firstAppVersion,
+  // country are write-once at signup and underpin per-user cohort slicing.
+  // lastSeenAt is updated on cold launch / 30+min foreground resume.
+  firstSeenAt?: Date;
+  firstPlatform?: "ios" | "android" | "web";
+  firstAppVersion?: string;
+  country?: string;
+  lastSeenAt?: Date;
+  // Lifetime revenue + first/last purchase. Mirrored from the RevenueCat
+  // webhook so per-user dashboards can compute LTV without scanning the
+  // events log.
+  firstPurchaseAt?: Date;
+  lastPurchaseAt?: Date;
+  lifetimeRevenueCents?: number;
+  everUsedFreeTrial?: boolean;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   stripeSubscriptionStatus?: string;

@@ -332,7 +332,7 @@ export default function UpgradeScreen() {
         ) : (
           <>
             <TouchableOpacity
-              onPress={() => navigation.navigate("Paywall")}
+              onPress={() => navigation.navigate("Paywall", { entryPoint: "upgrade_screen" })}
               activeOpacity={0.85}
               style={{ borderRadius: 16, overflow: "hidden" }}
             >

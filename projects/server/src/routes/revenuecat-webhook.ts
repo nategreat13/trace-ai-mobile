@@ -152,6 +152,35 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
         }
+
+        // Mirror revenue + purchase timestamps to the userProfile so per-user
+        // dashboards can compute LTV / time-to-paid without scanning RC.
+        const now = new Date();
+        const priceCents =
+          typeof price_in_purchased_currency === "number"
+            ? Math.round(price_in_purchased_currency * 100)
+            : 0;
+        const profileData = profileDoc.data() as {
+          firstPurchaseAt?: any;
+          lifetimeRevenueCents?: number;
+          everUsedFreeTrial?: boolean;
+        };
+        if (type === "INITIAL_PURCHASE" && !profileData.firstPurchaseAt) {
+          updates.firstPurchaseAt = now;
+        }
+        if (type === "INITIAL_PURCHASE" || type === "RENEWAL") {
+          updates.lastPurchaseAt = now;
+          if (priceCents > 0) {
+            // Use FieldValue.increment so concurrent renewals don't clobber
+            // each other (rare but possible).
+            updates.lifetimeRevenueCents =
+              admin.firestore.FieldValue.increment(priceCents);
+          }
+        }
+        if (period_type === "TRIAL" && !profileData.everUsedFreeTrial) {
+          updates.everUsedFreeTrial = true;
+        }
+
         await profileRef.update(updates);
         console.log("[RC Webhook] Updated profile to:", tier);
 

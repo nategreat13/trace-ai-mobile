@@ -9,7 +9,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { X, Zap, TrendingDown, Clock, Users, Crown, Briefcase, Sparkles } from "lucide-react-native";
@@ -49,6 +49,8 @@ function computeAnnualSavings(
 
 export default function PaywallScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<RootStackParamList, "Paywall">>();
+  const entryPoint = route.params?.entryPoint ?? "unknown";
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
@@ -76,6 +78,7 @@ export default function PaywallScreen() {
   useEffect(() => {
     logEvent("paywall_viewed", {
       current_tier: currentTier ?? "free",
+      entry_point: entryPoint,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -726,7 +726,7 @@ export default function DashboardScreen() {
                 Upgrade to get notified the moment a deal drops for your saved destinations — before anyone else.
               </Text>
               <TouchableOpacity
-                onPress={() => { setShowAlertsUpgrade(false); navigation.navigate("Paywall"); }}
+                onPress={() => { setShowAlertsUpgrade(false); navigation.navigate("Paywall", { entryPoint: "dashboard_alerts_upgrade" }); }}
                 activeOpacity={0.85}
                 style={{ borderRadius: 14, overflow: "hidden", marginBottom: 12 }}
               >

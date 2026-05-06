@@ -1,6 +1,6 @@
 import "./global.css";
 import React, { useEffect, useRef } from "react";
-import { Linking, AppState, AppStateStatus, Platform } from "react-native";
+import { Linking } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   NavigationContainer,
@@ -13,11 +13,7 @@ import { AuthProvider } from "./src/context/AuthContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/types";
 import { logEvent } from "./src/lib/analytics";
-
-// Treat a foreground return as a new session if the app was backgrounded
-// for at least this long. Avoids spamming `app_open` when the user briefly
-// flips out to Mail or Messages mid-flow.
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+import AnalyticsLifecycle from "./src/components/AnalyticsLifecycle";
 
 function handleDeepLink(
   url: string,
@@ -34,8 +30,7 @@ function handleDeepLink(
 
 export default function App() {
   const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
-  const lastBackgroundedAtRef = useRef<number | null>(null);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const previousRouteRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (__DEV__) return;
@@ -56,39 +51,30 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  // Fire `app_open` on cold launch, and again whenever the app returns to
-  // the foreground after being backgrounded for more than SESSION_TIMEOUT_MS.
-  useEffect(() => {
-    // Cold launch
-    logEvent("app_open", { source: "cold_launch", platform: Platform.OS });
-
-    const handleChange = (next: AppStateStatus) => {
-      const prev = appStateRef.current;
-      if (prev === "active" && next.match(/inactive|background/)) {
-        lastBackgroundedAtRef.current = Date.now();
-      } else if (prev.match(/inactive|background/) && next === "active") {
-        const backgroundedAt = lastBackgroundedAtRef.current;
-        const elapsed = backgroundedAt ? Date.now() - backgroundedAt : Infinity;
-        if (elapsed >= SESSION_TIMEOUT_MS) {
-          logEvent("app_open", {
-            source: "foreground_resume",
-            platform: Platform.OS,
-            background_duration_ms: backgroundedAt ? elapsed : null,
-          });
-        }
-      }
-      appStateRef.current = next;
-    };
-
-    const sub = AppState.addEventListener("change", handleChange);
-    return () => sub.remove();
-  }, []);
+  // Emits `screen_view` whenever the active route changes. The previous
+  // route is included so per-screen drop-off (e.g. "X% who hit Onboarding
+  // never reach Home") becomes computable from the events log.
+  function handleNavigationStateChange() {
+    const currentRoute = navRef.current?.getCurrentRoute()?.name ?? null;
+    if (!currentRoute) return;
+    if (currentRoute === previousRouteRef.current) return;
+    logEvent("screen_view", {
+      screen_name: currentRoute,
+      previous_screen: previousRouteRef.current,
+    });
+    previousRouteRef.current = currentRoute;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <NavigationContainer ref={navRef}>
+          <AnalyticsLifecycle />
+          <NavigationContainer
+            ref={navRef}
+            onReady={handleNavigationStateChange}
+            onStateChange={handleNavigationStateChange}
+          >
             <RootNavigator />
             <StatusBar style="auto" />
           </NavigationContainer>

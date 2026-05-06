@@ -218,7 +218,7 @@ export default function ExploreScreen() {
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
-      navigation.navigate("Paywall");
+      navigation.navigate("Paywall", { entryPoint: "explore_save_limit" });
       return;
     }
     await saveDeal({
@@ -296,7 +296,7 @@ export default function ExploreScreen() {
 
   const handleCreateAlert = async (dest: { label: string; code?: string }) => {
     if (!user) return;
-    if (!isPremium) { navigation.navigate("Paywall"); return; }
+    if (!isPremium) { navigation.navigate("Paywall", { entryPoint: "explore_create_alert" }); return; }
     await createDealAlert({
       userId: user.uid,
       destination: dest.label,
@@ -369,7 +369,7 @@ export default function ExploreScreen() {
         {/* Image */}
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => isBlurred ? navigation.navigate("Paywall") : setExpandedDeal(deal)}
+          onPress={() => isBlurred ? navigation.navigate("Paywall", { entryPoint: "explore_blurred_deal" }) : setExpandedDeal(deal)}
         >
           <View style={{ position: "relative", height: 200 }}>
             <Image
@@ -536,7 +536,7 @@ export default function ExploreScreen() {
         end={{ x: 1, y: 0 }}
         style={{ borderRadius: 12, width: "100%" }}
       >
-        <TouchableOpacity onPress={() => navigation.navigate("Paywall")} style={{ paddingVertical: 14, alignItems: "center" }}>
+        <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_view_plans" })} style={{ paddingVertical: 14, alignItems: "center" }}>
           <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
         </TouchableOpacity>
       </LinearGradient>
@@ -824,7 +824,7 @@ export default function ExploreScreen() {
       {!isPremium && savedDealIds.size === 2 && (
         <Animated.View entering={FadeIn.duration(300)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("Paywall")}
+            onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_one_save_left" })}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -1053,7 +1053,7 @@ export default function ExploreScreen() {
           isBusiness={profile?.subscriptionStatus === "business"}
           onUpgradeBusiness={() => {
             setShowFilters(false);
-            navigation.navigate("Paywall");
+            navigation.navigate("Paywall", { entryPoint: "explore_filters_business" });
           }}
         />
       )}
