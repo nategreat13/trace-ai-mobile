@@ -21,6 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTrialEligibility } from "../hooks/useTrialEligibility";
 import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -103,12 +105,14 @@ function DailyLimitView({
   maxSwipes,
   onUpgrade,
   onExplore,
+  trialEligible,
 }: {
   theme: typeof colors.light | typeof colors.dark;
   scheme: "light" | "dark" | null | undefined;
   maxSwipes: number;
   onUpgrade: () => void;
   onExplore: () => void;
+  trialEligible: boolean;
 }) {
   const [timeLeft, setTimeLeft] = React.useState(() => {
     const now = new Date();
@@ -194,7 +198,9 @@ function DailyLimitView({
             end={{ x: 1, y: 0 }}
             style={{ paddingVertical: 14, alignItems: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Unlock Unlimited Swipes</Text>
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+              {trialEligible ? "Try Premium free for 3 days" : "Unlock Unlimited Swipes"}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -222,6 +228,7 @@ export default function SwipeDeckScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
+  const trialEligible = useTrialEligibility();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
@@ -291,6 +298,33 @@ export default function SwipeDeckScreen() {
       setShowHowToSwipe(true);
     }
   }, [profile?.howToSwipeShown, loading]);
+
+  // First-launch trial offer: once the user has dismissed the HowToSwipe
+  // tutorial (so we're not stacking modals), surface the paywall as a
+  // "try Premium free for 3 days" offer. Gated by:
+  //   - free tier (no point offering trial to existing subscribers)
+  //   - trial-eligible per RC (haven't already used a trial)
+  //   - one-shot via AsyncStorage so dismissing it sticks
+  // Fires entry_point=onboarding_trial_offer so its conversion is
+  // measurable separately on the dashboard.
+  useEffect(() => {
+    if (!profile || loading) return;
+    if (profile.howToSwipeShown !== true) return;
+    if (isPremium) return;
+    if (trialEligible !== true) return;
+    let cancelled = false;
+    (async () => {
+      const KEY = "trace_trial_offer_shown_v1";
+      const seen = await AsyncStorage.getItem(KEY);
+      if (cancelled || seen) return;
+      // Set the flag BEFORE navigating so a re-render doesn't re-trigger
+      await AsyncStorage.setItem(KEY, "true");
+      navigation.navigate("Paywall", { entryPoint: "onboarding_trial_offer" });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.howToSwipeShown, loading, isPremium, trialEligible, navigation]);
 
   // Auto-switch to business for business members — and reset to economy
   // when they're no longer on the Business tier
@@ -708,6 +742,7 @@ export default function SwipeDeckScreen() {
                 maxSwipes={MAX_DAILY_SWIPES}
                 onUpgrade={() => navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit" })}
                 onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
+                trialEligible={trialEligible === true}
               />
             )}
             {deckMode === "business" && (
@@ -813,7 +848,7 @@ export default function SwipeDeckScreen() {
               >
                 <Text style={{ fontSize: 14 }}>🔖</Text>
                 <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
-                  1 save left — upgrade for unlimited
+                  {trialEligible ? "1 save left — try Premium free for 3 days" : "1 save left — upgrade for unlimited"}
                 </Text>
               </TouchableOpacity>
             </Animated.View>

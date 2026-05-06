@@ -17,6 +17,7 @@ import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useIAP } from "../hooks/useIAP";
+import { invalidateTrialEligibility } from "../hooks/useTrialEligibility";
 import { hasEntitlement } from "../services/iap";
 import { logEvent } from "../lib/analytics";
 import type { RootStackParamList } from "../navigation/types";
@@ -132,6 +133,12 @@ export default function PaywallScreen() {
       billing: billingPeriod,
     });
     if (!info) return;
+
+    // The cross-app trial-eligibility cache holds the user's pre-purchase
+    // state ("eligible"). Now that they've actually used the trial, copy
+    // on other screens (e.g. UpgradeScreen, hard wall) should stop offering
+    // it on the next render.
+    invalidateTrialEligibility();
 
     // Derive the welcome screen from the tier the user just bought, NOT from
     // their current entitlements. In sandbox (and occasionally production),
@@ -314,6 +321,49 @@ export default function PaywallScreen() {
           </Text>
         </View>
 
+        {/* Trial banner — surfaces the 3-day free trial offer prominently
+            for users who haven't yet used one. Shown regardless of which
+            billing toggle is active so eligible users always see the
+            value prop, but the banner itself reframes when monthly is
+            selected (trial is annual-only, so we nudge toward annual). */}
+        {trialEligible && !hasPremium && !hasBusiness && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+            <LinearGradient
+              colors={
+                selected === "business"
+                  ? [colors.brand.amber400, colors.brand.orange500]
+                  : [colors.brand.traceRed, colors.brand.tracePink]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ borderRadius: 16, padding: 14 }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={{ fontSize: 28, marginRight: 12 }}>🎁</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontSize: 16,
+                      fontWeight: "900",
+                      marginBottom: 2,
+                    }}
+                  >
+                    {billingPeriod === "annual"
+                      ? "Start with 3 days free"
+                      : "Try 3 days free with Annual"}
+                  </Text>
+                  <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12 }}>
+                    {billingPeriod === "annual"
+                      ? "No payment today. Cancel anytime in Settings."
+                      : "Switch to Annual above to start your free trial."}
+                  </Text>
+                </View>
+              </View>
+            </LinearGradient>
+          </View>
+        )}
+
         {/* Billing period toggle */}
         <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
           <View
@@ -446,12 +496,32 @@ export default function PaywallScreen() {
                   )}
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {premiumDisplayPkg.product.priceString}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
-                    /{billingPeriod === "annual" ? "year" : "month"}
-                  </Text>
+                  {trialEligible && billingPeriod === "annual" && !hasPremium && !hasBusiness ? (
+                    <>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "800",
+                          color: colors.brand.traceGreen,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        FREE FOR 3 DAYS
+                      </Text>
+                      <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 2 }}>
+                        then {premiumDisplayPkg.product.priceString}/year
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
+                        {premiumDisplayPkg.product.priceString}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
+                        /{billingPeriod === "annual" ? "year" : "month"}
+                      </Text>
+                    </>
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -526,12 +596,32 @@ export default function PaywallScreen() {
                   )}
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {businessDisplayPkg?.product.priceString ?? ""}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
-                    /{billingPeriod === "annual" ? "year" : "month"}
-                  </Text>
+                  {trialEligible && billingPeriod === "annual" && !hasPremium && !hasBusiness ? (
+                    <>
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "800",
+                          color: colors.brand.traceGreen,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        FREE FOR 3 DAYS
+                      </Text>
+                      <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 2 }}>
+                        then {businessDisplayPkg?.product.priceString ?? ""}/year
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
+                        {businessDisplayPkg?.product.priceString ?? ""}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
+                        /{billingPeriod === "annual" ? "year" : "month"}
+                      </Text>
+                    </>
+                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -706,7 +796,7 @@ export default function PaywallScreen() {
                     marginTop: 6,
                   }}
                 >
-                  Then {priceString}/{periodSuffix}. Cancel anytime.
+                  No payment due today. {priceString}/{periodSuffix} after 3 days. Cancel anytime in Settings.
                 </Text>
               )}
             </>

@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useTrialEligibility } from "../hooks/useTrialEligibility";
 import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
@@ -36,6 +37,7 @@ export default function ExploreScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
+  const trialEligible = useTrialEligibility();
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [savedDealIds, setSavedDealIds] = useState<Set<string>>(new Set());
@@ -537,7 +539,9 @@ export default function ExploreScreen() {
         style={{ borderRadius: 12, width: "100%" }}
       >
         <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_view_plans" })} style={{ paddingVertical: 14, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
+          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+            {trialEligible ? "Start 3-day free trial" : "View Plans"}
+          </Text>
         </TouchableOpacity>
       </LinearGradient>
     </View>

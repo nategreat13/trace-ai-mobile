@@ -25,6 +25,7 @@ import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useTrialEligibility } from "../hooks/useTrialEligibility";
 import {
   getSavedDeals,
   getSwipeActions,
@@ -39,6 +40,7 @@ export default function DashboardScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
+  const trialEligible = useTrialEligibility();
   const route = useRoute<RouteProp<TabParamList, "Dashboard">>();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
@@ -729,7 +731,9 @@ export default function DashboardScreen() {
                 Deal Alerts is a Premium Feature
               </Text>
               <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", lineHeight: 20, marginBottom: 28 }}>
-                Upgrade to get notified the moment a deal drops for your saved destinations — before anyone else.
+                {trialEligible
+                  ? "Try Premium free for 3 days — get notified the moment a deal drops for your saved destinations."
+                  : "Upgrade to get notified the moment a deal drops for your saved destinations — before anyone else."}
               </Text>
               <TouchableOpacity
                 onPress={() => { setShowAlertsUpgrade(false); navigation.navigate("Paywall", { entryPoint: "dashboard_alerts_upgrade" }); }}
@@ -742,7 +746,9 @@ export default function DashboardScreen() {
                   end={{ x: 1, y: 0 }}
                   style={{ paddingVertical: 15, alignItems: "center" }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Upgrade to Premium</Text>
+                  <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+                    {trialEligible ? "Start 3-day free trial" : "Upgrade to Premium"}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
               <TouchableOpacity
