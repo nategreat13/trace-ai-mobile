@@ -10,6 +10,7 @@ import {
   Linking,
   ScrollView,
 } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing } from "lucide-react-native";
@@ -818,6 +819,32 @@ export default function ExploreScreen() {
             : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
         </Text>
       </View>
+
+      {/* 1 save left warning */}
+      {!isPremium && savedDealIds.size === 2 && (
+        <Animated.View entering={FadeIn.duration(300)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Paywall")}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              alignSelf: "flex-start",
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              backgroundColor: "#fdf2f8",
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: "#f9a8d4",
+            }}
+          >
+            <Text style={{ fontSize: 14 }}>🔖</Text>
+            <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
+              1 save left — upgrade for unlimited
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* Deals list */}
       {pendingAlertDest && filteredDeals.length > 0 && (

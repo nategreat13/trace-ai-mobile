@@ -10,6 +10,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Lock } from "lucide-react-native";
@@ -124,6 +125,13 @@ export default function LandingScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      <LinearGradient
+        colors={scheme === "dark"
+          ? ["rgba(220,38,38,0.07)", "transparent", "rgba(99,102,241,0.05)"]
+          : ["rgba(220,38,38,0.06)", "transparent", "rgba(99,102,241,0.04)"]}
+        locations={[0, 0.45, 1]}
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+      />
       {/* Logo */}
       <View style={{ alignItems: "center", paddingTop: 16, paddingBottom: 4 }}>
         <Image
@@ -141,11 +149,11 @@ export default function LandingScreen() {
         style={{
           paddingHorizontal: 32,
           paddingTop: 12,
-          fontSize: 34,
+          fontSize: 30,
           fontWeight: "900",
           color: theme.foreground,
           textAlign: "center",
-          lineHeight: 40,
+          lineHeight: 36,
         }}
       >
         Let the best flights{"\n"}find you.

@@ -740,7 +740,7 @@ export default function SwipeDeckScreen() {
                   deal={deal}
                   isTop={i === arr.length - 1}
                   onSwipe={handleSwipe}
-                  onExpand={() => setExpandedDeal(deal)}
+                  onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
                   triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                   isSwipeDisabled={!isPremium && swipesLeft <= 0}
                   isUndone={deal.id === undoneDealId}
@@ -787,6 +787,33 @@ export default function SwipeDeckScreen() {
                 <Text style={{ fontSize: 14 }}>⚡</Text>
                 <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.amber600 }}>
                   {swipesLeft} swipe{swipesLeft !== 1 ? "s" : ""} left today
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {/* 1 save left warning */}
+          {!isPremium && allSwipes.filter((s) => s.action === "super").length === MAX_SAVES - 1 && (
+            <Animated.View entering={FadeIn.duration(300)}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Paywall")}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  alignSelf: "center",
+                  gap: 6,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  backgroundColor: "#fdf2f8",
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: "#f9a8d4",
+                  marginBottom: 8,
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>🔖</Text>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
+                  1 save left — upgrade for unlimited
                 </Text>
               </TouchableOpacity>
             </Animated.View>

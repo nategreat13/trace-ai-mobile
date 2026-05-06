@@ -226,14 +226,6 @@ export default function ExpandedDeal({
               style={StyleSheet.absoluteFillObject}
             />
 
-            <TouchableOpacity
-              onPress={onClose}
-              style={[styles.closeButton, { top: insets.top + 12 }]}
-              activeOpacity={0.8}
-            >
-              <X size={20} color="#1a1a1a" strokeWidth={2.5} />
-            </TouchableOpacity>
-
             <View style={styles.heroOverlay}>
               {/* Route + deal tier row */}
               <View style={styles.heroTopRow}>
@@ -514,6 +506,14 @@ export default function ExpandedDeal({
             </TouchableOpacity>
           </View>
         </View>
+
+        <TouchableOpacity
+          onPress={onClose}
+          style={[styles.closeButton, { top: insets.top + 12 }]}
+          activeOpacity={0.8}
+        >
+          <X size={20} color="#1a1a1a" strokeWidth={2.5} />
+        </TouchableOpacity>
       </Animated.View>
     </Modal>
   );
