@@ -2,10 +2,9 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { getDb } from "../firebase";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
+import { grantPromotionalEntitlement } from "../lib/revenuecat-rest";
 
 export const promoRoutes = Router();
-
-const RC_API_BASE = "https://api.revenuecat.com/v2";
 
 /**
  * Tier → RevenueCat entitlement identifier. These are the public entitlement
@@ -25,97 +24,6 @@ interface PromoCodeDoc {
   expiresAt?: admin.firestore.Timestamp | null;
   active: boolean;
   note?: string | null;
-}
-
-/**
- * RC V2 requires the project_id in the path. We auto-discover it from
- * /v2/projects on first use and cache for the function's lifetime.
- */
-let _cachedProjectId: string | null = null;
-
-async function getRcProjectId(): Promise<string> {
-  if (process.env.REVENUECAT_PROJECT_ID) {
-    return process.env.REVENUECAT_PROJECT_ID;
-  }
-  if (_cachedProjectId) return _cachedProjectId;
-  const apiKey = process.env.REVENUECAT_REST_API_KEY;
-  if (!apiKey) {
-    throw new Error("REVENUECAT_REST_API_KEY is not set");
-  }
-  const res = await fetch(`${RC_API_BASE}/projects?limit=10`, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: "application/json",
-    },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "(unreadable)");
-    throw new Error(
-      `Failed to list RC projects (${res.status}): ${body.slice(0, 300)}`
-    );
-  }
-  const data = (await res.json()) as { items?: Array<{ id: string }> };
-  if (!data.items?.length) {
-    throw new Error("No RC projects visible to this API key");
-  }
-  _cachedProjectId = data.items[0].id;
-  return _cachedProjectId;
-}
-
-/**
- * Grant a promotional entitlement on RevenueCat for `appUserId` until the
- * given absolute end time. Uses the V2 grant_entitlement action:
- *   POST /v2/projects/{project_id}/customers/{customer_id}/actions/grant_entitlement
- *   body: { entitlement_id, expires_at }   // expires_at = ms since epoch
- *
- * Throws if the API key is missing or the call fails. Caller is responsible
- * for wrapping in a try/catch and surfacing a sensible error to the client.
- */
-async function grantPromotionalEntitlement(opts: {
-  appUserId: string;
-  tier: "premium" | "business";
-  endTimeMs: number;
-}): Promise<{ rcResponse: any }> {
-  const apiKey = process.env.REVENUECAT_REST_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "REVENUECAT_REST_API_KEY is not set on the function. Cannot grant promo."
-    );
-  }
-  const entitlement = TIER_ENTITLEMENT[opts.tier];
-  if (!entitlement) {
-    throw new Error(`Unknown tier: ${opts.tier}`);
-  }
-  if (!opts.endTimeMs || opts.endTimeMs <= Date.now()) {
-    throw new Error(`Invalid endTimeMs: ${opts.endTimeMs}`);
-  }
-
-  const projectId = await getRcProjectId();
-  const url = `${RC_API_BASE}/projects/${encodeURIComponent(
-    projectId
-  )}/customers/${encodeURIComponent(opts.appUserId)}/actions/grant_entitlement`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      entitlement_id: entitlement,
-      expires_at: opts.endTimeMs,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => "(unreadable)");
-    throw new Error(
-      `RevenueCat API returned ${res.status}: ${body.slice(0, 500)}`
-    );
-  }
-  const json = await res.json().catch(() => ({}));
-  return { rcResponse: json };
 }
 
 /**
@@ -196,10 +104,16 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
   // If RC fails, we don't burn a redemption slot. If the redemption write
   // fails after RC succeeds, the user has the entitlement and we'll
   // reconcile on the next webhook event (or via a manual cleanup).
+  const entitlementId = TIER_ENTITLEMENT[codeData.tier];
+  if (!entitlementId) {
+    res.status(500).json({ error: "Unknown tier on code." });
+    return;
+  }
+
   try {
     await grantPromotionalEntitlement({
       appUserId: userId,
-      tier: codeData.tier,
+      entitlementId,
       endTimeMs,
     });
   } catch (err: any) {

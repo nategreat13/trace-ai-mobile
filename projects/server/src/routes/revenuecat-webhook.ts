@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as admin from "firebase-admin";
 import { getDb } from "../firebase";
 import { fanOutConversion } from "../lib/ad-conversions";
+import { listActiveEntitlements } from "../lib/revenuecat-rest";
 
 export const revenuecatWebhookRoutes = Router();
 
@@ -315,12 +316,55 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       }
 
       case "EXPIRATION": {
-        await profileRef.update({
-          subscriptionStatus: "free",
-          subscriptionSource: null,
-          trialEndDate: null,
-        });
-        console.log("[RC Webhook] Subscription expired, reset to free");
+        // Don't blindly reset to free. The user may have other active
+        // entitlements (e.g. a real Premium expired but a Business promo
+        // is still valid, or vice-versa). Query RC for what remains and
+        // pick the highest-ranked tier among those.
+        //
+        // We deliberately leave subscriptionSource alone when something
+        // remains: V2's active_entitlements payload doesn't expose the
+        // source (store vs promotional), so the safest move is "don't
+        // overwrite". The next webhook that does carry source info
+        // (INITIAL_PURCHASE / NON_RENEWING_PURCHASE / etc.) will correct it.
+        let remaining: Awaited<ReturnType<typeof listActiveEntitlements>> = [];
+        try {
+          remaining = await listActiveEntitlements(app_user_id);
+        } catch (err) {
+          console.warn(
+            `[RC Webhook] EXPIRATION: failed to fetch active entitlements for ${app_user_id}; falling back to free:`,
+            err
+          );
+        }
+
+        const TIER_RANK: Record<string, number> = { premium: 2, business: 3 };
+        const tieredRemaining = remaining.filter(
+          (e) => typeof TIER_RANK[e.entitlement_id] === "number"
+        );
+
+        if (tieredRemaining.length === 0) {
+          await profileRef.update({
+            subscriptionStatus: "free",
+            subscriptionSource: null,
+            trialEndDate: null,
+          });
+          console.log(
+            "[RC Webhook] EXPIRATION: no entitlements remain, reset to free"
+          );
+        } else {
+          tieredRemaining.sort(
+            (a, b) => TIER_RANK[b.entitlement_id] - TIER_RANK[a.entitlement_id]
+          );
+          const winner = tieredRemaining[0];
+          const winnerTier = winner.entitlement_id as "premium" | "business";
+          const updates: Record<string, any> = { subscriptionStatus: winnerTier };
+          if (winner.expires_at) {
+            updates.trialEndDate = new Date(winner.expires_at);
+          }
+          await profileRef.update(updates);
+          console.log(
+            `[RC Webhook] EXPIRATION: ${tieredRemaining.length} entitlement(s) remain; set to ${winnerTier}`
+          );
+        }
         await logAnalyticsEvent("subscription_expired", app_user_id, baseEventProps);
         break;
       }
