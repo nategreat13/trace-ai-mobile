@@ -63,9 +63,10 @@ async function getRcProjectId(): Promise<string> {
 }
 
 /**
- * Grant a promotional entitlement on RevenueCat for `appUserId`. Uses the
- * V2 grant_entitlement action with an ISO 8601 duration:
+ * Grant a promotional entitlement on RevenueCat for `appUserId` until the
+ * given absolute end time. Uses the V2 grant_entitlement action:
  *   POST /v2/projects/{project_id}/customers/{customer_id}/actions/grant_entitlement
+ *   body: { entitlement_id, expires_at }   // expires_at = ms since epoch
  *
  * Throws if the API key is missing or the call fails. Caller is responsible
  * for wrapping in a try/catch and surfacing a sensible error to the client.
@@ -73,7 +74,7 @@ async function getRcProjectId(): Promise<string> {
 async function grantPromotionalEntitlement(opts: {
   appUserId: string;
   tier: "premium" | "business";
-  durationDays: number;
+  endTimeMs: number;
 }): Promise<{ rcResponse: any }> {
   const apiKey = process.env.REVENUECAT_REST_API_KEY;
   if (!apiKey) {
@@ -85,8 +86,8 @@ async function grantPromotionalEntitlement(opts: {
   if (!entitlement) {
     throw new Error(`Unknown tier: ${opts.tier}`);
   }
-  if (!opts.durationDays || opts.durationDays < 1) {
-    throw new Error(`Invalid durationDays: ${opts.durationDays}`);
+  if (!opts.endTimeMs || opts.endTimeMs <= Date.now()) {
+    throw new Error(`Invalid endTimeMs: ${opts.endTimeMs}`);
   }
 
   const projectId = await getRcProjectId();
@@ -101,10 +102,9 @@ async function grantPromotionalEntitlement(opts: {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    // ISO 8601 duration: P{N}D — e.g. P30D for 30 days, P365D for a year.
     body: JSON.stringify({
       entitlement_id: entitlement,
-      duration: `P${opts.durationDays}D`,
+      expires_at: opts.endTimeMs,
     }),
   });
 
@@ -200,7 +200,7 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
     await grantPromotionalEntitlement({
       appUserId: userId,
       tier: codeData.tier,
-      durationDays: codeData.durationDays,
+      endTimeMs,
     });
   } catch (err: any) {
     console.error("[redeem-promo] RC grant failed:", err?.message);
