@@ -29,11 +29,6 @@ export default function AnalyticsLifecycle() {
   const lastBackgroundedAtRef = useRef<number | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
-  // Keep a ref to the latest profile id so the AppState handler always has it
-  useEffect(() => {
-    profileIdRef.current = profile?.id ?? null;
-  }, [profile?.id]);
-
   // Mirror lastSeenAt to the user's profile doc. Fire-and-forget; the user
   // shouldn't see analytics writes affect anything UI-side.
   function mirrorLastSeenAt() {
@@ -46,12 +41,27 @@ export default function AnalyticsLifecycle() {
     });
   }
 
+  // Sync the profile-id ref AND mirror lastSeenAt the moment a profile id
+  // becomes available. The bare-mount cold-launch handler below runs
+  // BEFORE the profile finishes loading (auth + Firestore round-trip take
+  // a beat), so a mirror call from there silently no-ops because
+  // profileIdRef is still null. Doing the cold-launch mirror here, gated
+  // on profile?.id, fixes the never-mirrored bug for users whose only
+  // sessions are cold launches with the app left open.
+  useEffect(() => {
+    profileIdRef.current = profile?.id ?? null;
+    if (profile?.id) {
+      mirrorLastSeenAt();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
+
   useEffect(() => {
     // Cold launch — already a fresh process, but ensure session id is set
-    // and emit the open event.
+    // and emit the open event. The lastSeenAt mirror happens in the
+    // profile-watching effect above (see comment there for why).
     resetSessionId();
     logEvent("app_open", { source: "cold_launch", platform: Platform.OS });
-    mirrorLastSeenAt();
 
     const handleChange = (next: AppStateStatus) => {
       const prev = appStateRef.current;
