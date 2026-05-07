@@ -5,7 +5,7 @@ import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 
 export const promoRoutes = Router();
 
-const RC_API_BASE = "https://api.revenuecat.com/v1";
+const RC_API_BASE = "https://api.revenuecat.com/v2";
 
 /**
  * Tier → RevenueCat entitlement identifier. These are the public entitlement
@@ -28,9 +28,44 @@ interface PromoCodeDoc {
 }
 
 /**
- * Grant a promotional entitlement on RevenueCat for `appUserId` until the
- * given absolute end time. Mirrors the REST endpoint:
- *   POST /v1/subscribers/{app_user_id}/entitlements/{entitlement_id}/promotional
+ * RC V2 requires the project_id in the path. We auto-discover it from
+ * /v2/projects on first use and cache for the function's lifetime.
+ */
+let _cachedProjectId: string | null = null;
+
+async function getRcProjectId(): Promise<string> {
+  if (process.env.REVENUECAT_PROJECT_ID) {
+    return process.env.REVENUECAT_PROJECT_ID;
+  }
+  if (_cachedProjectId) return _cachedProjectId;
+  const apiKey = process.env.REVENUECAT_REST_API_KEY;
+  if (!apiKey) {
+    throw new Error("REVENUECAT_REST_API_KEY is not set");
+  }
+  const res = await fetch(`${RC_API_BASE}/projects?limit=10`, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(unreadable)");
+    throw new Error(
+      `Failed to list RC projects (${res.status}): ${body.slice(0, 300)}`
+    );
+  }
+  const data = (await res.json()) as { items?: Array<{ id: string }> };
+  if (!data.items?.length) {
+    throw new Error("No RC projects visible to this API key");
+  }
+  _cachedProjectId = data.items[0].id;
+  return _cachedProjectId;
+}
+
+/**
+ * Grant a promotional entitlement on RevenueCat for `appUserId`. Uses the
+ * V2 grant_entitlement action with an ISO 8601 duration:
+ *   POST /v2/projects/{project_id}/customers/{customer_id}/actions/grant_entitlement
  *
  * Throws if the API key is missing or the call fails. Caller is responsible
  * for wrapping in a try/catch and surfacing a sensible error to the client.
@@ -38,7 +73,7 @@ interface PromoCodeDoc {
 async function grantPromotionalEntitlement(opts: {
   appUserId: string;
   tier: "premium" | "business";
-  endTimeMs: number;
+  durationDays: number;
 }): Promise<{ rcResponse: any }> {
   const apiKey = process.env.REVENUECAT_REST_API_KEY;
   if (!apiKey) {
@@ -50,19 +85,27 @@ async function grantPromotionalEntitlement(opts: {
   if (!entitlement) {
     throw new Error(`Unknown tier: ${opts.tier}`);
   }
+  if (!opts.durationDays || opts.durationDays < 1) {
+    throw new Error(`Invalid durationDays: ${opts.durationDays}`);
+  }
 
-  const url = `${RC_API_BASE}/subscribers/${encodeURIComponent(
-    opts.appUserId
-  )}/entitlements/${encodeURIComponent(entitlement)}/promotional`;
+  const projectId = await getRcProjectId();
+  const url = `${RC_API_BASE}/projects/${encodeURIComponent(
+    projectId
+  )}/customers/${encodeURIComponent(opts.appUserId)}/actions/grant_entitlement`;
 
   const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
       "Content-Type": "application/json",
-      "X-Platform": "stripe", // arbitrary; required by the API
     },
-    body: JSON.stringify({ end_time_ms: opts.endTimeMs }),
+    // ISO 8601 duration: P{N}D — e.g. P30D for 30 days, P365D for a year.
+    body: JSON.stringify({
+      entitlement_id: entitlement,
+      duration: `P${opts.durationDays}D`,
+    }),
   });
 
   if (!res.ok) {
@@ -157,7 +200,7 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
     await grantPromotionalEntitlement({
       appUserId: userId,
       tier: codeData.tier,
-      endTimeMs,
+      durationDays: codeData.durationDays,
     });
   } catch (err: any) {
     console.error("[redeem-promo] RC grant failed:", err?.message);
