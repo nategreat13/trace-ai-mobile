@@ -97,6 +97,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ──── Admin Audit Log ────
+    // Append-only log of admin actions. Same access pattern as
+    // analyticsExclusions: server-only via Admin SDK; clients denied.
+    match /adminAuditLog/{docId} {
+      allow read, write: if false;
+    }
+
     // ──── Deny everything else ────
     match /{document=**} {
       allow read, write: if false;

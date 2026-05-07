@@ -7,6 +7,7 @@ import {
   removeExclusion,
   refreshAllUserIds,
 } from "@/lib/exclusions";
+import { logAuditEvent } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +16,17 @@ async function addByEmail(formData: FormData) {
   const email = (formData.get("email") as string | null)?.trim() ?? "";
   const note = (formData.get("note") as string | null)?.trim() ?? undefined;
   if (!email) {
-    redirect("/analytics/exclusions?error=email_required");
+    redirect("/admin/exclusions?error=email_required");
   }
   try {
     await addExclusionByEmail(email, note);
+    await logAuditEvent("exclusion.add_email", email, { note });
   } catch (err: any) {
-    redirect(`/analytics/exclusions?error=${encodeURIComponent(err?.message ?? "add_failed")}`);
+    redirect(`/admin/exclusions?error=${encodeURIComponent(err?.message ?? "add_failed")}`);
   }
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/exclusions");
-  redirect("/analytics/exclusions?added=email");
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/exclusions");
+  redirect("/admin/exclusions?added=email");
 }
 
 async function addByUserId(formData: FormData) {
@@ -32,16 +34,17 @@ async function addByUserId(formData: FormData) {
   const userId = (formData.get("userId") as string | null)?.trim() ?? "";
   const note = (formData.get("note") as string | null)?.trim() ?? undefined;
   if (!userId) {
-    redirect("/analytics/exclusions?error=userid_required");
+    redirect("/admin/exclusions?error=userid_required");
   }
   try {
     await addExclusionByUserId(userId, note);
+    await logAuditEvent("exclusion.add_user_id", userId, { note });
   } catch (err: any) {
-    redirect(`/analytics/exclusions?error=${encodeURIComponent(err?.message ?? "add_failed")}`);
+    redirect(`/admin/exclusions?error=${encodeURIComponent(err?.message ?? "add_failed")}`);
   }
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/exclusions");
-  redirect("/analytics/exclusions?added=userid");
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/exclusions");
+  redirect("/admin/exclusions?added=userid");
 }
 
 async function remove(formData: FormData) {
@@ -49,16 +52,18 @@ async function remove(formData: FormData) {
   const id = formData.get("id") as string | null;
   if (!id) return;
   await removeExclusion(id);
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/exclusions");
+  await logAuditEvent("exclusion.remove", id);
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/exclusions");
 }
 
 async function refresh() {
   "use server";
   const { updated } = await refreshAllUserIds();
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/exclusions");
-  redirect(`/analytics/exclusions?refreshed=${updated}`);
+  await logAuditEvent("exclusion.refresh", null, { updated });
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/exclusions");
+  redirect(`/admin/exclusions?refreshed=${updated}`);
 }
 
 export default async function ExclusionsPage({
@@ -70,13 +75,9 @@ export default async function ExclusionsPage({
   const exclusions = await listExclusions();
 
   return (
-    <main className="min-h-screen bg-gray-50 py-10 px-6">
-      <div className="max-w-3xl mx-auto">
-        <header className="mb-8">
-          <a href="/analytics" className="text-sm text-rose-500 hover:text-rose-600">
-            ← Back to dashboard
-          </a>
-          <h1 className="text-3xl font-bold text-gray-900 mt-1">Excluded accounts</h1>
+    <div className="max-w-3xl mx-auto">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Excluded accounts</h1>
           <p className="text-sm text-gray-500 mt-1">
             Internal, test, and employee accounts to keep out of dashboard
             stats. Excluded accounts still produce events in the database —
@@ -260,8 +261,7 @@ export default async function ExclusionsPage({
               </tbody>
             </table>
           )}
-        </section>
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }

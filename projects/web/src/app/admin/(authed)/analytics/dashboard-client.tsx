@@ -124,42 +124,23 @@ export default function AnalyticsDashboardClient({
   const totalSpendCents = Object.values(spendByPlatform).reduce((a, b) => a + b, 0);
 
   return (
-    <main className="min-h-screen bg-gray-50 py-10 px-6">
-      <div className="max-w-7xl mx-auto">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Trace Analytics</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Last 30 days. Data refreshes on every page load.
-              {excludedCount > 0 && (
-                <>
-                  {" · "}
-                  <a
-                    href="/analytics/exclusions"
-                    className="text-rose-500 hover:text-rose-600"
-                  >
-                    {excludedCount} account{excludedCount === 1 ? "" : "s"} excluded
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <a
-              href="/analytics/exclusions"
-              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:border-gray-400"
-            >
-              Exclusions
-            </a>
-            <form action="/analytics/logout" method="POST">
-              <button
-                type="submit"
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:border-gray-400"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
+    <>
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Last 30 days. Data refreshes on every page load.
+            {excludedCount > 0 && (
+              <>
+                {" · "}
+                <a
+                  href="/admin/exclusions"
+                  className="text-rose-500 hover:text-rose-600"
+                >
+                  {excludedCount} account{excludedCount === 1 ? "" : "s"} excluded
+                </a>
+              </>
+            )}
+          </p>
         </header>
 
         {/* Top-line stats */}
@@ -582,7 +563,7 @@ export default function AnalyticsDashboardClient({
                 Manually enter monthly ad spend per platform to compute CAC.
               </p>
               <a
-                href="/analytics/spend"
+                href="/admin/spend"
                 className="text-sm font-medium text-rose-500 hover:text-rose-600"
               >
                 Manage spend →
@@ -656,7 +637,6 @@ export default function AnalyticsDashboardClient({
             </div>
           </Section>
         )}
-      </div>
-    </main>
+    </>
   );
 }

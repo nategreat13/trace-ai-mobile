@@ -7,14 +7,14 @@ async function login(formData: FormData) {
   "use server";
 
   const password = formData.get("password");
-  const next = (formData.get("next") as string) || "/analytics";
+  const next = (formData.get("next") as string) || "/admin/analytics";
 
   if (typeof password !== "string") {
-    redirect("/analytics/login?error=1");
+    redirect("/admin/login?error=1");
   }
 
   if (password !== process.env.ANALYTICS_PASSWORD) {
-    redirect(`/analytics/login?error=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
+    redirect(`/admin/login?error=1${next ? `&next=${encodeURIComponent(next)}` : ""}`);
   }
 
   const jar = await cookies();
@@ -26,7 +26,7 @@ async function login(formData: FormData) {
     maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 
-  redirect(next || "/analytics");
+  redirect(next || "/admin/analytics");
 }
 
 export default async function AnalyticsLoginPage({
@@ -36,7 +36,7 @@ export default async function AnalyticsLoginPage({
 }) {
   const params = await searchParams;
   const error = params?.error === "1";
-  const next = params?.next || "/analytics";
+  const next = params?.next || "/admin/analytics";
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

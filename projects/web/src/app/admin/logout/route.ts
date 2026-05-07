@@ -6,6 +6,6 @@ const ANALYTICS_COOKIE = "trace_analytics_auth";
 export async function POST(req: Request) {
   const jar = await cookies();
   jar.delete(ANALYTICS_COOKIE);
-  const url = new URL("/analytics/login", req.url);
+  const url = new URL("/admin/login", req.url);
   return NextResponse.redirect(url, { status: 303 });
 }

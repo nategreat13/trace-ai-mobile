@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/firebase-admin";
+import { logAuditEvent } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -13,21 +14,23 @@ async function saveSpend(formData: FormData) {
   const month = formData.get("month") as string;
   const dollars = parseFloat((formData.get("spend") as string) ?? "0");
   if (!platform || !month || !Number.isFinite(dollars)) {
-    redirect("/analytics/spend?error=1");
+    redirect("/admin/spend?error=1");
   }
 
   const db = getDb();
   const id = `${platform}_${month}`;
+  const spendCents = Math.round(dollars * 100);
   await db.collection("adSpend").doc(id).set({
     platform,
     month,
-    spendCents: Math.round(dollars * 100),
+    spendCents,
     updatedAt: new Date(),
   });
+  await logAuditEvent("spend.set", id, { platform, month, spendCents });
 
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/spend");
-  redirect("/analytics/spend?saved=1");
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/spend");
+  redirect("/admin/spend?saved=1");
 }
 
 async function deleteSpend(formData: FormData) {
@@ -36,8 +39,9 @@ async function deleteSpend(formData: FormData) {
   if (!id) return;
   const db = getDb();
   await db.collection("adSpend").doc(id).delete();
-  revalidatePath("/analytics");
-  revalidatePath("/analytics/spend");
+  await logAuditEvent("spend.delete", id);
+  revalidatePath("/admin/analytics");
+  revalidatePath("/admin/spend");
 }
 
 export default async function AdSpendPage({
@@ -60,19 +64,13 @@ export default async function AdSpendPage({
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   return (
-    <main className="min-h-screen bg-gray-50 py-10 px-6">
-      <div className="max-w-3xl mx-auto">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <a href="/analytics" className="text-sm text-rose-500 hover:text-rose-600">
-              ← Back to dashboard
-            </a>
-            <h1 className="text-3xl font-bold text-gray-900 mt-1">Ad spend</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Enter monthly ad spend per platform. Used to compute CAC on the dashboard.
-            </p>
-          </div>
-        </header>
+    <div className="max-w-3xl mx-auto">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Ad spend</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Enter monthly ad spend per platform. Used to compute CAC on the dashboard.
+        </p>
+      </header>
 
         <section className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Add / update spend</h2>
@@ -172,8 +170,7 @@ export default async function AdSpendPage({
               </tbody>
             </table>
           )}
-        </section>
-      </div>
-    </main>
+      </section>
+    </div>
   );
 }
