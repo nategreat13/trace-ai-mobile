@@ -82,6 +82,12 @@ export default async function ExclusionsPage({
             stats. Excluded accounts still produce events in the database —
             they're just filtered out of every chart, funnel, and count.
           </p>
+          <p className="text-xs text-gray-400 mt-2">
+            <span className="font-medium">Plus:</span> events from accounts
+            that have been deleted are also automatically filtered out of
+            the dashboard (no entry needed here). Anonymous "guest" events
+            from pre-signup interactions are still counted.
+          </p>
         </header>
 
         {/* Status banner */}

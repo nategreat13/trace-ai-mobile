@@ -11,20 +11,27 @@ import {
   getSubscriptionLifecycle,
   getPurchaseFailuresByDay,
 } from "@/lib/analytics-queries";
-import { getExcludedSets } from "@/lib/exclusions";
+import { getExcludedSets, getValidUserIds } from "@/lib/exclusions";
 import AnalyticsDashboardClient from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default async function AnalyticsPage() {
-  // Resolve the exclusion list first (one Firestore round-trip) so every
-  // downstream query can filter test/internal accounts out before
-  // aggregation.
-  const excluded = await getExcludedSets().catch((e) => {
-    console.error("[analytics] failed to load exclusions:", e);
-    return { userIds: new Set<string>(), emails: new Set<string>() };
-  });
+  // Resolve the exclusion list and the set of valid (non-deleted) userIds
+  // up front so every downstream query can filter both test/internal
+  // accounts AND orphan events (events whose authoring user no longer
+  // has a userProfile).
+  const [excluded, validUserIds] = await Promise.all([
+    getExcludedSets().catch((e) => {
+      console.error("[analytics] failed to load exclusions:", e);
+      return { userIds: new Set<string>(), emails: new Set<string>() };
+    }),
+    getValidUserIds().catch((e) => {
+      console.error("[analytics] failed to load valid userIds:", e);
+      return new Set<string>();
+    }),
+  ]);
   const excludedCount = excluded.userIds.size + excluded.emails.size;
 
   // Kick off all the queries in parallel
@@ -46,15 +53,15 @@ export default async function AnalyticsPage() {
       return null;
     }),
     getSignupsByDay(30, excluded).catch(() => []),
-    getEventCountsByName(30, excluded).catch(() => []),
-    getFunnelCounts(30, excluded).catch(() => null),
-    getRetentionCohorts(8, excluded).catch(() => []),
+    getEventCountsByName(30, excluded, validUserIds).catch(() => []),
+    getFunnelCounts(30, excluded, validUserIds).catch(() => null),
+    getRetentionCohorts(8, excluded, validUserIds).catch(() => []),
     getAdSpend().catch(() => []),
     getUserCount(excluded).catch(() => 0),
-    getPurchaseFlowFunnel(30, excluded).catch(() => null),
-    getLoginCount(30, excluded).catch(() => 0),
-    getSubscriptionLifecycle(30, excluded).catch(() => null),
-    getPurchaseFailuresByDay(30, excluded).catch(() => []),
+    getPurchaseFlowFunnel(30, excluded, validUserIds).catch(() => null),
+    getLoginCount(30, excluded, validUserIds).catch(() => 0),
+    getSubscriptionLifecycle(30, excluded, validUserIds).catch(() => null),
+    getPurchaseFailuresByDay(30, excluded, validUserIds).catch(() => []),
   ]);
 
   return (

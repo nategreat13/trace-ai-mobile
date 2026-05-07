@@ -164,6 +164,29 @@ export async function removeExclusion(docId: string): Promise<void> {
 }
 
 /**
+ * Returns the set of every userId currently present in `userProfiles`.
+ *
+ * Used by the dashboard to filter out "orphan" events — events whose
+ * authoring userId no longer has a userProfile, typically because the
+ * user deleted their account. Those events stay in the database (we
+ * don't bulk-delete on account deletion) but they shouldn't appear on
+ * the live dashboard.
+ *
+ * Scale note: returns N docs where N = total userProfiles. Cheap up to
+ * ~100k users; past that, switch to a maintained counter set.
+ */
+export async function getValidUserIds(): Promise<Set<string>> {
+  const db = getDb();
+  const snap = await db.collection("userProfiles").select("userId").get();
+  const ids = new Set<string>();
+  snap.forEach((doc) => {
+    const uid = doc.data().userId as string | undefined;
+    if (uid) ids.add(uid);
+  });
+  return ids;
+}
+
+/**
  * Re-resolve userIds for every email-based exclusion. Useful if a user
  * was excluded before they signed up, or if an account got new
  * userProfile docs after sign-in/sign-up flow changes.

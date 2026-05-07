@@ -3,11 +3,15 @@ import type { Firestore } from "firebase-admin/firestore";
 import type { ExcludedSets } from "./exclusions";
 
 /**
- * All public query functions accept an optional `excluded: ExcludedSets`
- * argument. When provided, events / users belonging to those userIds (or
- * matching emails, for userProfile-keyed queries) are filtered out before
- * aggregation. This is how internal/test accounts are kept out of the
- * dashboard numbers.
+ * All public query functions accept two optional filter arguments:
+ *
+ *   - excluded:      explicit exclusion list (test/internal accounts).
+ *   - validUserIds:  the set of userIds that currently have a userProfile.
+ *                    When provided, events whose author no longer has a
+ *                    profile (i.e. the account was deleted) are filtered
+ *                    as orphans. The literal "guest" userId is always
+ *                    kept since pre-signup events are real anonymous
+ *                    interactions, not orphans.
  *
  * Implementation note: where the previous code used Firestore's `count()`
  * aggregation we now fetch the matching docs with a narrow `select()` and
@@ -17,12 +21,25 @@ import type { ExcludedSets } from "./exclusions";
  * exclusions than that).
  */
 
-function isExcludedUid(
+/**
+ * Returns true if an event with this userId should be counted.
+ *
+ *   - "guest" events: always counted (pre-signup interactions).
+ *   - Empty / missing userId: counted (we have no signal to filter on).
+ *   - In the explicit exclusion list: skipped.
+ *   - Has a userId but no longer has a userProfile (orphan): skipped
+ *     when validUserIds is provided.
+ */
+function shouldIncludeUid(
   userId: string | null | undefined,
-  excluded: ExcludedSets | undefined
+  excluded: ExcludedSets | undefined,
+  validUserIds: Set<string> | undefined
 ): boolean {
-  if (!excluded || !userId) return false;
-  return excluded.userIds.has(userId);
+  if (!userId) return true;
+  if (userId === "guest") return true;
+  if (excluded?.userIds.has(userId)) return false;
+  if (validUserIds && !validUserIds.has(userId)) return false;
+  return true;
 }
 
 /**
@@ -33,6 +50,9 @@ export async function getSignupsByDay(
   days = 30,
   excluded?: ExcludedSets
 ): Promise<Array<{ date: string; count: number }>> {
+  // No validUserIds filter here: by definition every userProfile we read
+  // exists, so there's nothing to "orphan". The only filter is the
+  // explicit exclusion list.
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -76,7 +96,8 @@ export async function getSignupsByDay(
  */
 export async function getEventCountsByName(
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<Array<{ name: string; count: number }>> {
   const db = getDb();
   const since = new Date();
@@ -91,7 +112,7 @@ export async function getEventCountsByName(
   const counts: Record<string, number> = {};
   snap.forEach((doc) => {
     const data = doc.data();
-    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    if (!shouldIncludeUid(data.userId as string | undefined, excluded, validUserIds)) return;
     const name = data.name as string | undefined;
     if (!name) return;
     counts[name] = (counts[name] ?? 0) + 1;
@@ -107,13 +128,17 @@ export async function getEventCountsByName(
  * Event names used: landing_viewed, signup_completed, onboarding_completed,
  *   paywall_viewed, purchase_completed.
  */
-export async function getFunnelCounts(days = 30, excluded?: ExcludedSets) {
+export async function getFunnelCounts(
+  days = 30,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+) {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
   // Fetch matching events + userId (rather than count()) so we can filter
-  // excluded users in memory.
+  // excluded + orphan users in memory.
   async function countEvent(name: string): Promise<number> {
     const snap = await db
       .collection("events")
@@ -121,10 +146,9 @@ export async function getFunnelCounts(days = 30, excluded?: ExcludedSets) {
       .where("name", "==", name)
       .select("userId")
       .get();
-    if (!excluded || excluded.userIds.size === 0) return snap.size;
     let n = 0;
     snap.forEach((doc) => {
-      if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+      if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
     });
     return n;
   }
@@ -151,7 +175,11 @@ export async function getFunnelCounts(days = 30, excluded?: ExcludedSets) {
  * Returns weekly retention cohorts. Each cohort = users who signed up in that
  * week. The array of percentages is Day 0, Day 1, Day 7, Day 30.
  */
-export async function getRetentionCohorts(weeks = 8, excluded?: ExcludedSets) {
+export async function getRetentionCohorts(
+  weeks = 8,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+) {
   const db = getDb();
   const now = new Date();
   const cohorts: Array<{
@@ -192,7 +220,7 @@ export async function getRetentionCohorts(weeks = 8, excluded?: ExcludedSets) {
 
     if (users.length === 0) continue;
 
-    const retained = await retentionFor(db, users, excluded);
+    const retained = await retentionFor(db, users, excluded, validUserIds);
     cohorts.push({
       weekStart: weekStart.toISOString().slice(0, 10),
       size: users.length,
@@ -208,7 +236,8 @@ export async function getRetentionCohorts(weeks = 8, excluded?: ExcludedSets) {
 async function retentionFor(
   db: Firestore,
   users: Array<{ uid: string; created: Date }>,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<{ d1: number; d7: number; d30: number }> {
   // For small cohorts, check each user for activity within the day-1/7/30 windows.
   // We define "retained" as: any event fired by the user within the window.
@@ -234,7 +263,7 @@ async function retentionFor(
         .get();
       snap.forEach((doc) => {
         const uid = doc.data().userId as string | undefined;
-        if (isExcludedUid(uid, excluded)) return;
+        if (!shouldIncludeUid(uid, excluded, validUserIds)) return;
         if (uid) retained.add(uid);
       });
     }
@@ -315,7 +344,8 @@ export async function getUserCount(excluded?: ExcludedSets): Promise<number> {
  */
 export async function getPurchaseFlowFunnel(
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<{
   paywallViewed: number;
   paywallCtaTapped: number;
@@ -336,10 +366,9 @@ export async function getPurchaseFlowFunnel(
       .where("name", "==", name)
       .select("userId")
       .get();
-    if (!excluded || excluded.userIds.size === 0) return snap.size;
     let n = 0;
     snap.forEach((doc) => {
-      if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+      if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
     });
     return n;
   }
@@ -358,7 +387,7 @@ export async function getPurchaseFlowFunnel(
   let purchaseFailedCount = 0;
   failedSnap.forEach((doc) => {
     const data = doc.data();
-    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    if (!shouldIncludeUid(data.userId as string | undefined, excluded, validUserIds)) return;
     purchaseFailedCount++;
     const props = (data.props ?? {}) as Record<string, unknown>;
     const code = typeof props.error_code === "string" || typeof props.error_code === "number"
@@ -396,7 +425,8 @@ export async function getPurchaseFlowFunnel(
  */
 export async function getLoginCount(
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<number> {
   const db = getDb();
   const since = new Date();
@@ -407,10 +437,9 @@ export async function getLoginCount(
     .where("name", "==", "login")
     .select("userId")
     .get();
-  if (!excluded || excluded.userIds.size === 0) return snap.size;
   let n = 0;
   snap.forEach((doc) => {
-    if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+    if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
   });
   return n;
 }
@@ -426,7 +455,8 @@ async function tierBreakdown(
   db: Firestore,
   name: string,
   since: Date,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<TierBreakdown> {
   const snap = await db
     .collection("events")
@@ -438,7 +468,7 @@ async function tierBreakdown(
   const out: TierBreakdown = { total: 0, premium: 0, business: 0, unknown: 0 };
   snap.forEach((doc) => {
     const data = doc.data();
-    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    if (!shouldIncludeUid(data.userId as string | undefined, excluded, validUserIds)) return;
     out.total++;
     const props = (data.props ?? {}) as Record<string, unknown>;
     const tier = props.tier;
@@ -462,7 +492,8 @@ async function tierBreakdown(
  */
 export async function getSubscriptionLifecycle(
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<{
   renewed: TierBreakdown;
   voluntaryChurn: TierBreakdown;
@@ -477,12 +508,12 @@ export async function getSubscriptionLifecycle(
 
   const [renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled] =
     await Promise.all([
-      tierBreakdown(db, "subscription_renewed", since, excluded),
-      tierBreakdown(db, "subscription_canceled", since, excluded),
-      tierBreakdown(db, "subscription_expired", since, excluded),
-      tierBreakdown(db, "billing_issue", since, excluded),
-      tierBreakdown(db, "subscription_changed", since, excluded),
-      tierBreakdown(db, "subscription_uncanceled", since, excluded),
+      tierBreakdown(db, "subscription_renewed", since, excluded, validUserIds),
+      tierBreakdown(db, "subscription_canceled", since, excluded, validUserIds),
+      tierBreakdown(db, "subscription_expired", since, excluded, validUserIds),
+      tierBreakdown(db, "billing_issue", since, excluded, validUserIds),
+      tierBreakdown(db, "subscription_changed", since, excluded, validUserIds),
+      tierBreakdown(db, "subscription_uncanceled", since, excluded, validUserIds),
     ]);
 
   return { renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled };
@@ -495,7 +526,8 @@ export async function getSubscriptionLifecycle(
  */
 export async function getPurchaseFailuresByDay(
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<Array<{ date: string; count: number }>> {
   const db = getDb();
   const since = new Date();
@@ -518,7 +550,7 @@ export async function getPurchaseFailuresByDay(
 
   snap.forEach((doc) => {
     const data = doc.data();
-    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    if (!shouldIncludeUid(data.userId as string | undefined, excluded, validUserIds)) return;
     const ts: any = data.timestamp;
     const date = ts?.toDate?.()?.toISOString().slice(0, 10);
     if (date && buckets[date] !== undefined) buckets[date]++;
