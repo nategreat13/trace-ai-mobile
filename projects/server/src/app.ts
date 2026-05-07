@@ -3,6 +3,7 @@ import cors from "cors";
 import { dealRoutes } from "./routes/deals";
 import { aiRoutes } from "./routes/ai";
 import { revenuecatWebhookRoutes } from "./routes/revenuecat-webhook";
+import { promoRoutes } from "./routes/promo";
 
 export const app = express();
 
@@ -12,6 +13,7 @@ app.use(express.json());
 app.use(dealRoutes);
 app.use(aiRoutes);
 app.use(revenuecatWebhookRoutes);
+app.use(promoRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

@@ -74,7 +74,11 @@ export type AnalyticsEventName =
   | "subscription_changed"
   | "subscription_canceled"
   | "subscription_expired"
-  | "billing_issue";
+  | "billing_issue"
+  // Promo code redemption flow (client-side)
+  | "promo_redeem_attempted"
+  | "promo_redeem_succeeded"
+  | "promo_redeem_failed";
 
 let currentUserId: string | null = null;
 

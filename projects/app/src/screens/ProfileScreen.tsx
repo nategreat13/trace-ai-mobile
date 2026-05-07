@@ -32,11 +32,13 @@ import {
   Share2,
   Pencil,
   Camera,
+  ChevronRight,
 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { logout, deleteAuthUser } from "../services/auth";
+import PromoCodeModal from "../components/PromoCodeModal";
 import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
@@ -59,6 +61,7 @@ export default function ProfileScreen() {
   const [tempFirstName, setTempFirstName] = useState("");
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -464,6 +467,37 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </LinearGradient>
 
+          {/* Promo code redemption */}
+          <TouchableOpacity
+            onPress={() => setShowPromoModal(true)}
+            activeOpacity={0.85}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              paddingHorizontal: 18,
+              paddingVertical: 14,
+              gap: 12,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+              <Text style={{ fontSize: 22 }}>🎁</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
+                  Have a promo code?
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                  Tap to redeem.
+                </Text>
+              </View>
+            </View>
+            <ChevronRight color={theme.mutedForeground} size={18} />
+          </TouchableOpacity>
+
           {/* Preferences */}
           <View
             style={{
@@ -741,6 +775,12 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Promo code redemption modal */}
+      <PromoCodeModal
+        visible={showPromoModal}
+        onClose={() => setShowPromoModal(false)}
+      />
 
       {/* Name edit modal */}
       <Modal visible={editingName} transparent animationType="fade">
