@@ -6,7 +6,12 @@ import {
   getUserEvents,
   getUserCollectionCounts,
 } from "@/lib/users-queries";
-import { getExcludedSets, addExclusionByUserId, removeExclusion } from "@/lib/exclusions";
+import {
+  getExcludedSets,
+  addExclusionByUserId,
+  removeExclusion,
+  listExclusions,
+} from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
 import { formatDate, formatMonthDayTime, relativeFromNow } from "@/lib/format";
 
@@ -97,7 +102,6 @@ export default async function UserDetailPage({
 
   // Find the doc IDs corresponding to this user in the exclusion list
   // (need them for the unexclude form).
-  const { listExclusions } = await import("@/lib/exclusions");
   const exclusionDocs = isExcluded
     ? (await listExclusions()).filter(
         (e) =>
