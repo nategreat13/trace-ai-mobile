@@ -10,6 +10,7 @@ export interface UserRow {
   displayName: string | null;
   homeAirport: string | null;
   subscriptionStatus: string;
+  subscriptionSource: "store" | "promo" | null;
   trialEndDate: Date | null;
   createdAt: Date | null;
   lastSeenAt: Date | null;
@@ -44,6 +45,7 @@ export async function listUsers(opts: {
       "displayName",
       "homeAirport",
       "subscriptionStatus",
+      "subscriptionSource",
       "trialEndDate",
       "createdAt",
       "lastSeenAt",
@@ -71,6 +73,8 @@ export async function listUsers(opts: {
       displayName,
       homeAirport: (data.homeAirport as string | undefined) ?? null,
       subscriptionStatus: (data.subscriptionStatus as string | undefined) ?? "free",
+      subscriptionSource:
+        (data.subscriptionSource as "store" | "promo" | undefined) ?? null,
       trialEndDate: (data.trialEndDate as any)?.toDate?.() ?? null,
       createdAt: (data.createdAt as any)?.toDate?.() ?? null,
       lastSeenAt: (data.lastSeenAt as any)?.toDate?.() ?? null,
@@ -147,6 +151,7 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
       displayName: null,
       homeAirport: null,
       subscriptionStatus: "deleted",
+      subscriptionSource: null,
       trialEndDate: null,
       createdAt: null,
       lastSeenAt: null,
@@ -188,6 +193,8 @@ export async function getUserDetail(userId: string): Promise<UserDetail | null> 
     displayName: (data.displayName as string | undefined) ?? null,
     homeAirport: (data.homeAirport as string | undefined) ?? null,
     subscriptionStatus: (data.subscriptionStatus as string | undefined) ?? "free",
+    subscriptionSource:
+      (data.subscriptionSource as "store" | "promo" | undefined) ?? null,
     trialEndDate: (data.trialEndDate as any)?.toDate?.() ?? null,
     createdAt: (data.createdAt as any)?.toDate?.() ?? null,
     lastSeenAt: (data.lastSeenAt as any)?.toDate?.() ?? null,

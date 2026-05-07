@@ -10,6 +10,13 @@ export interface UserProfile {
   dealTypes: string[];
   travelTimeframe: string[];
   subscriptionStatus: "free" | "trial" | "premium" | "business";
+  /**
+   * Where the user's current paid tier came from:
+   *   "store" — real subscription via App Store / Play Store (RC webhook)
+   *   "promo" — granted via /redeem-promo (RC promotional entitlement)
+   * Null/unset means free or legacy users with no recorded source.
+   */
+  subscriptionSource?: "store" | "promo" | null;
   trialEndDate: Date | null;
   swipeCount: number;
   streakDays: number;

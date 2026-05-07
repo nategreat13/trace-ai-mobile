@@ -158,6 +158,14 @@ export default async function UserDetailPage({
             >
               {user.subscriptionStatus}
             </span>
+            {user.subscriptionSource === "promo" && (
+              <span className="inline-block px-2.5 py-1 rounded border border-amber-200 bg-amber-50 text-amber-700 text-xs font-semibold uppercase tracking-wider">
+                🎁 promo
+              </span>
+            )}
+            {user.subscriptionSource === "store" && (user.subscriptionStatus === "premium" || user.subscriptionStatus === "business") && (
+              <span className="text-xs text-gray-500">paid subscriber</span>
+            )}
             {!user.exists && (
               <span className="text-xs text-red-600 font-medium">
                 (userProfile no longer exists)
@@ -228,6 +236,16 @@ export default async function UserDetailPage({
         {/* Subscription */}
         <Card title="Subscription">
           <Row label="Status" value={user.subscriptionStatus} />
+          <Row
+            label="Source"
+            value={
+              user.subscriptionSource === "promo"
+                ? "🎁 Promo grant"
+                : user.subscriptionSource === "store"
+                  ? "App Store / Play Store"
+                  : "—"
+            }
+          />
           <Row label="First purchase" value={formatDate(user.firstPurchaseAt, true)} />
           <Row label="Last purchase" value={formatDate(user.lastPurchaseAt, true)} />
           <Row label="Lifetime revenue" value={dollars(user.lifetimeRevenueCents)} />

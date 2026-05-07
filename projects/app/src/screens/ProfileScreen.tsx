@@ -408,16 +408,41 @@ export default function ProfileScreen() {
                 marginBottom: 16,
               }}
             >
-              <View>
-                <Text
-                  style={{
-                    fontWeight: "600",
-                    color: theme.foreground,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {profile?.subscriptionStatus || "free"}
-                </Text>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <Text
+                    style={{
+                      fontWeight: "600",
+                      color: theme.foreground,
+                      textTransform: "capitalize",
+                    }}
+                  >
+                    {profile?.subscriptionStatus || "free"}
+                  </Text>
+                  {profile?.subscriptionSource === "promo" && (
+                    <View
+                      style={{
+                        backgroundColor: colors.brand.amber50,
+                        borderWidth: 1,
+                        borderColor: colors.brand.amber200,
+                        borderRadius: 6,
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "800",
+                          color: colors.brand.amber600,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        🎁 PROMO
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Text
                   style={{
                     fontSize: 12,
@@ -428,26 +453,33 @@ export default function ProfileScreen() {
                   {profile?.subscriptionStatus === "trial" &&
                   profile?.trialEndDate
                     ? `Trial ends ${new Date(profile.trialEndDate).toLocaleDateString()}`
-                    : profile?.subscriptionStatus === "premium" ||
-                        profile?.subscriptionStatus === "business"
-                      ? "Active subscription"
-                      : "Upgrade to unlock premium features"}
+                    : profile?.subscriptionSource === "promo" &&
+                        profile?.trialEndDate
+                      ? `Promo access through ${new Date(profile.trialEndDate).toLocaleDateString()}`
+                      : profile?.subscriptionStatus === "premium" ||
+                          profile?.subscriptionStatus === "business"
+                        ? "Active subscription"
+                        : "Upgrade to unlock premium features"}
                 </Text>
               </View>
               <Crown color={colors.brand.rose500} size={20} />
             </View>
             <TouchableOpacity
               onPress={() => {
-                if (
-                  profile?.subscriptionStatus === "premium" ||
-                  profile?.subscriptionStatus === "business"
-                ) {
+                const isPromoAccess = profile?.subscriptionSource === "promo";
+                const hasPaidStoreSub =
+                  !isPromoAccess &&
+                  (profile?.subscriptionStatus === "premium" ||
+                    profile?.subscriptionStatus === "business");
+                if (hasPaidStoreSub) {
                   Linking.openURL(
                     Platform.OS === "ios"
                       ? "https://apps.apple.com/account/subscriptions"
                       : "https://play.google.com/store/account/subscriptions"
                   );
                 } else {
+                  // Promo users + free users both go to the paywall — promo
+                  // users so they can subscribe before their grant expires.
                   navigation.navigate("Paywall", { entryPoint: "profile_subscription_row" });
                 }
               }}
@@ -459,10 +491,12 @@ export default function ProfileScreen() {
               }}
             >
               <Text style={{ color: "#fff", fontSize: 14, fontWeight: "600" }}>
-                {profile?.subscriptionStatus === "premium" ||
-                profile?.subscriptionStatus === "business"
-                  ? "Manage Subscription"
-                  : "View Plans"}
+                {profile?.subscriptionSource === "promo"
+                  ? `Subscribe to keep ${profile?.subscriptionStatus === "business" ? "Business" : "Premium"}`
+                  : profile?.subscriptionStatus === "premium" ||
+                      profile?.subscriptionStatus === "business"
+                    ? "Manage Subscription"
+                    : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>

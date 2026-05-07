@@ -148,7 +148,14 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           break;
         }
 
-        const updates: Record<string, any> = { subscriptionStatus: tier };
+        const updates: Record<string, any> = {
+          subscriptionStatus: tier,
+          // Real purchase / renewal / uncancellation = store-sourced.
+          // The /redeem-promo endpoint sets "promo" when a promo grant
+          // is the winning tier; this overwrites it correctly when a
+          // real purchase later supersedes a promo.
+          subscriptionSource: "store",
+        };
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
         }
@@ -240,7 +247,10 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           );
           break;
         }
-        const updates: Record<string, any> = { subscriptionStatus: tier };
+        const updates: Record<string, any> = {
+          subscriptionStatus: tier,
+          subscriptionSource: "promo",
+        };
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
         }
@@ -274,7 +284,10 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           break;
         }
 
-        const updates: Record<string, any> = { subscriptionStatus: tier };
+        const updates: Record<string, any> = {
+          subscriptionStatus: tier,
+          subscriptionSource: "store",
+        };
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
         }
@@ -304,6 +317,7 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       case "EXPIRATION": {
         await profileRef.update({
           subscriptionStatus: "free",
+          subscriptionSource: null,
           trialEndDate: null,
         });
         console.log("[RC Webhook] Subscription expired, reset to free");

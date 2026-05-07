@@ -239,10 +239,17 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
       const curRank = TIER_RANK[cur.subscriptionStatus ?? "free"] ?? 0;
       const newRank = TIER_RANK[codeData.tier] ?? 0;
       const winningTier = newRank >= curRank ? codeData.tier : cur.subscriptionStatus;
-      await profileDoc.ref.update({
+      // Source flag: only mark as "promo" if the granted tier actually
+      // wins — otherwise the user has a higher real subscription and we
+      // shouldn't relabel them as a promo user.
+      const updates: Record<string, any> = {
         subscriptionStatus: winningTier,
         trialEndDate: new Date(endTimeMs),
-      });
+      };
+      if (winningTier === codeData.tier) {
+        updates.subscriptionSource = "promo";
+      }
+      await profileDoc.ref.update(updates);
     }
   } catch (err) {
     console.warn(
