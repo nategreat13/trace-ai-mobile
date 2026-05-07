@@ -210,6 +210,48 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
     return;
   }
 
+  // Mirror the granted tier to the user's userProfile directly. RC's
+  // webhook also handles this for "new" grants (NON_RENEWING_PURCHASE),
+  // but RC stays silent when the user already has the entitlement
+  // active (e.g. extending an existing promo or granting a tier they
+  // already hold) — in that case the webhook never fires and the
+  // profile would be stuck on whatever it was before. Writing directly
+  // here makes the redemption self-contained and idempotent.
+  //
+  // We pick the *higher* tier between current and granted so a Premium
+  // user redeeming a Business code goes to Business, but a Business
+  // user redeeming a Premium code keeps Business (don't downgrade).
+  try {
+    const profileQuery = await db
+      .collection("userProfiles")
+      .where("userId", "==", userId)
+      .limit(1)
+      .get();
+    if (!profileQuery.empty) {
+      const profileDoc = profileQuery.docs[0];
+      const cur = profileDoc.data() as { subscriptionStatus?: string };
+      const TIER_RANK: Record<string, number> = {
+        free: 0,
+        trial: 1,
+        premium: 2,
+        business: 3,
+      };
+      const curRank = TIER_RANK[cur.subscriptionStatus ?? "free"] ?? 0;
+      const newRank = TIER_RANK[codeData.tier] ?? 0;
+      const winningTier = newRank >= curRank ? codeData.tier : cur.subscriptionStatus;
+      await profileDoc.ref.update({
+        subscriptionStatus: winningTier,
+        trialEndDate: new Date(endTimeMs),
+      });
+    }
+  } catch (err) {
+    console.warn(
+      `[redeem-promo] Profile mirror failed for ${userId} (RC grant succeeded). ` +
+        `Webhook will reconcile if it fires:`,
+      err
+    );
+  }
+
   // Now write the redemption record + bump the counter atomically. If the
   // counter check fails inside the transaction (because we hit the cap
   // between our pre-check and now), we still have an RC grant out there —
