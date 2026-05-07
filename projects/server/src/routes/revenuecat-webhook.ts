@@ -224,6 +224,36 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         break;
       }
 
+      case "NON_RENEWING_PURCHASE": {
+        // RC fires this for promotional entitlements granted via the API
+        // (e.g. our /redeem-promo endpoint). Same effect on subscription
+        // status as INITIAL_PURCHASE — but we skip ad conversion fanout
+        // (these aren't real acquisitions) and log a separate analytics
+        // event so promos are distinguishable from real purchases.
+        const tier =
+          tierFromEntitlements(entitlement_ids) ??
+          tierFromProductId(product_id);
+        if (!tier) {
+          console.warn(
+            "[RC Webhook] Could not resolve tier for NON_RENEWING_PURCHASE",
+            { entitlement_ids, product_id }
+          );
+          break;
+        }
+        const updates: Record<string, any> = { subscriptionStatus: tier };
+        if (expiration_at_ms) {
+          updates.trialEndDate = new Date(expiration_at_ms);
+        }
+        await profileRef.update(updates);
+        console.log("[RC Webhook] NON_RENEWING_PURCHASE applied:", tier);
+
+        await logAnalyticsEvent("subscription_started_promo", app_user_id, {
+          ...baseEventProps,
+          tier,
+        });
+        break;
+      }
+
       case "PRODUCT_CHANGE": {
         // For tier upgrades (e.g. Premium → Business), the change takes
         // effect immediately and entitlement_ids reflects the new tier.

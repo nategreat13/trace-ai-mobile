@@ -68,6 +68,7 @@ export type AnalyticsEventName =
   // Names mirror RC event types but use snake_case past-tense for
   // consistency with the rest of the schema.
   | "subscription_started"
+  | "subscription_started_promo"
   | "trial_started_server"
   | "subscription_renewed"
   | "subscription_uncanceled"
