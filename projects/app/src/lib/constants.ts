@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 
 export const MAX_DAILY_SWIPES = 8;
-export const MAX_SAVES = 3;
+export const MAX_SAVES = 8;
 export const UNLIMITED_SWIPES = 999999;
 
 // @ts-ignore: __DEV__ is defined by React Native at runtime

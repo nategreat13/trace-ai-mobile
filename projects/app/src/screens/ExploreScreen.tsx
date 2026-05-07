@@ -25,6 +25,7 @@ import ExploreFilters, { ExploreFilterState } from "../components/explore/Explor
 import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { AIRPORTS } from "../components/onboarding/AirportInput";
+import { MAX_SAVES } from "../lib/constants";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -217,7 +218,7 @@ export default function ExploreScreen() {
 
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
-    if (!isPremium && savedDealIds.size >= 3) {
+    if (!isPremium && savedDealIds.size >= MAX_SAVES) {
       navigation.navigate("Paywall", { entryPoint: "explore_save_limit" });
       return;
     }
@@ -821,7 +822,7 @@ export default function ExploreScreen() {
       </View>
 
       {/* 1 save left warning */}
-      {!isPremium && savedDealIds.size === 2 && (
+      {!isPremium && savedDealIds.size === MAX_SAVES - 1 && (
         <Animated.View entering={FadeIn.duration(300)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
             onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_one_save_left" })}
