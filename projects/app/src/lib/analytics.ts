@@ -26,6 +26,7 @@ export type AnalyticsEventName =
   // Lifecycle
   | "app_open"
   | "login"
+  | "password_reset_requested"
   // Pre-signup
   | "landing_viewed"
   | "airport_changed"

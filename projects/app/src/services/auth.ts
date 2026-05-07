@@ -1,6 +1,7 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut,
   deleteUser,
   updateProfile,
@@ -27,6 +28,24 @@ export async function signup(
 
 export async function logout(): Promise<void> {
   await signOut(auth);
+}
+
+/**
+ * Send a password-reset email through Firebase Auth's built-in flow.
+ * Firebase's hosted reset page handles the new-password entry; the
+ * email arrives from no-reply@<project>.firebaseapp.com.
+ *
+ * Throws on invalid email format. Treats "user-not-found" as success
+ * to avoid leaking which emails are registered (standard practice).
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(auth, email.trim());
+  } catch (err: any) {
+    // Don't reveal whether the email exists — return silently for that one.
+    if (err?.code === "auth/user-not-found") return;
+    throw err;
+  }
 }
 
 export function getCurrentUser(): User | null {
