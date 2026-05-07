@@ -88,6 +88,15 @@ service cloud.firestore {
                     && resource.data.userId == request.auth.uid;
     }
 
+    // ──── Analytics Exclusions ────
+    // Admin-only list of internal/test accounts to keep out of dashboard
+    // stats. Reads and writes happen exclusively from the dashboard server
+    // via the Firebase Admin SDK (which bypasses these rules), so all
+    // client traffic is denied.
+    match /analyticsExclusions/{docId} {
+      allow read, write: if false;
+    }
+
     // ──── Deny everything else ────
     match /{document=**} {
       allow read, write: if false;

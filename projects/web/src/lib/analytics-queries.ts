@@ -1,11 +1,38 @@
 import { getDb } from "./firebase-admin";
 import type { Firestore } from "firebase-admin/firestore";
+import type { ExcludedSets } from "./exclusions";
+
+/**
+ * All public query functions accept an optional `excluded: ExcludedSets`
+ * argument. When provided, events / users belonging to those userIds (or
+ * matching emails, for userProfile-keyed queries) are filtered out before
+ * aggregation. This is how internal/test accounts are kept out of the
+ * dashboard numbers.
+ *
+ * Implementation note: where the previous code used Firestore's `count()`
+ * aggregation we now fetch the matching docs with a narrow `select()` and
+ * count after filtering. Slightly more expensive than `count()` but
+ * necessary because exclusion can't be expressed as a server-side query
+ * (Firestore's `not-in` is capped at 10 values and we may have more
+ * exclusions than that).
+ */
+
+function isExcludedUid(
+  userId: string | null | undefined,
+  excluded: ExcludedSets | undefined
+): boolean {
+  if (!excluded || !userId) return false;
+  return excluded.userIds.has(userId);
+}
 
 /**
  * Returns signup counts bucketed by day, oldest → newest.
  * Reads from the `userProfiles` collection (created on onboarding complete).
  */
-export async function getSignupsByDay(days = 30): Promise<Array<{ date: string; count: number }>> {
+export async function getSignupsByDay(
+  days = 30,
+  excluded?: ExcludedSets
+): Promise<Array<{ date: string; count: number }>> {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -14,7 +41,7 @@ export async function getSignupsByDay(days = 30): Promise<Array<{ date: string; 
   const snap = await db
     .collection("userProfiles")
     .where("createdAt", ">=", since)
-    .select("createdAt")
+    .select("createdAt", "userId", "email")
     .get();
 
   const buckets: Record<string, number> = {};
@@ -26,6 +53,12 @@ export async function getSignupsByDay(days = 30): Promise<Array<{ date: string; 
 
   snap.forEach((doc) => {
     const data = doc.data();
+    if (excluded) {
+      const uid = data.userId as string | undefined;
+      const email = (data.email as string | undefined)?.toLowerCase();
+      if (uid && excluded.userIds.has(uid)) return;
+      if (email && excluded.emails.has(email)) return;
+    }
     const ts: any = data.createdAt;
     const date =
       ts?.toDate?.()?.toISOString().slice(0, 10) ??
@@ -42,7 +75,8 @@ export async function getSignupsByDay(days = 30): Promise<Array<{ date: string; 
  * Returns event counts grouped by event name over the last N days.
  */
 export async function getEventCountsByName(
-  days = 30
+  days = 30,
+  excluded?: ExcludedSets
 ): Promise<Array<{ name: string; count: number }>> {
   const db = getDb();
   const since = new Date();
@@ -51,12 +85,14 @@ export async function getEventCountsByName(
   const snap = await db
     .collection("events")
     .where("timestamp", ">=", since)
-    .select("name")
+    .select("name", "userId")
     .get();
 
   const counts: Record<string, number> = {};
   snap.forEach((doc) => {
-    const name = doc.data().name as string | undefined;
+    const data = doc.data();
+    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    const name = data.name as string | undefined;
     if (!name) return;
     counts[name] = (counts[name] ?? 0) + 1;
   });
@@ -71,19 +107,26 @@ export async function getEventCountsByName(
  * Event names used: landing_viewed, signup_completed, onboarding_completed,
  *   paywall_viewed, purchase_completed.
  */
-export async function getFunnelCounts(days = 30) {
+export async function getFunnelCounts(days = 30, excluded?: ExcludedSets) {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
+  // Fetch matching events + userId (rather than count()) so we can filter
+  // excluded users in memory.
   async function countEvent(name: string): Promise<number> {
     const snap = await db
       .collection("events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
-      .count()
+      .select("userId")
       .get();
-    return snap.data().count;
+    if (!excluded || excluded.userIds.size === 0) return snap.size;
+    let n = 0;
+    snap.forEach((doc) => {
+      if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+    });
+    return n;
   }
 
   const [landingViews, signupCompleted, onboardingCompleted, paywallViewed, purchaseCompleted] =
@@ -108,7 +151,7 @@ export async function getFunnelCounts(days = 30) {
  * Returns weekly retention cohorts. Each cohort = users who signed up in that
  * week. The array of percentages is Day 0, Day 1, Day 7, Day 30.
  */
-export async function getRetentionCohorts(weeks = 8) {
+export async function getRetentionCohorts(weeks = 8, excluded?: ExcludedSets) {
   const db = getDb();
   const now = new Date();
   const cohorts: Array<{
@@ -130,22 +173,26 @@ export async function getRetentionCohorts(weeks = 8) {
       .collection("userProfiles")
       .where("createdAt", ">=", weekStart)
       .where("createdAt", "<", weekEnd)
-      .select("userId", "createdAt")
+      .select("userId", "createdAt", "email")
       .get();
 
     const users: Array<{ uid: string; created: Date }> = [];
     snap.forEach((doc) => {
       const data = doc.data();
+      const uid = data.userId as string | undefined;
+      const email = (data.email as string | undefined)?.toLowerCase();
+      if (excluded && uid && excluded.userIds.has(uid)) return;
+      if (excluded && email && excluded.emails.has(email)) return;
       const created: any = data.createdAt;
       users.push({
-        uid: data.userId,
+        uid: uid ?? "",
         created: created?.toDate?.() ?? new Date(),
       });
     });
 
     if (users.length === 0) continue;
 
-    const retained = await retentionFor(db, users);
+    const retained = await retentionFor(db, users, excluded);
     cohorts.push({
       weekStart: weekStart.toISOString().slice(0, 10),
       size: users.length,
@@ -160,7 +207,8 @@ export async function getRetentionCohorts(weeks = 8) {
 
 async function retentionFor(
   db: Firestore,
-  users: Array<{ uid: string; created: Date }>
+  users: Array<{ uid: string; created: Date }>,
+  excluded?: ExcludedSets
 ): Promise<{ d1: number; d7: number; d30: number }> {
   // For small cohorts, check each user for activity within the day-1/7/30 windows.
   // We define "retained" as: any event fired by the user within the window.
@@ -184,7 +232,11 @@ async function retentionFor(
         .where("timestamp", "<", windowEnd)
         .select("userId")
         .get();
-      snap.forEach((doc) => retained.add(doc.data().userId));
+      snap.forEach((doc) => {
+        const uid = doc.data().userId as string | undefined;
+        if (isExcludedUid(uid, excluded)) return;
+        if (uid) retained.add(uid);
+      });
     }
     return retained;
   }
@@ -222,12 +274,28 @@ export async function getAdSpend(): Promise<
 }
 
 /**
- * Total user count (useful as a top-of-page stat).
+ * Total user count (useful as a top-of-page stat). When excluded is
+ * provided, subtracts excluded userProfiles from the headline number.
  */
-export async function getUserCount(): Promise<number> {
+export async function getUserCount(excluded?: ExcludedSets): Promise<number> {
   const db = getDb();
-  const snap = await db.collection("userProfiles").count().get();
-  return snap.data().count;
+  if (!excluded || (excluded.userIds.size === 0 && excluded.emails.size === 0)) {
+    const snap = await db.collection("userProfiles").count().get();
+    return snap.data().count;
+  }
+  // With exclusions we can't use count() — fetch the userIds + emails and
+  // filter. At small scale this is fine; at 100k+ users move to a counter doc.
+  const snap = await db.collection("userProfiles").select("userId", "email").get();
+  let n = 0;
+  snap.forEach((doc) => {
+    const data = doc.data();
+    const uid = data.userId as string | undefined;
+    const email = (data.email as string | undefined)?.toLowerCase();
+    if (uid && excluded.userIds.has(uid)) return;
+    if (email && excluded.emails.has(email)) return;
+    n++;
+  });
+  return n;
 }
 
 /**
@@ -245,7 +313,10 @@ export async function getUserCount(): Promise<number> {
  * `failuresByCode` groups purchase_failed events by props.error_code so we
  * can spot a regression like "all Premium-monthly purchases failing".
  */
-export async function getPurchaseFlowFunnel(days = 30): Promise<{
+export async function getPurchaseFlowFunnel(
+  days = 30,
+  excluded?: ExcludedSets
+): Promise<{
   paywallViewed: number;
   paywallCtaTapped: number;
   purchaseInitiated: number;
@@ -263,9 +334,14 @@ export async function getPurchaseFlowFunnel(days = 30): Promise<{
       .collection("events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
-      .count()
+      .select("userId")
       .get();
-    return snap.data().count;
+    if (!excluded || excluded.userIds.size === 0) return snap.size;
+    let n = 0;
+    snap.forEach((doc) => {
+      if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+    });
+    return n;
   }
 
   // Pull failure docs (not just count) so we can aggregate by error_code.
@@ -275,12 +351,16 @@ export async function getPurchaseFlowFunnel(days = 30): Promise<{
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
-    .select("props")
+    .select("props", "userId")
     .get();
 
   const codeBuckets: Record<string, number> = {};
+  let purchaseFailedCount = 0;
   failedSnap.forEach((doc) => {
-    const props = (doc.data().props ?? {}) as Record<string, unknown>;
+    const data = doc.data();
+    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    purchaseFailedCount++;
+    const props = (data.props ?? {}) as Record<string, unknown>;
     const code = typeof props.error_code === "string" || typeof props.error_code === "number"
       ? String(props.error_code)
       : "unknown";
@@ -302,7 +382,7 @@ export async function getPurchaseFlowFunnel(days = 30): Promise<{
     purchaseInitiated,
     purchaseCompleted,
     purchaseCanceled,
-    purchaseFailed: failedSnap.size,
+    purchaseFailed: purchaseFailedCount,
     failuresByCode: Object.entries(codeBuckets)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
@@ -314,7 +394,10 @@ export async function getPurchaseFlowFunnel(days = 30): Promise<{
  * Returns the count of `login` events in the last N days. Pairs with
  * `getSignupsByDay` so the dashboard can show new vs returning users.
  */
-export async function getLoginCount(days = 30): Promise<number> {
+export async function getLoginCount(
+  days = 30,
+  excluded?: ExcludedSets
+): Promise<number> {
   const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -322,9 +405,14 @@ export async function getLoginCount(days = 30): Promise<number> {
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "login")
-    .count()
+    .select("userId")
     .get();
-  return snap.data().count;
+  if (!excluded || excluded.userIds.size === 0) return snap.size;
+  let n = 0;
+  snap.forEach((doc) => {
+    if (!isExcludedUid(doc.data().userId as string | undefined, excluded)) n++;
+  });
+  return n;
 }
 
 type TierBreakdown = { total: number; premium: number; business: number; unknown: number };
@@ -337,19 +425,22 @@ type TierBreakdown = { total: number; premium: number; business: number; unknown
 async function tierBreakdown(
   db: Firestore,
   name: string,
-  since: Date
+  since: Date,
+  excluded?: ExcludedSets
 ): Promise<TierBreakdown> {
   const snap = await db
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", name)
-    .select("props")
+    .select("props", "userId")
     .get();
 
   const out: TierBreakdown = { total: 0, premium: 0, business: 0, unknown: 0 };
   snap.forEach((doc) => {
+    const data = doc.data();
+    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
     out.total++;
-    const props = (doc.data().props ?? {}) as Record<string, unknown>;
+    const props = (data.props ?? {}) as Record<string, unknown>;
     const tier = props.tier;
     if (tier === "premium") out.premium++;
     else if (tier === "business") out.business++;
@@ -369,7 +460,10 @@ async function tierBreakdown(
  * These behave very differently and warrant separate countermeasures
  * (winback campaigns vs payment retries).
  */
-export async function getSubscriptionLifecycle(days = 30): Promise<{
+export async function getSubscriptionLifecycle(
+  days = 30,
+  excluded?: ExcludedSets
+): Promise<{
   renewed: TierBreakdown;
   voluntaryChurn: TierBreakdown;
   involuntaryChurn: TierBreakdown;
@@ -383,12 +477,12 @@ export async function getSubscriptionLifecycle(days = 30): Promise<{
 
   const [renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled] =
     await Promise.all([
-      tierBreakdown(db, "subscription_renewed", since),
-      tierBreakdown(db, "subscription_canceled", since),
-      tierBreakdown(db, "subscription_expired", since),
-      tierBreakdown(db, "billing_issue", since),
-      tierBreakdown(db, "subscription_changed", since),
-      tierBreakdown(db, "subscription_uncanceled", since),
+      tierBreakdown(db, "subscription_renewed", since, excluded),
+      tierBreakdown(db, "subscription_canceled", since, excluded),
+      tierBreakdown(db, "subscription_expired", since, excluded),
+      tierBreakdown(db, "billing_issue", since, excluded),
+      tierBreakdown(db, "subscription_changed", since, excluded),
+      tierBreakdown(db, "subscription_uncanceled", since, excluded),
     ]);
 
   return { renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled };
@@ -400,7 +494,8 @@ export async function getSubscriptionLifecycle(days = 30): Promise<{
  * Premium-monthly receipt bug) is obvious at a glance.
  */
 export async function getPurchaseFailuresByDay(
-  days = 30
+  days = 30,
+  excluded?: ExcludedSets
 ): Promise<Array<{ date: string; count: number }>> {
   const db = getDb();
   const since = new Date();
@@ -411,7 +506,7 @@ export async function getPurchaseFailuresByDay(
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
-    .select("timestamp")
+    .select("timestamp", "userId")
     .get();
 
   const buckets: Record<string, number> = {};
@@ -422,7 +517,9 @@ export async function getPurchaseFailuresByDay(
   }
 
   snap.forEach((doc) => {
-    const ts: any = doc.data().timestamp;
+    const data = doc.data();
+    if (isExcludedUid(data.userId as string | undefined, excluded)) return;
+    const ts: any = data.timestamp;
     const date = ts?.toDate?.()?.toISOString().slice(0, 10);
     if (date && buckets[date] !== undefined) buckets[date]++;
   });

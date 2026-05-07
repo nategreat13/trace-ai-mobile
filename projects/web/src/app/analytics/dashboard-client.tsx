@@ -62,6 +62,7 @@ interface Props {
   loginCount: number;
   subscriptionLifecycle: SubscriptionLifecycleData | null;
   purchaseFailuresByDay: FailureDayRow[];
+  excludedCount: number;
 }
 
 function dollars(cents: number) {
@@ -112,6 +113,7 @@ export default function AnalyticsDashboardClient({
   loginCount,
   subscriptionLifecycle,
   purchaseFailuresByDay,
+  excludedCount,
 }: Props) {
   const signupsTotal30 = signupsByDay.reduce((acc, r) => acc + r.count, 0);
 
@@ -129,16 +131,35 @@ export default function AnalyticsDashboardClient({
             <h1 className="text-3xl font-bold text-gray-900">Trace Analytics</h1>
             <p className="text-sm text-gray-500 mt-1">
               Last 30 days. Data refreshes on every page load.
+              {excludedCount > 0 && (
+                <>
+                  {" · "}
+                  <a
+                    href="/analytics/exclusions"
+                    className="text-rose-500 hover:text-rose-600"
+                  >
+                    {excludedCount} account{excludedCount === 1 ? "" : "s"} excluded
+                  </a>
+                </>
+              )}
             </p>
           </div>
-          <form action="/analytics/logout" method="POST">
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:border-gray-400"
+          <div className="flex items-center gap-2">
+            <a
+              href="/analytics/exclusions"
+              className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:border-gray-400"
             >
-              Sign out
-            </button>
-          </form>
+              Exclusions
+            </a>
+            <form action="/analytics/logout" method="POST">
+              <button
+                type="submit"
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:border-gray-400"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </header>
 
         {/* Top-line stats */}
