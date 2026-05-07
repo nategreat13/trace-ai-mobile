@@ -88,6 +88,36 @@ service cloud.firestore {
                     && resource.data.userId == request.auth.uid;
     }
 
+    // ──── Events (analytics) ────
+    // Append-only event log written by the mobile app (client SDK) and
+    // by the server (Admin SDK, which bypasses these rules).
+    //
+    // Clients can only create events tagged with their own userId — or
+    // the literal string "guest" before sign-in. This prevents a logged-
+    // in user from spoofing events as another user, and prevents anyone
+    // from spoofing the server's `source: revenuecat_webhook` events.
+    //
+    // No client reads — events contain other users' activity and the
+    // dashboard reads them via Admin SDK on the server.
+    match /events/{docId} {
+      allow create: if isOwnEventCreate();
+      allow read, update, delete: if false;
+
+      function isOwnEventCreate() {
+        let d = request.resource.data;
+        // Clients must not stamp `source` — that field is reserved for
+        // server-emitted events (e.g. "revenuecat_webhook").
+        return !("source" in d)
+          && d.keys().hasAll(["name", "userId", "timestamp"])
+          && (
+            // Authenticated user logging their own event
+            (request.auth != null && d.userId == request.auth.uid)
+            // Or unauthenticated user logging a guest event
+            || (request.auth == null && d.userId == "guest")
+          );
+      }
+    }
+
     // ──── Analytics Exclusions ────
     // Admin-only list of internal/test accounts to keep out of dashboard
     // stats. Reads and writes happen exclusively from the dashboard server
