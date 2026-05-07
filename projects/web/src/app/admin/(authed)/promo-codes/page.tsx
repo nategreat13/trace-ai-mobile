@@ -8,6 +8,7 @@ import {
   deletePromoCode,
 } from "@/lib/promo-codes";
 import { logAuditEvent } from "@/lib/audit";
+import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -75,14 +76,6 @@ async function deleteAction(formData: FormData) {
   await deletePromoCode(code);
   await logAuditEvent("promo.delete", code);
   revalidatePath("/admin/promo-codes");
-}
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
 }
 
 function tierClass(tier: string): string {
@@ -299,7 +292,7 @@ export default async function PromoCodesPage({
                         {c.expiresAt.getTime() < Date.now() ? (
                           <span className="text-red-500">expired</span>
                         ) : (
-                          <>expires {formatDate(c.expiresAt)}</>
+                          <>expires {formatDate(c.expiresAt, true)}</>
                         )}
                       </div>
                     )}
@@ -308,7 +301,7 @@ export default async function PromoCodesPage({
                     {c.note ?? <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                    {formatDate(c.createdAt)}
+                    {formatDate(c.createdAt, true)}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     {c.active ? (

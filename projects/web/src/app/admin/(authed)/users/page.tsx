@@ -1,29 +1,9 @@
 import Link from "next/link";
 import { listUsers } from "@/lib/users-queries";
 import { getExcludedSets } from "@/lib/exclusions";
+import { formatDateShort, relativeFromNow } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function relativeFromNow(d: Date | null): string {
-  if (!d) return "—";
-  const ms = Date.now() - d.getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  if (days < 0) return "future";
-  if (days === 0) return "today";
-  if (days === 1) return "1d ago";
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
-}
 
 function dollars(cents: number): string {
   if (!cents) return "—";
@@ -174,7 +154,7 @@ export default async function UsersPage({
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                     <div className="font-medium text-gray-700">
-                      {formatDate(row.createdAt)}
+                      {formatDateShort(row.createdAt)}
                     </div>
                     <div>{relativeFromNow(row.createdAt)}</div>
                   </td>
@@ -182,7 +162,7 @@ export default async function UsersPage({
                     {row.lastSeenAt ? (
                       <>
                         <div className="font-medium text-gray-700">
-                          {formatDate(row.lastSeenAt)}
+                          {formatDateShort(row.lastSeenAt)}
                         </div>
                         <div>{relativeFromNow(row.lastSeenAt)}</div>
                       </>

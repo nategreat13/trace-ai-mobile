@@ -3,16 +3,9 @@ import {
   listPromoCodes,
   listRedemptionsForCode,
 } from "@/lib/promo-codes";
+import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 function tierClass(tier: string): string {
   switch (tier) {
@@ -140,7 +133,7 @@ export default async function PromoCodeDetailPage({
                     {r.durationDays} days
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                    {formatDate(r.redeemedAt)}
+                    {formatDate(r.redeemedAt, true)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                     {r.grantExpiresAt ? (
@@ -151,7 +144,7 @@ export default async function PromoCodeDetailPage({
                             : ""
                         }
                       >
-                        {formatDate(r.grantExpiresAt)}
+                        {formatDate(r.grantExpiresAt, true)}
                       </span>
                     ) : (
                       "—"

@@ -1,4 +1,5 @@
 import { listAuditEntries } from "@/lib/audit";
+import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,7 @@ export default async function AuditPage() {
               {entries.map((e) => (
                 <tr key={e.id} className="border-t border-gray-100 align-top">
                   <td className="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {e.performedAt
-                      ? e.performedAt.toLocaleString(undefined, {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })
-                      : "—"}
+                    {formatDate(e.performedAt, true)}
                   </td>
                   <td className="px-6 py-3 font-mono text-xs text-gray-900 whitespace-nowrap">
                     {e.action}

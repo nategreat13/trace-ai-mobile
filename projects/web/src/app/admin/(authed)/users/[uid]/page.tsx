@@ -8,28 +8,9 @@ import {
 } from "@/lib/users-queries";
 import { getExcludedSets, addExclusionByUserId, removeExclusion } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
+import { formatDate, formatMonthDayTime, relativeFromNow } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date | null, withTime = false): string {
-  if (!d) return "—";
-  return d.toLocaleString(undefined, {
-    dateStyle: "medium",
-    ...(withTime ? { timeStyle: "short" } : {}),
-  });
-}
-
-function relativeFromNow(d: Date | null): string {
-  if (!d) return "—";
-  const ms = Date.now() - d.getTime();
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  if (days < 0) return "future";
-  if (days === 0) return "today";
-  if (days === 1) return "1d ago";
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
-}
 
 function dollars(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, {
@@ -322,14 +303,7 @@ export default async function UserDetailPage({
                 {events.map((evt) => (
                   <tr key={evt.id} className="border-t border-gray-100 align-top">
                     <td className="px-5 py-2 text-gray-500 text-xs whitespace-nowrap">
-                      {evt.timestamp
-                        ? evt.timestamp.toLocaleString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "—"}
+                      {formatMonthDayTime(evt.timestamp)}
                     </td>
                     <td className="px-5 py-2 font-medium text-gray-900 whitespace-nowrap">
                       {evt.name}

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getDb } from "@/lib/firebase-admin";
+import { formatDateShort } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -74,15 +75,6 @@ function dollars(cents: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   })}`;
-}
-
-function formatDate(d: Date | null): string {
-  if (!d) return "—";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 function tierClass(status: string): string {
@@ -205,10 +197,10 @@ export default async function SubscriptionsPage() {
                     {dollars(r.lifetimeRevenueCents)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                    {formatDate(r.firstPurchaseAt)}
+                    {formatDateShort(r.firstPurchaseAt)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                    {formatDate(r.lastPurchaseAt)}
+                    {formatDateShort(r.lastPurchaseAt)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-500 text-xs">
                     {r.trialEndDate ? (
@@ -219,7 +211,7 @@ export default async function SubscriptionsPage() {
                             : ""
                         }
                       >
-                        {formatDate(r.trialEndDate)}
+                        {formatDateShort(r.trialEndDate)}
                       </span>
                     ) : (
                       "—"

@@ -8,6 +8,7 @@ import {
   refreshAllUserIds,
 } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
+import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -238,12 +239,7 @@ export default async function ExclusionsPage({
                       {row.note ?? <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-6 py-3 text-gray-500 text-xs">
-                      {row.addedAt
-                        ? row.addedAt.toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
-                        : "—"}
+                      {formatDate(row.addedAt, true)}
                     </td>
                     <td className="px-6 py-3 text-right">
                       <form action={remove} style={{ display: "inline" }}>
