@@ -66,7 +66,7 @@ Changes are **instant** — the next time the trigger fires, it uses your new wo
 4. Optionally pick a Deep link.
 5. Click **Send broadcast**.
 
-It goes out **immediately**. There's no scheduled-send yet — if you need that, ping Nate and we'll add it.
+It goes out **immediately**. There's no scheduled-send yet — if you need that, ask Claude to add it.
 
 ### Seeing what was sent
 
@@ -138,7 +138,7 @@ Now boot the Simulator and install:
 
 - The first launch may take 30+ seconds — iOS Simulators boot the entire OS each time.
 - **Notifications via APNs (real Apple push delivery) won't work** on the Simulator. That's an Apple limitation, not a Trace bug.
-- You **can** simulate a notification's appearance on the Simulator with a Mac command — ask Nate if you need this for screenshot/QA purposes.
+- You **can** simulate a notification's appearance on the Simulator with a Mac command — ask Claude for the command if you need this for screenshot/QA purposes.
 - Reset everything with **Device → Erase All Content and Settings** in the Simulator menu. Useful for testing the first-time signup flow repeatedly.
 
 ---
@@ -203,13 +203,15 @@ It's off. The cron still runs daily, but no push goes out until you re-enable.
 
 ### "I want a brand new triggered notification"
 
-This requires Nate to write some code (the actual logic of "when does this fire?"). Ping him with what you want and he'll wire it up — usually <1 hour. Once wired, it appears in your Notifications tab automatically and you take it from there.
+This requires writing some code (the actual logic of "when does this fire?"). **Ask Claude** — describe the trigger condition in plain English ("send when a user has saved 3+ deals in a single day", say) and Claude will wire it up. Usually <1 hour of back-and-forth. Once wired and deployed, the new template appears in your Notifications tab automatically and you take it from there.
+
+If Claude says it needs Nate (because the change touches credentials, App Store / Play Store config, or something only Nate has access to), it'll tell you exactly what to ask Nate for.
 
 ---
 
 ## Notifications we haven't built yet — for your review
 
-The 5 triggers wired up today (welcome, trial-ending, billing-issue, inactivity-3d, inactivity-7d) are the foundation, but they're nowhere close to a complete push strategy for a deal-finder app. Below is a menu of additional notifications worth considering. **Read through, mark which ones you want, and ping Nate.** Each one needs a small chunk of code to wire the trigger logic; once wired, you control copy and on/off the same way as today.
+The 5 triggers wired up today (welcome, trial-ending, billing-issue, inactivity-3d, inactivity-7d) are the foundation, but they're nowhere close to a complete push strategy for a deal-finder app. Below is a menu of additional notifications worth considering. **Read through, pick the ones you want, and work with Claude to wire them up.** Each one needs a small chunk of code; once wired, you control copy and on/off the same way as today.
 
 Effort labels mean roughly:
 - **Easy** = ~30 min of code, just a cron that scans userProfiles for some condition.
@@ -343,7 +345,7 @@ Effort labels mean roughly:
 - *Deep link:* Dashboard → Alerts (which prompts the paywall for non-Premium)
 - *Why:* Drives Premium upgrade and product depth.
 
-### Operational (you don't need to ask Nate for these — just use the broadcast feature)
+### Operational (you don't need code for these — just use the broadcast feature)
 
 You can already do these today via Compose Broadcast:
 
@@ -357,7 +359,7 @@ You can already do these today via Compose Broadcast:
 
 1. Scan through and mentally check which 3-5 you most want next.
 2. For each, decide priority: must-have soon vs. nice-to-have eventually.
-3. Send Nate the list of must-haves. He'll wire them up (most are 30 min - 2 hr each), and they'll appear in your Notifications tab as editable templates.
+3. Hand the list to Claude — paste each entry verbatim and ask it to wire them up. Claude will write the trigger code, deploy it, and tell you when each appears in your Notifications tab.
 4. The "Operational" section at the bottom — you can do those right now without anyone's help. Just use Compose Broadcast.
 
 A reasonable v2 push strategy might look like: hot_deal_alert + saved_alert_match + daily_deal_digest + welcome_to_premium + streak_in_danger. That covers premium value prop, post-conversion delight, and habit formation. Everything else is incremental.
@@ -382,20 +384,49 @@ A reasonable v2 push strategy might look like: hot_deal_alert + saved_alert_matc
 
 ---
 
-## When to ask Nate
+## Who to ask: Just-do-it / Claude / Nate
 
-| Situation | Ask Nate? |
-|-----------|-----------|
-| Editing copy on an existing trigger | No — just do it. |
-| Toggling a trigger on/off | No. |
-| Sending a broadcast | No. |
-| Sending a test push to yourself or another user | No. |
-| **Adding a new trigger** (e.g., "send a push when a user saves their 5th deal") | Yes — needs ~30 min of code. |
-| **Scheduling a broadcast** for a future time | Yes — not built yet. |
-| **A/B testing** different copy on the same trigger | Yes — needs new infrastructure. |
-| Notification copy isn't appearing on devices when it should | Yes — could be a delivery issue, an opted-out account, or something Nate broke. |
-| You want to filter the audience by something other than tier/platform (e.g., "only users from SLC") | Yes — needs a new audience filter. |
-| You need to delete a broadcast you sent by accident | Sort of — once it's sent, it's sent (Apple/Google deliver them). But Nate can scrub the history log if needed. |
+Three buckets. Most things you handle yourself or with Claude. Nate is reserved for credentials, dashboards, and platform stuff only he can access.
+
+| Situation | Who? |
+|-----------|------|
+| Editing copy on an existing trigger | **Just do it** — admin → Notifications → click trigger → save. |
+| Toggling a trigger on / off | **Just do it** — same place, checkbox at the bottom. |
+| Sending a broadcast | **Just do it** — admin → Notifications → Compose broadcast. |
+| Sending a test push to yourself or another user | **Just do it** — admin → user's detail page → Send test push. |
+| Generating a promo code | **Just do it** — admin → Promo codes. |
+| **Adding a new trigger** ("send a push when a user saves their 5th deal") | **Claude** — describe the condition in plain English. ~30 min of back-and-forth. |
+| **Scheduling a broadcast** for a future time | **Claude** — not built yet, but ~1 hour to add. |
+| **A/B testing** different copy on the same trigger | **Claude** — needs new infrastructure but doable. |
+| **Audience filter beyond tier/platform** ("only SLC users", "only users with 5+ saves") | **Claude** — query change, ~15 min. |
+| **A new deal-driven notification** (hot deal alert, alert match, daily digest) | **Claude** — see the full menu in the section above. |
+| **Notification copy isn't appearing on devices when it should** | **Claude first** — ask it to read the recent send logs and diagnose. If Claude says it's a credentials/permissions issue, then it'll tell you what to ask Nate for. |
+| **Scrubbing notification history** | **Claude** — can delete entries from the Firestore log. |
+| **TestFlight invitation for a new tester** (Apple ID is yours or someone else's) | **Nate** — needs Apple Developer account access to add testers. |
+| **App Store Connect / Play Console / Apple Developer dashboard tasks** | **Nate** — only he has the logins. |
+| **Firebase Secret Manager values** (e.g., rotating ADMIN_API_TOKEN) | **Nate** — needs Firebase admin access. |
+| **Vercel env vars** (admin password, API keys) | **Nate** — needs Vercel admin access. |
+| **Apple/Google review or policy questions** during App Store submission | **Nate** — handles the developer relationship. |
+| **A new build to TestFlight** (after native code changes) | **Nate** — runs `eas build` + `eas submit`, deals with provisioning. |
+| **Anything that touches money / billing / refunds** | **Nate** — defer to him. |
+
+### How to "ask Claude" effectively
+
+When you want Claude to add a new trigger or fix something, give it:
+1. **What you want** in plain English — "send a push 24h after a user saves their first deal, telling them about deal alerts."
+2. **The audience** — "to free users only" / "to anyone who saved a deal yesterday."
+3. **Where it should deep-link** — "open the Dashboard alerts tab."
+4. **An example title and body** — even rough. Claude will tighten the wording.
+
+Claude has full read access to this codebase, so it can figure out the rest. If anything's ambiguous, it'll ask before writing code.
+
+### When something's broken
+
+If a notification isn't going out and you don't know why, ask Claude:
+
+> "I just turned on the [trigger_name] template and a test push to myself isn't arriving. Can you check the recent logs and tell me what's happening?"
+
+Claude will look at the Cloud Function logs, the notificationLog collection, and the user's profile state, and either fix it or tell you what only Nate can fix.
 
 ---
 
@@ -412,4 +443,6 @@ A reasonable v2 push strategy might look like: hot_deal_alert + saved_alert_matc
 
 ## Anything else?
 
-If you're stuck or something's confusing, ping Nate. The system is designed to fail safe (worst case: a notification doesn't go out), so don't worry about breaking anything by experimenting in the admin.
+If you're stuck or something's confusing, **ask Claude first** — it can explain anything in this doc, look at the actual code, run diagnostic queries, and walk you through fixes. Save Nate for the things only he can do (the right column of the table above).
+
+The admin portal is designed to fail safe (worst case: a notification doesn't go out), so don't worry about breaking anything by experimenting in there.
