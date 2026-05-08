@@ -114,56 +114,43 @@ The Simulator can receive push notifications you trigger by hand on your Mac (no
 
 That said, the Simulator is great for everything else: trying the app's UI, walking through onboarding, signing up, redeeming a promo code, etc.
 
-### Two ways to get the app onto your Simulator
+### Build and install
 
-**Option A — Easy: Nate sends you a build file** (recommended)
+Open **Terminal** (Cmd-Space → "Terminal"). Each block below is copy-pasteable as-is.
 
-When the app is updated, Nate runs a build and gives you the resulting `.tar.gz` file (probably in Slack or Drive). To install:
+#### One-time setup (do this once)
 
-1. Open **Xcode** (free from the Mac App Store if you don't have it). Just opening it is enough — you don't need to know how to use it.
-2. From Xcode's menu bar: **Xcode → Open Developer Tool → Simulator**. A window with a fake iPhone appears.
-3. Pick a device model: **File → New Simulator** if you want to choose, or it'll boot the default.
-4. Wait for the Simulator to fully boot (you'll see the iOS home screen).
-5. **Drag the `.tar.gz` file from Finder onto the Simulator window.** The app installs and you'll see its icon appear on the home screen.
-6. Tap to open. You're running Trace.
+1. **Get GitHub access.** Ask Nate to add your GitHub username as a collaborator on `nategreat13/trace-ai-mobile`. You'll get an invite email — click "View invitation" and accept.
 
-**Option B — Self-sufficient: Build it yourself**
+2. **Clone the repo into your home directory:**
 
-Only do this if you want to be independent. Setup is ~30 minutes the first time, but builds after that are one command.
-
-#### One-time setup
-
-1. **Install Node.js** (the runtime our build tools need):
-    - Go to https://nodejs.org and download the LTS version (the green button).
-    - Open the `.pkg` file, click through the installer.
-2. **Install Xcode** from the Mac App Store. Open it once and accept the license. You don't need to use it directly — we just need it installed for the Simulator and command-line tools.
-3. **Get the Trace repo**. You'll need access from Nate first — ask him to add your GitHub username as a collaborator.
-    - Once added, accept the invitation email from GitHub.
-    - On your Mac, open **Terminal** (Cmd-Space → "Terminal").
-    - Run:
-      ```bash
-      cd ~
-      git clone https://github.com/nategreat13/trace-ai-mobile.git
-      cd trace-ai-mobile/projects/app
-      ```
-4. **Install the project's dependencies**:
     ```bash
-    npm install -g yarn
+    cd ~
+    git clone https://github.com/nategreat13/trace-ai-mobile.git
+    ```
+
+3. **Install yarn and the Expo build CLI:**
+
+    ```bash
+    npm install -g yarn eas-cli
+    ```
+
+4. **Install the project's dependencies:**
+
+    ```bash
     cd ~/trace-ai-mobile/projects/app
     yarn install
     ```
-5. **Install the Expo build CLI**:
-    ```bash
-    npm install -g eas-cli
-    ```
-6. **Log in to Expo**. Ask Nate for the Trace Expo account credentials, or have him add you as a collaborator on the project. Then:
+
+5. **Log in to Expo.** Ask Nate to add your Expo account as a collaborator on the Trace project, then:
+
     ```bash
     eas login
     ```
 
-#### Building the simulator app
+   Enter your Expo username/password when prompted.
 
-Whenever you want a fresh Simulator build (typically: after Nate updates the app, or you want to try the latest code):
+#### Build and install the app (do this any time you want a fresh version)
 
 ```bash
 cd ~/trace-ai-mobile
@@ -172,9 +159,14 @@ cd projects/app
 eas build --profile simulator --platform ios
 ```
 
-EAS does the build in the cloud (takes about 10-15 minutes the first time, faster on subsequent builds because it caches stuff). When it finishes, the Terminal will show a download URL like `https://expo.dev/artifacts/...`. Click it (or copy/paste into your browser) to download the `.tar.gz`.
+EAS runs the build in the cloud — it usually takes 10-15 minutes the first time and 5-10 minutes on subsequent builds. When it finishes, Terminal shows a URL like `https://expo.dev/artifacts/eas/...`. Click it (or copy/paste into your browser) to download the `.tar.gz` file (probably saves to your Downloads folder).
 
-Then drag the `.tar.gz` onto a running Simulator (same as Option A step 5).
+Now boot the Simulator and install:
+
+1. Open **Xcode**, then from its menu bar: **Xcode → Open Developer Tool → Simulator**. A window with a fake iPhone appears.
+2. Wait for it to fully boot (you'll see the iOS home screen).
+3. **Drag the `.tar.gz` from Finder onto the Simulator window.** The app installs and its icon appears on the home screen.
+4. Tap the Trace icon to open. You're running the app.
 
 #### A few things to know about the Simulator
 
