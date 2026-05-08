@@ -17,6 +17,10 @@ import {
   requestNotificationPermission,
   registerPushToken,
 } from "../services/push";
+import {
+  markSoftPromptDismissed,
+  triggerGateRecheck,
+} from "../hooks/useDeviceNotificationGate";
 import { logEvent } from "../lib/analytics";
 
 /**
@@ -61,33 +65,54 @@ export default function NotificationsPermissionScreen() {
         notificationPermissionAsked: true,
         notificationsEnabled: status === "granted",
       };
-      await updateProfile(updates);
+      // Don't await these — Firestore writes can be slow and we want
+      // the gate to re-resolve and unmount this screen ASAP. Both
+      // functions are fire-and-forget safe (registerPushToken has
+      // internal error handling; updateProfile is just persistence).
+      updateProfile(updates).catch(() => {});
       if (status === "granted") {
-        await registerPushToken(profile.id);
+        registerPushToken(profile.id).catch(() => {});
+      } else {
+        // User denied at OS dialog. Mark dismissed so we don't keep
+        // showing the soft prompt — they can re-enable from Settings.
+        markSoftPromptDismissed().catch(() => {});
       }
     } catch (err) {
       if (__DEV__) console.warn("[NotificationsPermission] enable failed:", err);
-      // Still mark as asked so we don't loop. They can re-enable from Profile.
-      await updateProfile({
+      updateProfile({
         notificationPermissionAsked: true,
         notificationsEnabled: false,
-      });
+      }).catch(() => {});
+      markSoftPromptDismissed().catch(() => {});
+    } finally {
+      setSubmitting(false);
+      // Force the gate to re-evaluate. AppState foregrounding after
+      // the OS dialog usually triggers it on its own, but firing here
+      // makes the unmount deterministic regardless of dialog timing.
+      triggerGateRecheck();
     }
-    // RootNavigator unmounts this screen as soon as the profile updates.
   };
 
   const handleLater = async () => {
     if (!profile?.id || submitting) return;
     setSubmitting(true);
     logEvent("push_soft_prompt_later_tapped", {});
-    // Mark asked but DON'T touch the OS-level permission. iOS / Android
-    // status stays "undetermined", so the next time we feel like a
-    // re-prompt is contextual (e.g. when they try to enable alerts),
-    // the OS dialog still works.
-    await updateProfile({
-      notificationPermissionAsked: true,
-      notificationsEnabled: false,
-    });
+    try {
+      // Mark asked but DON'T touch the OS-level permission. iOS /
+      // Android status stays "undetermined", so a future contextual
+      // re-prompt (e.g. when setting a deal alert) can still work.
+      updateProfile({
+        notificationPermissionAsked: true,
+        notificationsEnabled: false,
+      }).catch(() => {});
+      // Per-device dismissal so we don't re-prompt on the next cold
+      // launch of this same install. A new device install won't have
+      // this flag and will see the soft prompt again.
+      await markSoftPromptDismissed();
+    } finally {
+      setSubmitting(false);
+      triggerGateRecheck();
+    }
   };
 
   return (

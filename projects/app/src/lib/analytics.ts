@@ -1,7 +1,7 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { Platform } from "react-native";
 import * as Updates from "expo-updates";
-import { db } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import { getSessionId } from "./session";
 
 /**
@@ -89,17 +89,26 @@ export type AnalyticsEventName =
   | "push_permission_granted"
   | "push_permission_denied"
   | "push_token_registered"
+  | "push_token_register_failed"
   | "notification_received"
   | "notification_opened";
 
-let currentUserId: string | null = null;
-
 /**
- * Call this from AuthContext on sign-in / sign-out so events are stamped
- * with the right user ID.
+ * Kept as a no-op for backwards compatibility. Earlier versions of this
+ * file cached the userId in a module-local variable that was set from
+ * AuthContext's onAuthStateChanged listener. That cache lagged behind
+ * Firebase's auth state by one microtask: events fired immediately
+ * after `signInWithEmailAndPassword` resolved (login/signup/app_open)
+ * would write `userId: "guest"` even though `auth.currentUser` was
+ * already set, and Firestore rules — which check `request.auth.uid` —
+ * would deny the write with "Missing or insufficient permissions".
+ *
+ * `logEvent` now reads from `auth.currentUser` directly, which is the
+ * same source Firestore rules use, so the two can't disagree.
  */
-export function setAnalyticsUser(userId: string | null) {
-  currentUserId = userId;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function setAnalyticsUser(_userId: string | null) {
+  // intentionally empty
 }
 
 /**
@@ -151,7 +160,10 @@ export function logEvent(
 
   addDoc(collection(db, "events"), {
     name,
-    userId: currentUserId ?? "guest",
+    // Source from auth.currentUser directly so it always agrees with
+    // request.auth.uid in the Firestore security rule. See the comment
+    // on setAnalyticsUser above for the race this avoids.
+    userId: auth.currentUser?.uid ?? "guest",
     props: cleanProps,
     timestamp: serverTimestamp(),
   }).catch((err) => {

@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-application";
+import Constants from "expo-constants";
 import { Platform } from "react-native";
 import {
   doc,
@@ -87,19 +88,73 @@ export async function requestNotificationPermission(): Promise<
 export async function registerPushToken(
   userProfileDocId: string
 ): Promise<string | null> {
+  console.log("[push] registerPushToken: entered, profile:", userProfileDocId);
   try {
-    const tokenResponse = await Notifications.getExpoPushTokenAsync();
+    // Pass projectId explicitly. Auto-detection from Constants works in
+    // dev builds but is flakier in standalone builds; passing it makes
+    // the call deterministic across all build profiles.
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      (Constants as any).easConfig?.projectId;
+    console.log("[push] projectId resolved:", projectId);
+    if (!projectId) {
+      console.log("[push] projectId missing; aborting");
+      logEvent("push_token_register_failed", { stage: "projectId_missing" });
+      return null;
+    }
+
+    // Retry once — on iOS the APNs device token may not be ready
+    // immediately after the user grants permission, even though
+    // getPermissionsAsync already reports "granted". A short delay
+    // gives the daemon time to issue the token.
+    //
+    // Each attempt is wrapped in a timeout because getExpoPushTokenAsync
+    // can silently hang forever if the iOS aps-environment entitlement
+    // is missing from the binary (registerForRemoteNotifications never
+    // calls back). Without the timeout, we'd never reach our catch
+    // block and never emit a `push_token_register_failed` event —
+    // which is exactly the failure mode that caught us pre-fix.
+    const fetchToken = () =>
+      Promise.race([
+        Notifications.getExpoPushTokenAsync({ projectId }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("getExpoPushTokenAsync timed out after 15s")),
+            15000
+          )
+        ),
+      ]);
+
+    let tokenResponse;
+    try {
+      console.log("[push] calling getExpoPushTokenAsync (attempt 1)");
+      tokenResponse = await fetchToken();
+      console.log("[push] attempt 1 returned");
+    } catch (firstErr: any) {
+      console.log("[push] attempt 1 threw:", String(firstErr?.message ?? firstErr));
+      await new Promise((r) => setTimeout(r, 1500));
+      console.log("[push] calling getExpoPushTokenAsync (attempt 2)");
+      tokenResponse = await fetchToken();
+      console.log("[push] attempt 2 returned");
+    }
+
     const token = tokenResponse.data;
-    if (!token) return null;
+    console.log("[push] token data:", token ? token.slice(0, 30) + "..." : "<empty>");
+    if (!token) {
+      logEvent("push_token_register_failed", { stage: "empty_token" });
+      return null;
+    }
 
     // Append to pushTokens array if not already present. arrayUnion is
     // a no-op for duplicates so re-launches are safe.
     const ref = doc(db, "userProfiles", userProfileDocId);
+    console.log("[push] reading existing userProfile to dedupe");
     const existing = await getDoc(ref);
     const currentTokens = (existing.data()?.pushTokens ?? []) as Array<{
       token: string;
     }>;
     const alreadyHas = currentTokens.some((t) => t.token === token);
+    console.log("[push] existing tokens count:", currentTokens.length, "already has?", alreadyHas);
 
     if (!alreadyHas) {
       const record = {
@@ -107,17 +162,24 @@ export async function registerPushToken(
         platform: Platform.OS as "ios" | "android",
         addedAt: Timestamp.now(),
       };
+      console.log("[push] writing new token to userProfiles/", userProfileDocId);
       await setDoc(
         ref,
         { pushTokens: arrayUnion(record) },
         { merge: true }
       );
+      console.log("[push] write complete");
       logEvent("push_token_registered", { platform: Platform.OS });
     }
 
     return token;
-  } catch (err) {
+  } catch (err: any) {
+    console.log("[push] registerPushToken caught:", String(err?.message ?? err));
     if (__DEV__) console.warn("[push] registerPushToken failed:", err);
+    logEvent("push_token_register_failed", {
+      stage: "exception",
+      message: String(err?.message ?? err).slice(0, 200),
+    });
     return null;
   }
 }

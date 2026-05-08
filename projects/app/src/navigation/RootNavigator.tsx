@@ -2,6 +2,7 @@ import React from "react";
 import { View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import { useDeviceNotificationGate } from "../hooks/useDeviceNotificationGate";
 import TraceLoader from "../components/TraceLoader";
 import type { RootStackParamList } from "./types";
 
@@ -20,7 +21,20 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { user, profile, loading } = useAuth();
 
-  if (loading) {
+  // Per-device gate for the soft prompt. On every authed launch this
+  // also re-syncs the device's push token to the userProfile if OS
+  // permission is already granted — so logging in on a new device
+  // automatically registers a push token without any user action.
+  const profileId = profile?.onboardingComplete ? profile.id : null;
+  const { resolved: gateResolved, shouldShowSoftPrompt } =
+    useDeviceNotificationGate(profileId);
+
+  // Block on the gate only after onboarding is done. Until then we
+  // don't need it (and triggering OS-permission reads pre-onboarding
+  // would be premature).
+  const blockingOnGate = !!user && !!profile?.onboardingComplete && !gateResolved;
+
+  if (loading || blockingOnGate) {
     return (
       <View style={{ flex: 1 }}>
         <TraceLoader />
@@ -37,11 +51,11 @@ export default function RootNavigator() {
         </>
       ) : !profile?.onboardingComplete ? (
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-      ) : !profile?.notificationPermissionAsked ? (
-        // After onboarding completes, show the soft prompt for push
-        // notifications before any normal app screens. Once the user
-        // taps Enable or Maybe later, notificationPermissionAsked
-        // flips to true and they advance to MainTabs.
+      ) : shouldShowSoftPrompt ? (
+        // Show the soft prompt for push notifications. Gating is
+        // per-device (OS permission state + an AsyncStorage dismissal
+        // flag), so a returning user signing in on a new device sees
+        // this even if they already went through it on another device.
         <Stack.Screen
           name="NotificationsPermission"
           component={NotificationsPermissionScreen}
