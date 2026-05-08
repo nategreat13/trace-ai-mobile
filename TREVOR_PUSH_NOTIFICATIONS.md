@@ -207,6 +207,163 @@ This requires Nate to write some code (the actual logic of "when does this fire?
 
 ---
 
+## Notifications we haven't built yet — for your review
+
+The 5 triggers wired up today (welcome, trial-ending, billing-issue, inactivity-3d, inactivity-7d) are the foundation, but they're nowhere close to a complete push strategy for a deal-finder app. Below is a menu of additional notifications worth considering. **Read through, mark which ones you want, and ping Nate.** Each one needs a small chunk of code to wire the trigger logic; once wired, you control copy and on/off the same way as today.
+
+Effort labels mean roughly:
+- **Easy** = ~30 min of code, just a cron that scans userProfiles for some condition.
+- **Medium** = ~1-2 hr; needs to integrate with the deal data feed or compute something non-trivial.
+- **Hard** = a few hours; new infrastructure (price-tracking history, real-time deal stream, etc.) before the trigger can even fire.
+
+### Deal-driven (the biggest gap right now — premium value prop)
+
+**hot_deal_alert** — Premium only — *medium*
+- *When:* A new deal appears at the user's home airport with ≥60% off.
+- *Suggested title:* "🔥 65% off to Paris from {{homeAirport}}"
+- *Suggested body:* "${{price}} round-trip, normally ${{normalPrice}}. Tap to see it."
+- *Deep link:* Explore (or specific deal once we add per-deal deep links)
+- *Why:* This is THE differentiator for Premium. People upgrade to find out about hot deals fast.
+
+**saved_alert_match** — Premium only — *medium-hard*
+- *When:* A new deal matches an alert the user manually set up (specific destination + month).
+- *Suggested title:* "Your {{destination}} alert just matched"
+- *Suggested body:* "${{price}} round-trip in {{month}}, ${{discount}}% off."
+- *Deep link:* Dashboard → Alerts tab
+- *Why:* Highest-leverage Premium use-case. Users explicitly told us they want this, so the open rate is going to be huge.
+
+**daily_deal_digest** — Premium only, opt-in — *medium*
+- *When:* Once a day around 8 AM in the user's timezone (or 8 AM ET as a v1 if timezone is hard).
+- *Suggested title:* "{{dealCount}} new deals from {{homeAirport}}"
+- *Suggested body:* "Including {{topDeal}} — tap to see today's best."
+- *Deep link:* Swipe deck
+- *Why:* Daily habit-formation. Frequent enough to keep Premium feeling worth it, infrequent enough not to be annoying.
+
+**business_class_drop** — Business tier only — *medium*
+- *When:* A new business-class deal appears at the user's home airport.
+- *Suggested title:* "Business class to {{destination}} for ${{price}}"
+- *Suggested body:* "Lie-flat seat, normally ${{normalPrice}}. {{discountPct}}% off."
+- *Deep link:* Explore (with business filter applied)
+- *Why:* Business tier is paying a premium specifically for these. Without notifications, they have to keep checking the app.
+
+**deal_expiring_soon** — All paid tiers — *medium*
+- *When:* A deal the user *saved* is approaching its sale-end date.
+- *Suggested title:* "Your {{destination}} deal expires today"
+- *Suggested body:* "Last chance to book at ${{price}}."
+- *Deep link:* Dashboard → Saved tab
+- *Why:* Recovers high-intent users who saved but didn't book. Trade-off: only valuable if we have reliable expiration data on deals.
+
+### Habit & gamification
+
+**streak_in_danger** — All tiers — *easy*
+- *When:* Daily check around 8 PM local; user has a streak of 3+ days and hasn't swiped today.
+- *Suggested title:* "Don't break your {{streakDays}}-day streak"
+- *Suggested body:* "A few quick swipes will keep it going."
+- *Deep link:* Swipe deck
+- *Why:* Obvious gamification lever. Only fires for users who already have a streak, so it never feels random.
+
+**daily_swipes_refreshed** — Free tier only — *easy*
+- *When:* Daily reset (1 AM ET); user maxed out their swipes yesterday.
+- *Suggested title:* "Your daily swipes are back"
+- *Suggested body:* "{{swipesRemaining}} fresh deals waiting."
+- *Deep link:* Swipe deck
+- *Why:* Pulls free users back the moment they have value to consume. Don't fire if they didn't max out — that'd just be noise.
+
+**badge_unlocked** — All tiers — *easy*
+- *When:* Right after the user unlocks a badge (existing in-app celebration also).
+- *Suggested title:* "🏆 You earned the {{badgeName}} badge"
+- *Suggested body:* "Tap to see your collection."
+- *Deep link:* Dashboard → Profile → Badges
+- *Why:* Reinforces the gamification loop, especially for users who close the app right after unlocking.
+
+**level_up** — All tiers — *easy*
+- *When:* Right after Deal Hunter level increases.
+- *Suggested title:* "Welcome to level {{newLevel}}"
+- *Suggested body:* "{{newPerk}} unlocked." (e.g. "More deals per day")
+- *Deep link:* Profile
+- *Why:* Same as badge — celebrate then bring them back.
+
+### Subscription milestones
+
+**welcome_to_premium** — Premium subs only — *easy*
+- *When:* Immediately after a successful first paid charge (post-trial conversion or fresh sub).
+- *Suggested title:* "Welcome to Premium ✈️"
+- *Suggested body:* "Unlimited swipes, all deals, priority alerts. You're set."
+- *Deep link:* Swipe deck
+- *Why:* Reinforces buyer's remorse at the worst moment (right after charge). Open rate is high; great place to highlight what they unlocked.
+
+**welcome_to_business** — Business subs only — *easy*
+- *When:* Immediately after upgrading to Business.
+- *Suggested title:* "Welcome to Business 🥂"
+- *Suggested body:* "Lie-flat deals, 48-hour early access, and everything in Premium."
+- *Deep link:* Explore (with business filter)
+- *Why:* Same as above, tier-specific.
+
+**trial_ending_3d** — Trial users — *easy* (clone of existing 24h)
+- *When:* 3 days before trial ends (earlier reminder before the 24h one).
+- *Suggested title:* "{{daysLeft}} days left in your trial"
+- *Suggested body:* "Subscribe now to keep unlimited swipes."
+- *Deep link:* Paywall
+- *Why:* Two-stage trial-end reminders convert better than one. Catches people before "ending tomorrow" feels rushed.
+
+**annual_upgrade_nudge** — Monthly subscribers, 60+ days in — *easy*
+- *When:* User has been on monthly for 60+ days, hasn't yet switched to annual.
+- *Suggested title:* "Save ${{annualSavings}} a year"
+- *Suggested body:* "Switch to Annual and pay 2 months less."
+- *Deep link:* Paywall
+- *Why:* Annual users churn way less. Free LTV bump.
+
+**winback_30d** — Recently expired users — *medium*
+- *When:* 30 days after subscription expired.
+- *Suggested title:* "We've added {{newFeature}} since you left"
+- *Suggested body:* "Try it free for 7 days when you come back."
+- *Deep link:* Paywall (with promo code pre-applied if we wire that)
+- *Why:* Cheapest acquisition channel — they already trusted us once.
+
+**subscription_canceled_acknowledgment** — Just-canceled users — *easy*
+- *When:* Within an hour of `CANCELLATION` webhook (auto-renew turned off, but access continues).
+- *Suggested title:* "We'll miss you"
+- *Suggested body:* "Your access continues until {{expirationDate}}. Change your mind? Reactivate anytime."
+- *Deep link:* Profile
+- *Why:* Surprisingly effective at uncanceling — users sometimes turn off renew by accident or in a moment of frustration.
+
+### Educational / first-time experience
+
+**first_save_celebration** — All tiers, first-time only — *easy*
+- *When:* Right after the user saves their first deal.
+- *Suggested title:* "Your first save 🎯"
+- *Suggested body:* "Find it anytime in the Dashboard tab."
+- *Deep link:* Dashboard → Saved
+- *Why:* Teaches a behavior they'll repeat. Big retention signal.
+
+**setup_first_alert** — Free tier, T+5 days no alerts — *easy*
+- *When:* User has been around 5+ days, hasn't created any alerts yet (Premium-only feature).
+- *Suggested title:* "Want a deal alert for somewhere specific?"
+- *Suggested body:* "Premium gets you instant alerts when prices drop."
+- *Deep link:* Dashboard → Alerts (which prompts the paywall for non-Premium)
+- *Why:* Drives Premium upgrade and product depth.
+
+### Operational (you don't need to ask Nate for these — just use the broadcast feature)
+
+You can already do these today via Compose Broadcast:
+
+- **Feature announcement** — "We just launched X"
+- **Maintenance notice** — "Quick maintenance tonight from 2-3 AM ET"
+- **Promo code drop** — "Use code TRACE25 for 25% off — this week only"
+- **Seasonal** — "Black Friday: 50% off your first year"
+- **Newsletter-style "this week's best"** — manually curated weekly summary
+
+### How to use this list
+
+1. Scan through and mentally check which 3-5 you most want next.
+2. For each, decide priority: must-have soon vs. nice-to-have eventually.
+3. Send Nate the list of must-haves. He'll wire them up (most are 30 min - 2 hr each), and they'll appear in your Notifications tab as editable templates.
+4. The "Operational" section at the bottom — you can do those right now without anyone's help. Just use Compose Broadcast.
+
+A reasonable v2 push strategy might look like: hot_deal_alert + saved_alert_match + daily_deal_digest + welcome_to_premium + streak_in_danger. That covers premium value prop, post-conversion delight, and habit formation. Everything else is incremental.
+
+---
+
 ## Glossary
 
 | Term | What it means |
