@@ -38,13 +38,13 @@ import {
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
-import { logout, deleteAuthUser } from "../services/auth";
+import { logout } from "../services/auth";
+import { deleteAccount } from "../services/deleteAccountApi";
 import PromoCodeModal from "../components/PromoCodeModal";
 import {
   requestNotificationPermission,
   registerPushToken,
 } from "../services/push";
-import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
 import { restorePurchases, hasEntitlement } from "../services/iap";
@@ -129,13 +129,21 @@ export default function ProfileScreen() {
   const handleDeleteAccount = async () => {
     if (deleteText !== "DELETE" || !user) return;
     try {
-      // Delete all Firestore data (profile, swipes, saved deals, alerts)
-      await deleteAllUserData(user.uid, profile?.id);
-      // Delete the Firebase Auth user
-      await deleteAuthUser();
-    } catch (error) {
+      // Server-side deletion via the /delete-account endpoint. Uses
+      // the Firebase Admin SDK on the backend, which bypasses the
+      // client-side `auth/requires-recent-login` guardrail — so the
+      // user doesn't need to re-enter their password.
+      //
+      // After this call returns, the user's ID token is invalidated.
+      // AuthContext's auth-state listener fires and routes them back
+      // to Landing automatically.
+      await deleteAccount();
+    } catch (error: any) {
       console.error("Error deleting account:", error);
-      Alert.alert("Error", "Failed to delete account. Please try again.");
+      Alert.alert(
+        "Error",
+        error?.message ?? "Failed to delete account. Please try again."
+      );
     }
   };
 

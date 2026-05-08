@@ -5,6 +5,7 @@ import { aiRoutes } from "./routes/ai";
 import { revenuecatWebhookRoutes } from "./routes/revenuecat-webhook";
 import { promoRoutes } from "./routes/promo";
 import { adminPushRoutes } from "./routes/admin-push";
+import { deleteAccountRoutes } from "./routes/delete-account";
 
 export const app = express();
 
@@ -16,6 +17,7 @@ app.use(aiRoutes);
 app.use(revenuecatWebhookRoutes);
 app.use(promoRoutes);
 app.use(adminPushRoutes);
+app.use(deleteAccountRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
