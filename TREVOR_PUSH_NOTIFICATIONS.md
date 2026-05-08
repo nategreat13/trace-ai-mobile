@@ -116,41 +116,7 @@ That said, the Simulator is great for everything else: trying the app's UI, walk
 
 ### Build and install
 
-Open **Terminal** (Cmd-Space → "Terminal"). Each block below is copy-pasteable as-is.
-
-#### One-time setup (do this once)
-
-1. **Get GitHub access.** Ask Nate to add your GitHub username as a collaborator on `nategreat13/trace-ai-mobile`. You'll get an invite email — click "View invitation" and accept.
-
-2. **Clone the repo into your home directory:**
-
-    ```bash
-    cd ~
-    git clone https://github.com/nategreat13/trace-ai-mobile.git
-    ```
-
-3. **Install yarn and the Expo build CLI:**
-
-    ```bash
-    npm install -g yarn eas-cli
-    ```
-
-4. **Install the project's dependencies:**
-
-    ```bash
-    cd ~/trace-ai-mobile/projects/app
-    yarn install
-    ```
-
-5. **Log in to Expo.** Ask Nate to add your Expo account as a collaborator on the Trace project, then:
-
-    ```bash
-    eas login
-    ```
-
-   Enter your Expo username/password when prompted.
-
-#### Build and install the app (do this any time you want a fresh version)
+Open **Terminal** (Cmd-Space → "Terminal") and run:
 
 ```bash
 cd ~/trace-ai-mobile
