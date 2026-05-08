@@ -1,3 +1,11 @@
+export interface PushTokenRecord {
+  /** Expo push token, e.g. "ExponentPushToken[xxxxxxxx]" */
+  token: string;
+  platform: "ios" | "android";
+  /** ISO string or Date — Firestore returns Timestamps which we convert */
+  addedAt: Date | string;
+}
+
 export interface UserProfile {
   id?: string;
   userId: string;
@@ -47,6 +55,15 @@ export interface UserProfile {
   lastPurchaseAt?: Date;
   lifetimeRevenueCents?: number;
   everUsedFreeTrial?: boolean;
+  // Push notifications. Each device that grants permission registers an
+  // Expo push token here; the server fans out to every active token when
+  // sending a push. expired-token cleanup happens server-side based on
+  // Expo Push API responses.
+  pushTokens?: PushTokenRecord[];
+  /** Per-user master toggle; OS-level permission is also required */
+  notificationsEnabled?: boolean;
+  /** True after we've shown the in-app permission ask once */
+  notificationPermissionAsked?: boolean;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   stripeSubscriptionStatus?: string;

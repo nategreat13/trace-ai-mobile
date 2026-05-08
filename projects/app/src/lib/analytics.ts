@@ -80,7 +80,14 @@ export type AnalyticsEventName =
   // Promo code redemption flow (client-side)
   | "promo_redeem_attempted"
   | "promo_redeem_succeeded"
-  | "promo_redeem_failed";
+  | "promo_redeem_failed"
+  // Push notifications (client-side)
+  | "push_permission_requested"
+  | "push_permission_granted"
+  | "push_permission_denied"
+  | "push_token_registered"
+  | "notification_received"
+  | "notification_opened";
 
 let currentUserId: string | null = null;
 

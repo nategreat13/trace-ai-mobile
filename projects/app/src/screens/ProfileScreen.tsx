@@ -12,6 +12,7 @@ import {
   Modal,
   Platform,
   Linking,
+  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -39,6 +40,10 @@ import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { logout, deleteAuthUser } from "../services/auth";
 import PromoCodeModal from "../components/PromoCodeModal";
+import {
+  requestNotificationPermission,
+  registerPushToken,
+} from "../services/push";
 import { deleteAllUserData } from "../services/firestore";
 import { storage } from "../services/firebase";
 import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
@@ -500,6 +505,58 @@ export default function ProfileScreen() {
               </Text>
             </TouchableOpacity>
           </LinearGradient>
+
+          {/* Notifications toggle */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              paddingHorizontal: 18,
+              paddingVertical: 14,
+              gap: 12,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
+                Push notifications
+              </Text>
+              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                Deal alerts, account updates
+              </Text>
+            </View>
+            <Switch
+              value={profile?.notificationsEnabled === true}
+              onValueChange={async (next) => {
+                if (!profile?.id) return;
+                if (next) {
+                  // Turning on: re-request OS permission if needed and
+                  // re-register the token. If the user had previously
+                  // denied at the OS level, we can't grant it from JS —
+                  // they'd have to flip it in iOS/Android Settings.
+                  const status = await requestNotificationPermission();
+                  if (status === "granted") {
+                    await registerPushToken(profile.id);
+                    await updateProfile({ notificationsEnabled: true });
+                  } else {
+                    Alert.alert(
+                      "Notifications blocked",
+                      "Push notifications are turned off in your device settings. Open the Settings app to enable them for Trace.",
+                    );
+                    await updateProfile({ notificationsEnabled: false });
+                  }
+                } else {
+                  await updateProfile({ notificationsEnabled: false });
+                }
+              }}
+              trackColor={{ false: theme.muted, true: colors.brand.traceRed }}
+              thumbColor="#fff"
+            />
+          </View>
 
           {/* Promo code redemption */}
           <TouchableOpacity

@@ -148,6 +148,20 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ──── Notification Templates ────
+    // Admin-edited copy for triggered notifications. Reads/writes happen
+    // exclusively from the dashboard server (Vercel) and the Cloud
+    // Function via the Admin SDK — clients should never need them.
+    match /notificationTemplates/{docId} {
+      allow read, write: if false;
+    }
+
+    // ──── Notification Log ────
+    // Append-only history of every push notification sent. Server-only.
+    match /notificationLog/{docId} {
+      allow read, write: if false;
+    }
+
     // ──── Deny everything else ────
     match /{document=**} {
       allow read, write: if false;

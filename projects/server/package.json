@@ -11,6 +11,7 @@
     "@anthropic-ai/sdk": "^0.80.0",
     "@trace/shared": "file:../shared",
     "cors": "^2.8.5",
+    "expo-server-sdk": "^6.1.0",
     "express": "^4.21.2",
     "firebase-admin": "^13.4.0",
     "firebase-functions": "^6.3.2",

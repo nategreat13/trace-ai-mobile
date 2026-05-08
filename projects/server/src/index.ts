@@ -12,13 +12,25 @@ const revenuecatWebhookSecret = defineSecret("REVENUECAT_WEBHOOK_SECRET");
 //   firebase functions:secrets:set REVENUECAT_REST_API_KEY
 const revenuecatRestApiKey = defineSecret("REVENUECAT_REST_API_KEY");
 
+// Shared admin token: gates the /admin/* push endpoints. The Vercel
+// admin web project sends this in the Authorization header when
+// invoking server actions like "Send broadcast" or "Send test push".
+// Set with:
+//   firebase functions:secrets:set ADMIN_API_TOKEN
+const adminApiToken = defineSecret("ADMIN_API_TOKEN");
+
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken],
   },
   app
 );
 
 // Firestore trigger: posts a Slack notification on each new signup.
 export { onUserProfileCreated } from "./triggers/user-signup";
+
+// Cron: fires welcome / trial-ending / inactivity push notifications
+// once per day. Each trigger is gated on its template being enabled,
+// so Trevor can switch any of them on/off without a deploy.
+export { dailyNotificationTriggers } from "./triggers/notification-cron";

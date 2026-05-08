@@ -3,6 +3,8 @@ import * as admin from "firebase-admin";
 import { getDb } from "../firebase";
 import { fanOutConversion } from "../lib/ad-conversions";
 import { listActiveEntitlements } from "../lib/revenuecat-rest";
+import { sendToUser } from "../lib/push";
+import { getTemplate, renderString } from "../lib/notification-templates";
 
 export const revenuecatWebhookRoutes = Router();
 
@@ -373,6 +375,27 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         // Leave active — RC will retry and send RENEWAL or EXPIRATION later
         console.log("[RC Webhook] Billing issue for user:", app_user_id);
         await logAnalyticsEvent("billing_issue", app_user_id, baseEventProps);
+
+        // Notify the user that their renewal failed so they can update
+        // payment before access lapses. Gated on the template being
+        // enabled in the admin so Trevor can switch this off if desired.
+        try {
+          const template = await getTemplate("billing_issue");
+          if (template?.enabled) {
+            const title = renderString(template.title, {});
+            const body = renderString(template.body, {});
+            const data = template.deepLink
+              ? { deepLink: template.deepLink, templateKey: "billing_issue" }
+              : { templateKey: "billing_issue" };
+            await sendToUser(
+              app_user_id,
+              { title, body, data },
+              { templateKey: "billing_issue" }
+            );
+          }
+        } catch (err) {
+          console.warn("[RC Webhook] billing_issue push failed:", err);
+        }
         break;
       }
 

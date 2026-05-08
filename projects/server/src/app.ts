@@ -4,6 +4,7 @@ import { dealRoutes } from "./routes/deals";
 import { aiRoutes } from "./routes/ai";
 import { revenuecatWebhookRoutes } from "./routes/revenuecat-webhook";
 import { promoRoutes } from "./routes/promo";
+import { adminPushRoutes } from "./routes/admin-push";
 
 export const app = express();
 
@@ -14,6 +15,7 @@ app.use(dealRoutes);
 app.use(aiRoutes);
 app.use(revenuecatWebhookRoutes);
 app.use(promoRoutes);
+app.use(adminPushRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

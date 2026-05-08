@@ -13,6 +13,7 @@ import {
   listExclusions,
 } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
+import { sendTestPush } from "@/lib/push-admin";
 import { formatDate, formatMonthDayTime, relativeFromNow } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,43 @@ async function excludeUser(formData: FormData) {
   revalidatePath("/admin/exclusions");
 }
 
+async function sendTestPushAction(formData: FormData) {
+  "use server";
+  const userId = formData.get("uid") as string;
+  const title = (formData.get("title") as string | null)?.trim() ?? "";
+  const body = (formData.get("body") as string | null)?.trim() ?? "";
+  const deepLinkRaw = (formData.get("deepLink") as string | null)?.trim() ?? "";
+  const deepLink = deepLinkRaw === "" ? null : deepLinkRaw;
+  if (!userId || !title || !body) {
+    redirect(`/admin/users/${encodeURIComponent(userId)}?push_error=missing_fields`);
+  }
+  try {
+    const data = deepLink ? { deepLink } : undefined;
+    const result = await sendTestPush({
+      userId,
+      title,
+      body,
+      data,
+      force: true,
+    });
+    await logAuditEvent("notification.test_push", userId, {
+      title,
+      bodyLength: body.length,
+      deepLink,
+      attempted: result.attempted,
+      ok: result.ok,
+    });
+    revalidatePath(`/admin/users/${userId}`);
+    redirect(
+      `/admin/users/${encodeURIComponent(userId)}?push_sent=${result.ok}&push_attempted=${result.attempted}`
+    );
+  } catch (err: any) {
+    redirect(
+      `/admin/users/${encodeURIComponent(userId)}?push_error=${encodeURIComponent(err?.message ?? "send_failed")}`
+    );
+  }
+}
+
 async function unexcludeUser(formData: FormData) {
   "use server";
   const docIds = formData.getAll("docId") as string[];
@@ -69,10 +107,17 @@ async function unexcludeUser(formData: FormData) {
 
 export default async function UserDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ uid: string }>;
+  searchParams: Promise<{
+    push_sent?: string;
+    push_attempted?: string;
+    push_error?: string;
+  }>;
 }) {
   const { uid } = await params;
+  const sp = await searchParams;
   const userId = decodeURIComponent(uid);
 
   const [user, events, counts, excluded] = await Promise.all([
@@ -287,6 +332,96 @@ export default async function UserDetailPage({
           />
         </Card>
       </div>
+
+      {/* Send test push */}
+      <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+          Send test push
+        </h2>
+        {(((user.raw.pushTokens as Array<unknown> | undefined)?.length ?? 0) === 0) ? (
+          <p className="text-sm text-gray-500">
+            This user has no registered push tokens. They need to grant
+            notification permission in the app first (typically after
+            onboarding completes).
+          </p>
+        ) : (
+          <>
+            {sp?.push_sent != null && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 text-green-800 text-xs rounded">
+                Sent — {sp.push_sent} delivery
+                {sp.push_sent === "1" ? "" : "s"} accepted by Expo.
+              </div>
+            )}
+            {sp?.push_error && (
+              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 text-red-800 text-xs rounded">
+                {sp.push_error.replace(/_/g, " ")}
+              </div>
+            )}
+            <form
+              action={sendTestPushAction}
+              className="grid grid-cols-1 md:grid-cols-2 gap-3"
+            >
+              <input type="hidden" name="uid" value={user.userId} />
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-medium text-gray-600 mb-1 uppercase tracking-wider">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  required
+                  defaultValue="Test push from admin"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-medium text-gray-600 mb-1 uppercase tracking-wider">
+                  Body
+                </label>
+                <textarea
+                  name="body"
+                  required
+                  rows={2}
+                  defaultValue="If you got this, push is working end-to-end."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-medium text-gray-600 mb-1 uppercase tracking-wider">
+                  Deep link (optional)
+                </label>
+                <select
+                  name="deepLink"
+                  defaultValue=""
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
+                >
+                  <option value="">(none)</option>
+                  <option value="/swipe">Swipe deck</option>
+                  <option value="/explore">Explore</option>
+                  <option value="/dashboard">Dashboard (saved)</option>
+                  <option value="/dashboard?tab=alerts">
+                    Dashboard (alerts)
+                  </option>
+                  <option value="/profile">Profile</option>
+                  <option value="/paywall">Paywall</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="submit"
+                  className="w-full px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-lg"
+                >
+                  Send to this user
+                </button>
+              </div>
+            </form>
+            <p className="text-[11px] text-gray-400 mt-3">
+              Bypasses the user's notifications-enabled toggle so testing
+              works on any account. Logged in audit + send history.
+            </p>
+          </>
+        )}
+      </section>
 
       {/* Recent events */}
       <Card title={`Recent events (last ${events.length})`}>
