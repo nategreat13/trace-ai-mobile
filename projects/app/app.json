@@ -23,7 +23,8 @@
     "android": {
       "package": "co.tracetravel.aiapp",
       "icon": "./assets/icon.jpeg",
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"

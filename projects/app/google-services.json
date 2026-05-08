@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "722122110487",
+    "project_id": "trace-ai-b9cba",
+    "storage_bucket": "trace-ai-b9cba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:722122110487:android:d99a5187b2437bf1664e52",
+        "android_client_info": {
+          "package_name": "co.tracetravel.aiapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD857NJx08Id41Gmt255nyKRpbVHb3zwpA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
