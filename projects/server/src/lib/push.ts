@@ -115,7 +115,14 @@ export async function sendToTokens(
   tokens: string[],
   payload: PushPayload
 ): Promise<SendResult> {
-  const valid = tokens.filter((t) => Expo.isExpoPushToken(t));
+  // Dedupe by token string. The client's registerPushToken can race
+  // when the gate fires multiple times concurrently (mount + AppState
+  // foreground + recheck signal), and `arrayUnion` only dedupes by
+  // whole-record equality — so a profile can end up with multiple
+  // records that share the same Expo token string, just with slightly
+  // different `addedAt` timestamps. Without this Set, each duplicate
+  // would result in one extra push delivery to the same device.
+  const valid = [...new Set(tokens.filter((t) => Expo.isExpoPushToken(t)))];
   if (valid.length === 0) {
     return { attempted: 0, ok: 0, removedTokens: [], errors: [] };
   }

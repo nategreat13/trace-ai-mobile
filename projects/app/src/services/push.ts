@@ -2,14 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-application";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  arrayUnion,
-  arrayRemove,
-  Timestamp,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { logEvent } from "../lib/analytics";
 
@@ -85,7 +78,34 @@ export async function requestNotificationPermission(): Promise<
  * (different from userId — there can theoretically be more than one
  * profile doc per user, though the app picks the most recent).
  */
+// Module-level in-flight promise. The gate hook can fire registerPushToken
+// concurrently (initial mount, AppState foreground, recheck signal). Without
+// this dedup, all parallel callers would race: each reads pushTokens=[],
+// each sees "no token yet", each writes — and `arrayUnion` doesn't dedupe
+// by token string when the addedAt timestamps differ. Net result: one
+// device with N records of the same token, and N push deliveries per send.
+//
+// Sharing one in-flight promise across concurrent callers means only one
+// getExpoPushTokenAsync runs and only one Firestore write happens.
+let inflightRegister: Promise<string | null> | null = null;
+
 export async function registerPushToken(
+  userProfileDocId: string
+): Promise<string | null> {
+  if (inflightRegister) {
+    console.log("[push] registerPushToken: already in flight, sharing promise");
+    return inflightRegister;
+  }
+  inflightRegister = (async () => doRegisterPushToken(userProfileDocId))();
+  // Clear the cache after the promise settles so a future call (e.g.
+  // user toggles notifications back on later) can re-register.
+  inflightRegister.finally(() => {
+    inflightRegister = null;
+  });
+  return inflightRegister;
+}
+
+async function doRegisterPushToken(
   userProfileDocId: string
 ): Promise<string | null> {
   console.log("[push] registerPushToken: entered, profile:", userProfileDocId);
@@ -145,31 +165,60 @@ export async function registerPushToken(
       return null;
     }
 
-    // Append to pushTokens array if not already present. arrayUnion is
-    // a no-op for duplicates so re-launches are safe.
+    // Read, dedupe by token string, write back. Replaces the old
+    // arrayUnion-based path which dedupes by whole-record equality and
+    // therefore couldn't catch two records with the same token but
+    // different addedAt timestamps. Combined with the in-flight cache
+    // above, this also self-heals any pre-existing duplicates on the
+    // profile (next launch reads the array, dedupes, writes back).
     const ref = doc(db, "userProfiles", userProfileDocId);
-    console.log("[push] reading existing userProfile to dedupe");
+    console.log("[push] reading existing userProfile");
     const existing = await getDoc(ref);
     const currentTokens = (existing.data()?.pushTokens ?? []) as Array<{
       token: string;
+      platform?: string;
+      addedAt?: unknown;
     }>;
-    const alreadyHas = currentTokens.some((t) => t.token === token);
-    console.log("[push] existing tokens count:", currentTokens.length, "already has?", alreadyHas);
+
+    // Build dedup map keyed on the Expo token string. The first
+    // occurrence wins so we keep the original addedAt.
+    const dedup = new Map<string, (typeof currentTokens)[number]>();
+    for (const t of currentTokens) {
+      if (t?.token && !dedup.has(t.token)) dedup.set(t.token, t);
+    }
+    const hadDuplicates = currentTokens.length !== dedup.size;
+    const alreadyHas = dedup.has(token);
+    console.log(
+      "[push] existing tokens:",
+      currentTokens.length,
+      "unique:",
+      dedup.size,
+      "already has?",
+      alreadyHas
+    );
 
     if (!alreadyHas) {
-      const record = {
+      dedup.set(token, {
         token,
         platform: Platform.OS as "ios" | "android",
         addedAt: Timestamp.now(),
-      };
-      console.log("[push] writing new token to userProfiles/", userProfileDocId);
-      await setDoc(
-        ref,
-        { pushTokens: arrayUnion(record) },
-        { merge: true }
+      });
+    }
+
+    if (!alreadyHas || hadDuplicates) {
+      const next = Array.from(dedup.values());
+      console.log(
+        "[push] writing pushTokens array, count:",
+        next.length,
+        "(deduped from",
+        currentTokens.length,
+        ")"
       );
+      await setDoc(ref, { pushTokens: next }, { merge: true });
       console.log("[push] write complete");
-      logEvent("push_token_registered", { platform: Platform.OS });
+      if (!alreadyHas) {
+        logEvent("push_token_registered", { platform: Platform.OS });
+      }
     }
 
     return token;
