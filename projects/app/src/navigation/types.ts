@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Landing: undefined;
   Login: { mode?: "signup" | "signin" } | undefined;
   Onboarding: undefined;
+  NotificationsPermission: undefined;
   MainTabs: NavigatorScreenParams<TabParamList>;
   Paywall: { entryPoint?: string } | undefined;
   PremiumWelcome: undefined;

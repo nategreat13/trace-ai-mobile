@@ -8,6 +8,7 @@ import type { RootStackParamList } from "./types";
 import LandingScreen from "../screens/LandingScreen";
 import LoginScreen from "../screens/LoginScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
+import NotificationsPermissionScreen from "../screens/NotificationsPermissionScreen";
 import TabNavigator from "./TabNavigator";
 import PaywallScreen from "../screens/PaywallScreen";
 import PremiumWelcomeScreen from "../screens/PremiumWelcomeScreen";
@@ -36,6 +37,15 @@ export default function RootNavigator() {
         </>
       ) : !profile?.onboardingComplete ? (
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+      ) : !profile?.notificationPermissionAsked ? (
+        // After onboarding completes, show the soft prompt for push
+        // notifications before any normal app screens. Once the user
+        // taps Enable or Maybe later, notificationPermissionAsked
+        // flips to true and they advance to MainTabs.
+        <Stack.Screen
+          name="NotificationsPermission"
+          component={NotificationsPermissionScreen}
+        />
       ) : (
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />

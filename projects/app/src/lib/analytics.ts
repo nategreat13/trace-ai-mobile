@@ -82,6 +82,9 @@ export type AnalyticsEventName =
   | "promo_redeem_succeeded"
   | "promo_redeem_failed"
   // Push notifications (client-side)
+  | "push_soft_prompt_shown"
+  | "push_soft_prompt_enable_tapped"
+  | "push_soft_prompt_later_tapped"
   | "push_permission_requested"
   | "push_permission_granted"
   | "push_permission_denied"

@@ -14,10 +14,6 @@ import {
 import { DEAL_TYPES, TIMEFRAMES, DEST_OPTIONS } from "../lib/constants";
 import OnboardingStep from "../components/onboarding/OnboardingStep";
 import { logEvent } from "../lib/analytics";
-import {
-  requestNotificationPermission,
-  registerPushToken,
-} from "../services/push";
 import AirportInput from "../components/onboarding/AirportInput";
 import OptionGrid from "../components/onboarding/OptionGrid";
 import PersonalityReveal from "../components/PersonalityReveal";
@@ -182,29 +178,11 @@ export default function OnboardingScreen() {
         is_editing: isEditing,
       });
 
-      // Ask for push permission once, only on first-time onboarding
-      // (not when editing preferences). Best practice: ask after the
-      // user has invested in the app, not on first launch.
-      if (!isEditing && !profile?.notificationPermissionAsked) {
-        try {
-          logEvent("push_permission_requested", {});
-          const status = await requestNotificationPermission();
-          const freshProfile = await getUserProfile(user.uid);
-          if (freshProfile?.id) {
-            const updates: Record<string, any> = {
-              notificationPermissionAsked: true,
-              notificationsEnabled: status === "granted",
-            };
-            await updateUserProfile(freshProfile.id, updates);
-            if (status === "granted") {
-              await registerPushToken(freshProfile.id);
-            }
-            setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
-          }
-        } catch (err) {
-          if (__DEV__) console.warn("[onboarding] push permission flow failed:", err);
-        }
-      }
+      // Push permission handling moved to NotificationsPermissionScreen,
+      // which renders automatically after onboardingComplete=true if the
+      // user hasn't been asked yet (see RootNavigator gate). Doing it
+      // there gives us a soft-prompt step before the OS dialog, which
+      // dramatically improves accept rate.
 
       if (isEditing) {
         navigation.goBack();
