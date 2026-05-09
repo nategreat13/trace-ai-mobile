@@ -1,6 +1,6 @@
-import React from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
-import { Cloud, Sun, CloudRain, CloudSnow } from "lucide-react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, useColorScheme, TouchableOpacity } from "react-native";
+import { Cloud, Sun, CloudRain, CloudSnow, ChevronDown, ChevronUp } from "lucide-react-native";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 
@@ -56,6 +56,14 @@ interface WeatherEntry {
   desc: string;
   icon: "sun" | "rain" | "snow" | "cloud" | "partly";
 }
+
+const PACKING_TIPS: Record<string, string> = {
+  sun:    "Light, breathable clothing. Sunscreen, sunglasses, and a hat are essential.",
+  rain:   "Waterproof jacket or compact umbrella. Quick-dry layers are your friend.",
+  snow:   "Heavy coat, thermal base layers, waterproof boots, and gloves.",
+  cloud:  "Bring a light jacket — temperatures can swing between morning and afternoon.",
+  partly: "Layers work best. A light jacket for evenings and cooler spells.",
+};
 
 // ── Month name to index mapping ─────────────────────────────────────────────
 const MONTH_MAP: Record<string, number> = {
@@ -118,6 +126,7 @@ interface WeatherPreviewProps {
 export default function WeatherPreview({ deal }: WeatherPreviewProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+  const [expanded, setExpanded] = useState(false);
 
   const monthIdx = getMonthIndex(deal.travel_window || deal.dateString);
   const region = getRegion(deal.continent, deal.destination);
@@ -126,9 +135,13 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
   if (!data) return null;
 
   const monthLabel = deal.travel_window?.split(" - ")[0]?.split(" ")[0] || "";
+  const packingTip = PACKING_TIPS[data.icon] ?? PACKING_TIPS.cloud;
+  const chevronColor = scheme === "dark" ? "#60a5fa" : "#2563eb";
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => setExpanded((v) => !v)}
       style={[
         styles.container,
         {
@@ -146,15 +159,33 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
             <Text style={[styles.sectionLabel, { color: theme.mutedForeground }]}>
               Weather in {monthLabel}
             </Text>
-            <Text style={[styles.tempText, { color: scheme === "dark" ? "#60a5fa" : "#2563eb" }]}>
-              {data.temp}
-            </Text>
+            <View style={styles.topRowRight}>
+              <Text style={[styles.tempText, { color: chevronColor }]}>{data.temp}</Text>
+              {expanded
+                ? <ChevronUp size={14} color={chevronColor} />
+                : <ChevronDown size={14} color={chevronColor} />}
+            </View>
           </View>
           <Text style={[styles.seasonLabel, { color: theme.foreground }]}>{data.label}</Text>
           <Text style={[styles.desc, { color: theme.mutedForeground }]}>{data.desc}</Text>
         </View>
       </View>
-    </View>
+
+      {expanded && (
+        <View style={[styles.expandedContent, { borderTopColor: scheme === "dark" ? "rgba(30,58,138,0.4)" : "#dbeafe" }]}>
+          <View style={styles.expandedRow}>
+            <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>What to pack</Text>
+            <Text style={[styles.expandedValue, { color: theme.foreground }]}>{packingTip}</Text>
+          </View>
+          {!!deal.weather_preview && (
+            <View style={[styles.expandedRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: scheme === "dark" ? "rgba(30,58,138,0.4)" : "#dbeafe" }]}>
+              <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>Local climate</Text>
+              <Text style={[styles.expandedValue, { color: theme.foreground }]}>{deal.weather_preview}</Text>
+            </View>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -181,6 +212,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 2,
   },
+  topRowRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "600",
@@ -198,5 +234,25 @@ const styles = StyleSheet.create({
   desc: {
     fontSize: 12,
     marginTop: 2,
+  },
+  expandedContent: {
+    marginTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    gap: 10,
+  },
+  expandedRow: {
+    gap: 4,
+    paddingTop: 10,
+  },
+  expandedLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  expandedValue: {
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

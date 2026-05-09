@@ -20,16 +20,17 @@ import {
   Bookmark,
   ExternalLink,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import WeatherPreview from "./WeatherPreview";
-import DealExperiences from "./DealExperiences";
 import DealInterestingFacts from "./DealInterestingFacts";
-import DealQuickTips from "./DealQuickTips";
 import DealTravelTips from "./DealTravelTips";
-import DealBudgetPreview from "./DealBudgetPreview";
+import DealDestinationTab from "./DealDestinationTab";
+import { useDestinationInfo } from "../../hooks/useDestinationInfo";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.65;
@@ -179,6 +180,9 @@ export default function ExpandedDeal({
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = React.useState<"flight" | "destination">("flight");
+  const [expandedActivity, setExpandedActivity] = React.useState<number | null>(null);
+  const { info: destinationInfo } = useDestinationInfo(deal);
 
   const fitData = useMemo(
     () =>
@@ -266,6 +270,28 @@ export default function ExpandedDeal({
             </View>
           </View>
 
+          {/* ── Tab Row ───────────────────────────────────────────────── */}
+          <View style={[styles.tabRow, { backgroundColor: theme.background }]}>
+            <View style={[styles.tabPills, { backgroundColor: theme.muted }]}>
+              {(["flight", "destination"] as const).map((tab) => (
+                <TouchableOpacity
+                  key={tab}
+                  onPress={() => setActiveTab(tab)}
+                  activeOpacity={0.7}
+                  style={[styles.tabPill, activeTab === tab && { backgroundColor: theme.card }]}
+                >
+                  <Text style={[styles.tabPillText, { color: activeTab === tab ? theme.foreground : theme.mutedForeground }]}>
+                    {tab === "flight" ? "✈️  Flight" : "🗺️  Destination"}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {activeTab === "destination" ? (
+            <DealDestinationTab deal={deal} />
+          ) : (
+            <>
           {/* ── Content ───────────────────────────────────────────────── */}
           <View style={styles.contentContainer}>
 
@@ -349,6 +375,14 @@ export default function ExpandedDeal({
                     <Text style={[styles.metaValue, { color: theme.foreground }]}>{deal.travel_window}</Text>
                   </View>
                 )}
+                {!!deal.airlines && (
+                  <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
+                    <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Airlines</Text>
+                    <Text style={[styles.metaValue, { color: theme.foreground, textAlign: "right", flex: 1 }]}>
+                      {deal.airlines}
+                    </Text>
+                  </View>
+                )}
                 {!!deal.layover_info && (
                   <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
                     <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Layovers</Text>
@@ -358,13 +392,35 @@ export default function ExpandedDeal({
                   </View>
                 )}
                 {!!deal.price_will_last && (
-                  <View style={styles.metaRow}>
+                  <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
                     <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Price valid</Text>
                     <Text style={[styles.metaValue, { color: theme.foreground, textAlign: "right", flex: 1 }]}>
                       {deal.price_will_last}
                     </Text>
                   </View>
                 )}
+                {!!deal.price_trend && deal.price_trend !== "stable" && (() => {
+                  const isRising = deal.price_trend.toLowerCase().includes("rising") || deal.price_trend.toLowerCase().includes("up");
+                  const isFalling = deal.price_trend.toLowerCase().includes("falling") || deal.price_trend.toLowerCase().includes("down");
+                  const trendColor = isRising ? "#ef4444" : isFalling ? "#16a34a" : theme.mutedForeground;
+                  const trendLabel = isRising ? "📈 Rising" : isFalling ? "📉 Falling" : deal.price_trend;
+                  return (
+                    <View style={styles.metaRow}>
+                      <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Price trend</Text>
+                      <Text style={[styles.metaValue, { color: trendColor, textAlign: "right", flex: 1, fontWeight: "700" }]}>
+                        {trendLabel}
+                      </Text>
+                    </View>
+                  );
+                })()}
+              </View>
+            )}
+
+            {/* Urgency strip */}
+            {deal.urgency?.toLowerCase() === "high" && (
+              <View style={[styles.urgencyStrip, { backgroundColor: scheme === "dark" ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.07)", borderColor: scheme === "dark" ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.20)" }]}>
+                <Text style={styles.urgencyIcon}>🔥</Text>
+                <Text style={[styles.urgencyText, { color: theme.foreground }]}>This price won't last — deals like this typically sell out within 24–48 hours.</Text>
               </View>
             )}
 
@@ -413,9 +469,6 @@ export default function ExpandedDeal({
               );
             })()}
 
-            {/* Daily Budget Estimate */}
-            <DealBudgetPreview deal={deal} />
-
             {/* Weather */}
             <WeatherPreview deal={deal} />
 
@@ -446,30 +499,66 @@ export default function ExpandedDeal({
                 )}
               </View>
             )}
+            {/* Things To Do — seasonal from destination info, falls back to deal data pre-deploy */}
+            {(() => {
+              const activities = destinationInfo?.seasonalActivities
+                ?? deal.itinerary_ideas?.map((idea) => ({ title: idea, description: "" }));
+              if (!activities || activities.length === 0) return null;
+              return (
+              <View style={[styles.itineraryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={[styles.sectionHeaderRow, { marginBottom: 0, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
+                  <Text style={styles.itineraryIcon}>🗓️</Text>
+                  <Text style={[styles.sectionHeaderText, { color: theme.mutedForeground, fontSize: 11, letterSpacing: 1.5 }]}>
+                    THINGS TO DO
+                  </Text>
+                </View>
+                {activities.map((activity, i) => {
+                  const isExpanded = expandedActivity === i;
+                  const isLast = i === activities.length - 1;
+                  const hasDesc = !!activity.description;
+                  return (
+                    <TouchableOpacity
+                      key={i}
+                      activeOpacity={hasDesc ? 0.75 : 1}
+                      onPress={() => hasDesc && setExpandedActivity(isExpanded ? null : i)}
+                      style={[
+                        styles.itineraryRow,
+                        { borderBottomColor: theme.border },
+                        isLast && { borderBottomWidth: 0 },
+                        isExpanded && { backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" },
+                      ]}
+                    >
+                      <Text style={[styles.itineraryNumber, { color: colors.brand.traceRed }]}>
+                        {String(i + 1).padStart(2, "0")}
+                      </Text>
+                      <View style={{ flex: 1, gap: 6 }}>
+                        <Text style={[styles.itineraryText, { color: theme.foreground }]}>{activity.title}</Text>
+                        {isExpanded && hasDesc && (
+                          <Text style={[styles.itineraryDesc, { color: theme.mutedForeground }]}>{activity.description}</Text>
+                        )}
+                      </View>
+                      {hasDesc && (isExpanded
+                        ? <ChevronUp size={14} color={theme.mutedForeground} />
+                        : <ChevronDown size={14} color={theme.mutedForeground} />)}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              );
+            })()}
           </View>
-
-          {/* ── Horizontal sections (full-bleed) ──────────────────────── */}
-          {deal.experiences && deal.experiences.length > 0 && (
-            <View style={styles.fullBleedSection}>
-              <DealExperiences
-                experiences={deal.experiences}
-                month={deal.travel_window?.split(" ")[0]}
-              />
-            </View>
-          )}
 
           {/* ── Padded sections ───────────────────────────────────────── */}
           <View style={styles.contentContainer}>
             {deal.interesting_facts && deal.interesting_facts.length > 0 && (
               <DealInterestingFacts facts={factObjects} />
             )}
-            {deal.quick_tips && deal.quick_tips.length > 0 && (
-              <DealQuickTips tips={deal.quick_tips} />
-            )}
             {deal.travel_tips && deal.travel_tips.length > 0 && (
               <DealTravelTips tips={travelTipObjects} />
             )}
           </View>
+            </>
+          )}
         </ScrollView>
 
         {/* ── Bottom action bar ─────────────────────────────────────── */}
@@ -632,6 +721,27 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.75)",
   },
 
+  // ── Tab row ───────────────────────────────────────────────────────────────
+  tabRow: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  tabPills: {
+    flexDirection: "row",
+    borderRadius: 12,
+    padding: 3,
+  },
+  tabPill: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  tabPillText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
   // ── Content containers ────────────────────────────────────────────────────
   contentContainer: {
     padding: 20,
@@ -775,6 +885,43 @@ const styles = StyleSheet.create({
   },
   aiText: { fontSize: 14, lineHeight: 21, marginBottom: 8 },
   vibeText: { fontSize: 13, lineHeight: 19 },
+
+  // ── Urgency strip ─────────────────────────────────────────────────────────
+  urgencyStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  urgencyIcon: { fontSize: 14 },
+  urgencyText: { fontSize: 13, lineHeight: 18, flex: 1 },
+
+  // ── Itinerary card ────────────────────────────────────────────────────────
+  itineraryCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+  },
+  itineraryIcon: { fontSize: 13 },
+  itineraryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  itineraryNumber: {
+    fontSize: 13,
+    fontWeight: "900",
+    width: 24,
+    letterSpacing: -0.5,
+  },
+  itineraryText: { fontSize: 14, fontWeight: "600", lineHeight: 20 },
+  itineraryDesc: { fontSize: 13, lineHeight: 19 },
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   bottomBar: {

@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { dealRoutes } from "./routes/deals";
 import { aiRoutes } from "./routes/ai";
+import { destinationInfoRoutes } from "./routes/destination-info";
 import { revenuecatWebhookRoutes } from "./routes/revenuecat-webhook";
 import { promoRoutes } from "./routes/promo";
 import { adminPushRoutes } from "./routes/admin-push";
@@ -14,6 +15,7 @@ app.use(express.json());
 
 app.use(dealRoutes);
 app.use(aiRoutes);
+app.use(destinationInfoRoutes);
 app.use(revenuecatWebhookRoutes);
 app.use(promoRoutes);
 app.use(adminPushRoutes);
