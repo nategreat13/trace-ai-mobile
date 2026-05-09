@@ -127,7 +127,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
     { "icon": "single emoji", "mode": "transport mode", "tip": "specific actionable tip", "cost": "rough cost or omit if not applicable" }
   ],
   "dayTrips": [
-    { "name": "destination", "emoji": "single emoji", "time": "X hrs by car/train" }
+    { "name": "destination", "emoji": "single emoji", "time": "X hrs by car/train", "description": "one sentence on what makes it worth the trip and what to do there" }
   ],
   "whatToAvoid": [
     { "tip": "one specific thing to avoid — tourist trap, safety note, common mistake, or scam" }

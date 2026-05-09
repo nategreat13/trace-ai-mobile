@@ -47,6 +47,6 @@ export interface DestinationInfo {
     tip: string;
     cost?: string;
   }>;
-  dayTrips: Array<{ name: string; emoji: string; time: string }>;
+  dayTrips: Array<{ name: string; emoji: string; time: string; description?: string }>;
   whatToAvoid: Array<{ tip: string }>;
 }

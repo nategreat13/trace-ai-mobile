@@ -70,10 +70,10 @@ const MOCK_DATA: DestinationInfo = {
     { icon: "🚕", mode: "Rideshare", tip: "Use for late nights or luggage. Surge pricing hits hard on weekends after 10pm — walk a block from busy venues before requesting.", cost: "$8–20 typical ride" },
   ],
   dayTrips: [
-    { name: "Coastal Cliffs", emoji: "🏔️", time: "45 min by car" },
-    { name: "Wine Valley", emoji: "🍷", time: "1.5 hrs by car" },
-    { name: "Historic Old Town", emoji: "🏘️", time: "1 hr by train" },
-    { name: "National Park", emoji: "🌲", time: "2 hrs by car" },
+    { name: "Coastal Cliffs", emoji: "🏔️", time: "45 min by car", description: "Dramatic seaside cliffs with walking trails and a lighthouse worth the hike. Go on a weekday to have the lookout points mostly to yourself." },
+    { name: "Wine Valley", emoji: "🍷", time: "1.5 hrs by car", description: "Rolling vineyard country with a handful of tasting rooms that don't require a reservation. Pick up a bottle and have a picnic — the scenery earns it." },
+    { name: "Historic Old Town", emoji: "🏘️", time: "1 hr by train", description: "A well-preserved colonial center with cobblestone streets, a cathedral, and one of the region's best Saturday markets. Easy day by train." },
+    { name: "National Park", emoji: "🌲", time: "2 hrs by car", description: "Old-growth forest with a handful of trails ranging from easy walks to serious half-day hikes. Get there early — the parking lot fills by 9am on weekends." },
   ],
   whatToAvoid: [
     { tip: "Don't eat at any restaurant directly on the main tourist plaza — you're paying 3x for worse food." },
