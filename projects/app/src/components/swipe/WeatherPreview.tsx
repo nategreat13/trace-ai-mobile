@@ -7,46 +7,46 @@ import { colors } from "../../theme/colors";
 // ── Weather data by region and month ────────────────────────────────────────
 const WEATHER_DATA: Record<string, Record<number, WeatherEntry>> = {
   tropical: {
-    0:  { label: "Dry Season",          temp: "75-88\u00B0F", desc: "Sunny, low humidity -- ideal travel weather",   icon: "sun"   },
-    1:  { label: "Dry Season",          temp: "77-90\u00B0F", desc: "Warm and sunny with light breezes",             icon: "sun"   },
-    2:  { label: "Dry Season",          temp: "80-93\u00B0F", desc: "Hot and clear -- pack light clothing",          icon: "sun"   },
-    3:  { label: "Transition",          temp: "82-95\u00B0F", desc: "Getting hotter, occasional showers",            icon: "partly"},
-    4:  { label: "Rainy Season Begins", temp: "80-93\u00B0F", desc: "Short afternoon rain showers likely",           icon: "rain"  },
-    5:  { label: "Rainy Season",        temp: "78-90\u00B0F", desc: "Frequent showers, lush greenery",               icon: "rain"  },
-    6:  { label: "Rainy Season",        temp: "78-88\u00B0F", desc: "Wettest month -- pack a rain jacket",           icon: "rain"  },
-    7:  { label: "Rainy Season",        temp: "78-88\u00B0F", desc: "Warm with heavy showers",                       icon: "rain"  },
-    8:  { label: "Transition",          temp: "79-90\u00B0F", desc: "Rain tapering off, still warm",                 icon: "partly"},
-    9:  { label: "Dry Season Begins",   temp: "79-91\u00B0F", desc: "Cooling down, less rain",                       icon: "partly"},
-    10: { label: "Dry Season",          temp: "77-89\u00B0F", desc: "Pleasant and sunny",                            icon: "sun"   },
-    11: { label: "Dry Season",          temp: "75-88\u00B0F", desc: "Perfect weather, peak season",                  icon: "sun"   },
+    0:  { label: "Dry Season",          temp: "75-88\u00B0F", desc: "Sunny, low humidity -- ideal travel weather",   icon: "sun",    details: "January is peak dry season -- consistently sunny with low humidity and a reliable sea breeze. Evenings cool down nicely. This is the most popular travel window, so expect higher prices and busier attractions." },
+    1:  { label: "Dry Season",          temp: "77-90\u00B0F", desc: "Warm and sunny with light breezes",             icon: "sun",    details: "February stays sunny and dry with slightly warmer temperatures than January. Crowds thin a little compared to peak holiday season, making it a sweet spot for the region. Ideal for outdoor activities and beach days." },
+    2:  { label: "Dry Season",          temp: "80-93\u00B0F", desc: "Hot and clear -- pack light clothing",          icon: "sun",    details: "March brings intensifying heat as the dry season peaks. Mornings are best for sightseeing before the midday sun sets in. The lack of rain keeps skies blue but UV levels are high -- sunscreen is essential." },
+    3:  { label: "Transition",          temp: "82-95\u00B0F", desc: "Getting hotter, occasional showers",            icon: "partly", details: "April marks the shift toward wet season with rising humidity and brief afternoon showers that cool things down quickly. Mornings are still clear and good for exploring. A light rain layer is worth packing." },
+    4:  { label: "Rainy Season Begins", temp: "80-93\u00B0F", desc: "Short afternoon rain showers likely",           icon: "rain",   details: "May signals the start of rainy season -- expect daily showers, usually in the afternoon, lasting 1-2 hours. Mornings are still usable and the landscape turns lush and green. Fewer tourists means better prices and quieter sites." },
+    5:  { label: "Rainy Season",        temp: "78-90\u00B0F", desc: "Frequent showers, lush greenery",               icon: "rain",   details: "June brings frequent rainfall and high humidity, but storms tend to be intense and short rather than all-day drizzle. The green scenery is stunning. A packable waterproof jacket and quick-dry clothes make a big difference." },
+    6:  { label: "Rainy Season",        temp: "78-88\u00B0F", desc: "Wettest month -- pack a rain jacket",           icon: "rain",   details: "July is typically the wettest month in tropical destinations. Heavy rain can disrupt outdoor plans, especially in the afternoons and evenings. Budget hotels and tour operators often discount significantly during this period." },
+    7:  { label: "Rainy Season",        temp: "78-88\u00B0F", desc: "Warm with heavy showers",                       icon: "rain",   details: "August remains firmly in rainy season with similar conditions to July. However, many travelers find it perfectly manageable -- mornings are often clear and rain is usually predictable. Indoor cultural attractions are a good backup plan." },
+    8:  { label: "Transition",          temp: "79-90\u00B0F", desc: "Rain tapering off, still warm",                 icon: "partly", details: "September sees rainfall starting to ease up, though conditions remain unpredictable. It's a transitional month that rewards flexible travelers with shoulder-season prices and noticeably fewer crowds than the dry season peak." },
+    9:  { label: "Dry Season Begins",   temp: "79-91\u00B0F", desc: "Cooling down, less rain",                       icon: "partly", details: "October signals the return of the dry season, with skies clearing and humidity dropping. Temperatures remain warm but more comfortable than the wet season peak. An underrated time to visit before the holiday crowds arrive." },
+    10: { label: "Dry Season",          temp: "77-89\u00B0F", desc: "Pleasant and sunny",                            icon: "sun",    details: "November offers some of the best travel conditions of the year -- reliable sunshine, moderate humidity, and pre-peak-season crowd levels. Prices are still reasonable before the December holiday rush begins." },
+    11: { label: "Dry Season",          temp: "75-88\u00B0F", desc: "Perfect weather, peak season",                  icon: "sun",    details: "December is peak season in tropical destinations with dry, sunny weather and festive atmosphere. Expect higher prices and advance booking requirements for popular accommodation. The weather delivers -- clear skies and comfortable evenings are the norm." },
   },
   temperate_north: {
-    0:  { label: "Winter",       temp: "28-45\u00B0F", desc: "Cold with possible snow -- bundle up",           icon: "snow"  },
-    1:  { label: "Winter",       temp: "30-47\u00B0F", desc: "Still cold but days getting longer",             icon: "snow"  },
-    2:  { label: "Early Spring", temp: "40-58\u00B0F", desc: "Chilly and fresh, flowers starting to bloom",    icon: "partly"},
-    3:  { label: "Spring",       temp: "50-65\u00B0F", desc: "Mild and pleasant with some rain",               icon: "partly"},
-    4:  { label: "Spring",       temp: "58-72\u00B0F", desc: "Warm and beautiful, great for sightseeing",      icon: "sun"   },
-    5:  { label: "Early Summer", temp: "65-80\u00B0F", desc: "Warm and sunny -- peak season begins",           icon: "sun"   },
-    6:  { label: "Summer",       temp: "72-88\u00B0F", desc: "Hot and sunny, long daylight hours",             icon: "sun"   },
-    7:  { label: "Summer",       temp: "70-87\u00B0F", desc: "Peak summer heat -- stay hydrated",              icon: "sun"   },
-    8:  { label: "Early Fall",   temp: "62-78\u00B0F", desc: "Warm days, cooler evenings -- ideal weather",    icon: "partly"},
-    9:  { label: "Fall",         temp: "50-65\u00B0F", desc: "Crisp autumn air, stunning foliage",             icon: "partly"},
-    10: { label: "Late Fall",    temp: "38-52\u00B0F", desc: "Getting chilly, bring a jacket",                 icon: "cloud" },
-    11: { label: "Winter",       temp: "30-45\u00B0F", desc: "Cold with festive holiday atmosphere",           icon: "snow"  },
+    0:  { label: "Winter",       temp: "28-45\u00B0F", desc: "Cold with possible snow -- bundle up",           icon: "snow",   details: "January is the coldest month. Snow is possible and daylight hours are short. That said, winter travel has its own appeal -- fewer tourists, lower prices, and a cozy atmosphere. Indoor cultural attractions are at their best this time of year." },
+    1:  { label: "Winter",       temp: "30-47\u00B0F", desc: "Still cold but days getting longer",             icon: "snow",   details: "February is still cold but you start to notice the days lengthening. Late-month temperatures can surprise you with mild spells. Crowds remain thin and hotel prices are typically at their annual low point." },
+    2:  { label: "Early Spring", temp: "40-58\u00B0F", desc: "Chilly and fresh, flowers starting to bloom",    icon: "partly", details: "March is the start of the transition -- mornings are still cool but afternoons can be genuinely pleasant. Spring blooms begin appearing and the city feels like it's waking up. Layers are essential as temperatures swing throughout the day." },
+    3:  { label: "Spring",       temp: "50-65\u00B0F", desc: "Mild and pleasant with some rain",               icon: "partly", details: "April is a favorite month for many travelers -- comfortable temperatures, longer days, and the city in full spring color. Rain showers are common but brief. Popular sites start getting busier, especially around holidays." },
+    4:  { label: "Spring",       temp: "58-72\u00B0F", desc: "Warm and beautiful, great for sightseeing",      icon: "sun",    details: "May is arguably the best month to visit -- warm, long days without the peak summer crowds or prices. Outdoor cafes, parks, and markets come fully alive. Book accommodation in advance as savvy travelers already know this is prime time." },
+    5:  { label: "Early Summer", temp: "65-80\u00B0F", desc: "Warm and sunny -- peak season begins",           icon: "sun",    details: "June marks the start of peak summer with warm, reliable weather and very long days. Outdoor events and festivals fill the calendar. Prices rise and popular attractions get busy -- book ahead and aim for early mornings to beat the crowds." },
+    6:  { label: "Summer",       temp: "72-88\u00B0F", desc: "Hot and sunny, long daylight hours",             icon: "sun",    details: "July is peak summer -- hot days, long evenings, and the city at its most vibrant. It's also the busiest and most expensive time of year. Despite the crowds, the energy is unbeatable and the weather is consistently good." },
+    7:  { label: "Summer",       temp: "70-87\u00B0F", desc: "Peak summer heat -- stay hydrated",              icon: "sun",    details: "August stays hot and busy. The height of tourist season means crowded attractions and premium pricing, but the weather is reliably excellent. Evening temperatures are comfortable for outdoor dining. Staying hydrated in the midday heat is important." },
+    8:  { label: "Early Fall",   temp: "62-78\u00B0F", desc: "Warm days, cooler evenings -- ideal weather",    icon: "partly", details: "September is one of the best-kept travel secrets -- summer crowds disappear, prices drop, but the weather remains excellent. Warm days and cool evenings are perfect for exploring. This is arguably the ideal time to visit for most travelers." },
+    9:  { label: "Fall",         temp: "50-65\u00B0F", desc: "Crisp autumn air, stunning foliage",             icon: "partly", details: "October brings crisp air and spectacular autumn colors. Days are cooler but still comfortable for sightseeing, and the golden light is beautiful for photos. Crowds and prices have retreated significantly from summer peaks." },
+    10: { label: "Late Fall",    temp: "38-52\u00B0F", desc: "Getting chilly, bring a jacket",                 icon: "cloud",  details: "November gets noticeably cold with shorter days and overcast skies becoming more common. It's low season with good value on flights and hotels. The city takes on a quieter, more local character as tourists thin out significantly." },
+    11: { label: "Winter",       temp: "30-45\u00B0F", desc: "Cold with festive holiday atmosphere",           icon: "snow",   details: "December brings cold weather but also festive markets, holiday lights, and a magical atmosphere in many cities. It's busy around the holidays and prices spike in late December -- traveling in early December gets you the festive vibe at better rates." },
   },
   temperate_south: {
-    0:  { label: "Summer",        temp: "72-88\u00B0F", desc: "Hot and sunny -- peak summer",               icon: "sun"   },
-    1:  { label: "Summer",        temp: "70-87\u00B0F", desc: "Warm and dry, long evenings",                icon: "sun"   },
-    2:  { label: "Late Summer",   temp: "65-82\u00B0F", desc: "Warm with pleasant breezes",                 icon: "sun"   },
-    3:  { label: "Early Fall",    temp: "58-74\u00B0F", desc: "Mild and comfortable, less crowded",         icon: "partly"},
-    4:  { label: "Fall",          temp: "50-65\u00B0F", desc: "Crisp air, beautiful autumn colors",         icon: "partly"},
-    5:  { label: "Winter Begins", temp: "42-57\u00B0F", desc: "Cooling down, quieter season",               icon: "cloud" },
-    6:  { label: "Winter",        temp: "38-52\u00B0F", desc: "Cool and overcast -- pack layers",           icon: "cloud" },
-    7:  { label: "Winter",        temp: "40-54\u00B0F", desc: "Cool days, cold nights",                     icon: "cloud" },
-    8:  { label: "Early Spring",  temp: "48-62\u00B0F", desc: "Warming up, wildflowers emerging",           icon: "partly"},
-    9:  { label: "Spring",        temp: "55-70\u00B0F", desc: "Lovely spring weather, great for outdoors",  icon: "sun"   },
-    10: { label: "Late Spring",   temp: "62-78\u00B0F", desc: "Warm and sunny, pre-summer crowds",          icon: "sun"   },
-    11: { label: "Early Summer",  temp: "68-84\u00B0F", desc: "Hot and festive, peak holiday season",       icon: "sun"   },
+    0:  { label: "Summer",        temp: "72-88\u00B0F", desc: "Hot and sunny -- peak summer",               icon: "sun",    details: "January is peak summer in the southern hemisphere -- long days, hot temperatures, and the busiest travel season. Book well in advance. The heat is intense midday so mornings and evenings are the best times to explore outdoors." },
+    1:  { label: "Summer",        temp: "70-87\u00B0F", desc: "Warm and dry, long evenings",                icon: "sun",    details: "February remains firmly in summer with warm, dry conditions and long evenings. Crowds start to ease slightly from the January peak while the weather stays excellent. A great month to visit if you want summer without the holiday rush." },
+    2:  { label: "Late Summer",   temp: "65-82\u00B0F", desc: "Warm with pleasant breezes",                 icon: "sun",    details: "March is the end of summer and one of the most comfortable months -- temperatures are warm but no longer oppressive, and crowd levels are dropping. An often-overlooked sweet spot for travel in this region." },
+    3:  { label: "Early Fall",    temp: "58-74\u00B0F", desc: "Mild and comfortable, less crowded",         icon: "partly", details: "April brings early autumn conditions with mild, comfortable temperatures and a noticeable drop in tourist numbers. The landscape starts showing autumn colors. Prices are reasonable and the weather is very pleasant for walking and outdoor activities." },
+    4:  { label: "Fall",          temp: "50-65\u00B0F", desc: "Crisp air, beautiful autumn colors",         icon: "partly", details: "May offers crisp autumn weather with beautiful foliage and low tourist numbers. It's a genuinely underrated time to visit -- good value on accommodation, minimal crowds, and pleasant temperatures for sightseeing." },
+    5:  { label: "Winter Begins", temp: "42-57\u00B0F", desc: "Cooling down, quieter season",               icon: "cloud",  details: "June marks the start of winter in the southern hemisphere. Temperatures cool noticeably and days are shorter. It's low season for tourism, which means good value and a more local atmosphere. Layering up is essential, especially in the evenings." },
+    6:  { label: "Winter",        temp: "38-52\u00B0F", desc: "Cool and overcast -- pack layers",           icon: "cloud",  details: "July is the heart of winter -- cool, sometimes overcast, with the shortest days of the year. Indoor cultural experiences are excellent this time of year. Prices are at their lowest and popular attractions are blissfully uncrowded." },
+    7:  { label: "Winter",        temp: "40-54\u00B0F", desc: "Cool days, cold nights",                     icon: "cloud",  details: "August stays cold but days are beginning to lengthen again. The end of winter brings occasional warm spells. Late August can feel noticeably different to early August -- a transitional month with good value and improving conditions." },
+    8:  { label: "Early Spring",  temp: "48-62\u00B0F", desc: "Warming up, wildflowers emerging",           icon: "partly", details: "September is the start of spring -- temperatures are rising, wildflowers are blooming, and the city is coming back to life. Shoulder season prices are still in effect but the weather is becoming genuinely pleasant. An excellent time to visit." },
+    9:  { label: "Spring",        temp: "55-70\u00B0F", desc: "Lovely spring weather, great for outdoors",  icon: "sun",    details: "October is prime spring travel -- warm enough for comfortable outdoor exploring, still before the summer crowd and price surge. The landscape is lush and green. One of the best months to visit this region for most travelers." },
+    10: { label: "Late Spring",   temp: "62-78\u00B0F", desc: "Warm and sunny, pre-summer crowds",          icon: "sun",    details: "November brings warm, sunny weather and noticeably longer days as summer approaches. Crowds are building but haven't hit peak yet -- a good window before prices spike in December. Outdoor activities are at their best." },
+    11: { label: "Early Summer",  temp: "68-84\u00B0F", desc: "Hot and festive, peak holiday season",       icon: "sun",    details: "December opens summer in the southern hemisphere and the festive season in full swing. Expect hot weather, holiday energy, and rising prices as the season peaks. Book accommodation well in advance, especially around Christmas and New Year." },
   },
 };
 
@@ -54,6 +54,7 @@ interface WeatherEntry {
   label: string;
   temp: string;
   desc: string;
+  details: string;
   icon: "sun" | "rain" | "snow" | "cloud" | "partly";
 }
 
@@ -178,12 +179,10 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
             <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>What to pack</Text>
             <Text style={[styles.expandedValue, { color: theme.foreground }]}>{packingTip}</Text>
           </View>
-          {!!deal.weather_preview && deal.weather_preview !== "undefined" && (
-            <View style={[styles.expandedRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: scheme === "dark" ? "rgba(30,58,138,0.4)" : "#dbeafe" }]}>
+          <View style={[styles.expandedRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: scheme === "dark" ? "rgba(30,58,138,0.4)" : "#dbeafe" }]}>
               <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>Local climate</Text>
-              <Text style={[styles.expandedValue, { color: theme.foreground }]}>{deal.weather_preview}</Text>
+              <Text style={[styles.expandedValue, { color: theme.foreground }]}>{data.details}</Text>
             </View>
-          )}
         </View>
       )}
     </TouchableOpacity>
