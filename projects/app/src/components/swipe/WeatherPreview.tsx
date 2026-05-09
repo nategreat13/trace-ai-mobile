@@ -177,7 +177,7 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
             <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>What to pack</Text>
             <Text style={[styles.expandedValue, { color: theme.foreground }]}>{packingTip}</Text>
           </View>
-          {!!deal.weather_preview && (
+          {!!deal.weather_preview && deal.weather_preview !== "undefined" && (
             <View style={[styles.expandedRow, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: scheme === "dark" ? "rgba(30,58,138,0.4)" : "#dbeafe" }]}>
               <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>Local climate</Text>
               <Text style={[styles.expandedValue, { color: theme.foreground }]}>{deal.weather_preview}</Text>
