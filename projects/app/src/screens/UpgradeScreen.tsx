@@ -7,6 +7,7 @@ import {
   useColorScheme,
   Dimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,6 +26,8 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
+
+
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -96,6 +99,19 @@ export default function UpgradeScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
 
+        {/* ── Business Class Hero Image ── */}
+        <View style={{ paddingTop: 16 }}>
+          <Image
+            source={require("../../assets/businessimage.png")}
+            style={{ width: SCREEN_WIDTH, height: 220 }}
+            contentFit="cover"
+          />
+<LinearGradient
+            colors={["transparent", "#0a0a12"]}
+            style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 80, pointerEvents: "none" }}
+          />
+        </View>
+
         {/* ── Cinematic Hero ── */}
         <LinearGradient
           colors={["#0a0a12", "#0f1929", "#0a1628"]}
@@ -118,8 +134,8 @@ export default function UpgradeScreen() {
                 <Text style={{ fontSize: 10, fontWeight: "800", color: "#fff", letterSpacing: 1.5, textTransform: "uppercase" }}>Business Class</Text>
               </View>
             </View>
-            <Text style={{ fontSize: 40, fontWeight: "900", color: "#fff", lineHeight: 46, marginBottom: 14 }}>
-              The way flying{"\n"}was meant{"\n"}to feel.
+            <Text style={{ fontSize: 30, fontWeight: "900", color: "#fff", lineHeight: 36, marginBottom: 14 }}>
+              The way flying{"\n"}was meant to feel.
             </Text>
             <Text style={{ fontSize: 15, color: "rgba(255,255,255,0.6)", lineHeight: 22, marginBottom: 28 }}>
               Lie-flat beds. Champagne. Exclusive deals up to 65% off — before anyone else sees them.

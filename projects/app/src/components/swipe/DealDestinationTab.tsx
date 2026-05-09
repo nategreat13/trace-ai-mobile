@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,160 +6,282 @@ import {
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
-  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
 } from "react-native";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import { useDestinationInfo } from "../../hooks/useDestinationInfo";
+import { DestinationInfo } from "../../lib/destinationData";
+import AiWeatherCard from "./AiWeatherCard";
 
-type Theme = typeof colors.dark | typeof colors.light;
-
-interface Props {
-  deal: Deal;
-}
-
-const PRICE_LEVELS: Record<"budget" | "moderate" | "premium", { label: string; symbol: string }> = {
-  budget: { label: "Low-key", symbol: "$" },
-  moderate: { label: "Mid-range", symbol: "$$" },
-  premium: { label: "Splurge", symbol: "$$$" },
+// ── Tag → travel style mapping for For You personalization ──────────────────
+const TAG_MAP: Record<string, string[]> = {
+  adventure:   ["adventure"],
+  culture:     ["culture"],
+  food:        ["food"],
+  relaxation:  ["relaxation"],
+  luxury:      ["luxury"],
+  family:      ["family"],
+  romantic:    ["romantic"],
+  // dealTypes aliases
+  budget:      ["food", "relaxation"],
+  surprise:    ["adventure", "culture"],
 };
 
-export default function DealDestinationTab({ deal }: Props) {
+function getForYouItems(
+  info: DestinationInfo,
+  dealTypes: string[]
+): Array<{ emoji: string; name: string; description: string; reason: string }> {
+  if (!dealTypes.length) return [];
+
+  const wantedTags = new Set(
+    dealTypes.flatMap((dt) => TAG_MAP[dt.toLowerCase()] ?? [dt.toLowerCase()])
+  );
+
+  const scored = info.thingsToDo
+    .map((item) => ({
+      ...item,
+      score: item.tags.filter((t) => wantedTags.has(t)).length,
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  const reasonMap: Record<string, string> = {
+    adventure: "adventure traveler",
+    culture: "culture lover",
+    food: "food enthusiast",
+    relaxation: "relaxation seeker",
+    luxury: "luxury traveler",
+    family: "family trip",
+    romantic: "romantic getaway",
+  };
+
+  return scored.map((item) => {
+    const matchedTag = item.tags.find((t) => wantedTags.has(t)) ?? item.tags[0];
+    return {
+      emoji: item.emoji,
+      name: item.name,
+      description: item.description,
+      reason: reasonMap[matchedTag] ?? matchedTag,
+    };
+  });
+}
+
+// ── Pulsing logo loading state ───────────────────────────────────────────────
+function LoadingState({ scheme }: { scheme: "dark" | "light" | null | undefined }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.4, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1,   duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const logo = scheme === "dark"
+    ? require("../../../assets/TraceLogoDark.png")
+    : require("../../../assets/TraceLogoLight.png");
+
+  return (
+    <View style={loadingStyles.container}>
+      <Animated.Image source={logo} style={[loadingStyles.logo, { opacity: pulse }]} resizeMode="contain" />
+      <Text style={[loadingStyles.title, { color: scheme === "dark" ? "#ffffff" : "#111111" }]}>
+        Building your guide
+      </Text>
+      <Text style={[loadingStyles.subtitle, { color: scheme === "dark" ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)" }]}>
+        Our AI is pulling together everything you need to know about this destination…
+      </Text>
+    </View>
+  );
+}
+
+const loadingStyles = StyleSheet.create({
+  container: {
+    paddingTop: 60,
+    paddingBottom: 80,
+    paddingHorizontal: 40,
+    alignItems: "center",
+    gap: 16,
+  },
+  logo: {
+    width: 72,
+    height: 72,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+  },
+});
+
+// ── Section wrapper ──────────────────────────────────────────────────────────
+function Section({ title, children, theme }: {
+  title: string;
+  children: React.ReactNode;
+  theme: any;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>{title.toUpperCase()}</Text>
+      {children}
+    </View>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+interface Props {
+  deal: Deal;
+  userProfile?: any;
+}
+
+export default function DealDestinationTab({ deal, userProfile }: Props) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { info, loading, error } = useDestinationInfo(deal);
-  const [expandedNeighbourhood, setExpandedNeighbourhood] = useState<string | null>(null);
+  const [expandedNeighborhood, setExpandedNeighborhood] = useState<string | null>(null);
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color={colors.brand.traceRed} />
-        <Text style={[styles.loadingText, { color: theme.mutedForeground }]}>Loading destination guide…</Text>
-      </View>
-    );
-  }
+  if (loading) return <LoadingState scheme={scheme} />;
 
   if (error || !info) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={[styles.loadingText, { color: theme.mutedForeground }]}>Couldn't load destination info. Try again later.</Text>
+      <View style={styles.errorContainer}>
+        <Text style={[styles.errorText, { color: theme.mutedForeground }]}>
+          Couldn't load destination info right now. Try again later.
+        </Text>
       </View>
     );
   }
 
-  const hasEssentialsGrid = !!(info.essentials.flag || info.essentials.currency || info.essentials.language || info.essentials.timezone || info.essentials.plug);
+  const dealTypes: string[] = userProfile?.dealTypes ?? [];
+  const forYouItems = getForYouItems(info, dealTypes);
+  const isInternational = !!(info.essentials);
 
   return (
     <View style={styles.root}>
 
-      {/* ── Essentials ──────────────────────────────────────────── */}
-      <Section title="Essentials" theme={theme}>
-        {hasEssentialsGrid && (
-          <View style={[styles.essentialsGrid, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            {!!info.essentials.flag && <EssRow label="Flag" value={info.essentials.flag} theme={theme} />}
-            {!!info.essentials.currency && <EssRow label="Currency" value={info.essentials.currency} theme={theme} />}
-            {!!info.essentials.language && <EssRow label="Language" value={info.essentials.language} theme={theme} />}
-            {!!info.essentials.timezone && <EssRow label="Timezone" value={info.essentials.timezone} theme={theme} />}
-            {!!info.essentials.plug && (
-              <EssRow
-                label="Power plug"
-                value={`${info.essentials.plug}${info.essentials.needsAdapter ? " — adapter needed" : " — no adapter"}`}
-                theme={theme}
-                last
-              />
-            )}
+      {/* ── For You ─────────────────────────────────────────────────── */}
+      {forYouItems.length > 0 && (
+        <Section title="For You" theme={theme}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hRow}>
+            {forYouItems.map((item, i) => (
+              <View key={i} style={[styles.forYouCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={styles.forYouTop}>
+                  <Text style={styles.forYouEmoji}>{item.emoji}</Text>
+                  <View style={[styles.forYouBadge, { backgroundColor: scheme === "dark" ? "rgba(139,92,246,0.18)" : "rgba(139,92,246,0.10)" }]}>
+                    <Text style={[styles.forYouBadgeText, { color: scheme === "dark" ? "#c4b5fd" : "#7c3aed" }]}>{item.reason}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.forYouName, { color: theme.foreground }]}>{item.name}</Text>
+                <Text style={[styles.forYouDesc, { color: theme.mutedForeground }]}>{item.description}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Section>
+      )}
+
+      {/* ── Essentials (international only) ─────────────────────────── */}
+      {isInternational && info.essentials && (
+        <Section title="Essentials" theme={theme}>
+          <View style={[styles.listCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <EssRow label={`${info.essentials.flag}  Country`} value="" theme={theme} />
+            <EssRow label="Currency" value={info.essentials.currency} theme={theme} />
+            <EssRow label="Language" value={info.essentials.language} theme={theme} />
+            <EssRow label="Timezone" value={info.essentials.timezone} theme={theme} />
+            <EssRow
+              label="Power Plug"
+              value={`${info.essentials.plug} · ${info.essentials.needsAdapter ? "Adapter needed" : "No adapter needed"}`}
+              theme={theme}
+              last
+            />
           </View>
-        )}
-        {!!info.essentials.insiderNote && (
-          <View style={[styles.insiderCard, { backgroundColor: scheme === "dark" ? "rgba(245,158,11,0.10)" : "rgba(245,158,11,0.07)", borderColor: scheme === "dark" ? "rgba(245,158,11,0.28)" : "rgba(245,158,11,0.20)" }]}>
-            <Text style={styles.insiderIcon}>💡</Text>
-            <Text style={[styles.insiderText, { color: theme.foreground }]}>{info.essentials.insiderNote}</Text>
-          </View>
-        )}
+        </Section>
+      )}
+
+      {/* ── Weather ─────────────────────────────────────────────────── */}
+      <Section title="Weather" theme={theme}>
+        <AiWeatherCard weather={info.weather} scheme={scheme} theme={theme} />
       </Section>
 
-      {/* ── Neighbourhoods ──────────────────────────────────────── */}
-      <Section title="Neighbourhoods" theme={theme}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalRow}
-        >
-          {info.neighborhoods.map((n) => {
-            const isExpanded = expandedNeighbourhood === n.name;
-            return (
-              <TouchableOpacity
-                key={n.name}
-                activeOpacity={0.8}
-                onPress={() => setExpandedNeighbourhood(isExpanded ? null : n.name)}
-                style={[
-                  styles.hoodCard,
-                  { backgroundColor: theme.card, borderColor: isExpanded ? colors.brand.traceRed : theme.border },
-                ]}
-              >
-                <Text style={styles.hoodEmoji}>{n.emoji}</Text>
-                <Text style={[styles.hoodName, { color: theme.foreground }]}>{n.name}</Text>
-                <Text style={[styles.hoodVibe, { color: theme.mutedForeground }]}>{n.vibe}</Text>
-              </TouchableOpacity>
-            );
-          })}
+      {/* ── Neighborhoods ───────────────────────────────────────────── */}
+      <Section title="Neighborhoods" theme={theme}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hRow}>
+          {info.neighborhoods.map((n) => (
+            <TouchableOpacity
+              key={n.name}
+              activeOpacity={0.8}
+              onPress={() => setExpandedNeighborhood(expandedNeighborhood === n.name ? null : n.name)}
+              style={[
+                styles.hoodCard,
+                { backgroundColor: theme.card, borderColor: expandedNeighborhood === n.name ? colors.brand.traceRed : theme.border },
+              ]}
+            >
+              <Text style={styles.hoodEmoji}>{n.emoji}</Text>
+              <Text style={[styles.hoodName, { color: theme.foreground }]}>{n.name}</Text>
+              <Text style={[styles.hoodVibe, { color: theme.mutedForeground }]}>{n.vibe}</Text>
+            </TouchableOpacity>
+          ))}
         </ScrollView>
-        {expandedNeighbourhood && (() => {
-          const n = info.neighborhoods.find((x) => x.name === expandedNeighbourhood);
+        {expandedNeighborhood && (() => {
+          const n = info.neighborhoods.find((x) => x.name === expandedNeighborhood);
           if (!n) return null;
           return (
             <View style={[styles.hoodExpanded, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Text style={[styles.hoodExpandedTitle, { color: theme.foreground }]}>
-                {n.emoji} {n.name}
-              </Text>
-              <Text style={[styles.hoodExpandedDesc, { color: theme.mutedForeground }]}>
-                {n.description}
-              </Text>
+              <Text style={[styles.hoodExpandedTitle, { color: theme.foreground }]}>{n.emoji} {n.name}</Text>
+              <Text style={[styles.hoodExpandedDesc, { color: theme.mutedForeground }]}>{n.description}</Text>
             </View>
           );
         })()}
       </Section>
 
-      {/* ── Attractions ─────────────────────────────────────────── */}
-      <Section title="Don't Miss" theme={theme}>
+      {/* ── Things To Do ────────────────────────────────────────────── */}
+      <Section title="Things To Do" theme={theme}>
         <View style={[styles.listCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          {info.attractions.map((a, i) => (
+          {info.thingsToDo.map((item, i) => (
             <View
-              key={a.name}
-              style={[
-                styles.listRow,
-                { borderBottomColor: theme.border },
-                i === info.attractions.length - 1 && { borderBottomWidth: 0 },
-              ]}
+              key={item.name}
+              style={[styles.todoRow, { borderBottomColor: theme.border }, i === info.thingsToDo.length - 1 && { borderBottomWidth: 0 }]}
             >
-              <Text style={styles.listEmoji}>{a.emoji}</Text>
-              <Text style={[styles.listLabel, { color: theme.foreground }]}>{a.name}</Text>
+              <Text style={styles.todoEmoji}>{item.emoji}</Text>
+              <View style={styles.todoText}>
+                <Text style={[styles.todoName, { color: theme.foreground }]}>{item.name}</Text>
+                <Text style={[styles.todoDesc, { color: theme.mutedForeground }]}>{item.description}</Text>
+              </View>
             </View>
           ))}
         </View>
       </Section>
 
-      {/* ── Dining ──────────────────────────────────────────────── */}
+      {/* ── Dining ──────────────────────────────────────────────────── */}
       <Section title="Where to Eat" theme={theme}>
         {(["budget", "moderate", "premium"] as const).map((tier) => {
           const places = info.dining[tier];
-          if (!places || places.length === 0) return null;
-          const { label, symbol } = PRICE_LEVELS[tier];
+          if (!places?.length) return null;
+          const tierConfig = {
+            budget:   { symbol: "$",   label: "Budget",    color: "#16a34a" },
+            moderate: { symbol: "$$",  label: "Mid-Range", color: "#b45309" },
+            premium:  { symbol: "$$$", label: "Splurge",   color: colors.brand.traceRed },
+          }[tier];
           return (
             <View key={tier} style={styles.diningBlock}>
-              <View style={styles.diningTierHeader}>
-                <Text style={[styles.diningSymbol, { color: scheme === "dark" ? "#a78bfa" : "#7c3aed" }]}>{symbol}</Text>
-                <Text style={[styles.diningTierLabel, { color: theme.mutedForeground }]}>{label}</Text>
+              <View style={styles.diningTierRow}>
+                <Text style={[styles.diningSymbol, { color: tierConfig.color }]}>{tierConfig.symbol}</Text>
+                <Text style={[styles.diningTierLabel, { color: theme.mutedForeground }]}>{tierConfig.label}</Text>
               </View>
               <View style={[styles.listCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 {places.map((p, i) => (
                   <View
                     key={p.name}
-                    style={[
-                      styles.diningRow,
-                      { borderBottomColor: theme.border },
-                      i === places.length - 1 && { borderBottomWidth: 0 },
-                    ]}
+                    style={[styles.diningRow, { borderBottomColor: theme.border }, i === places.length - 1 && { borderBottomWidth: 0 }]}
                   >
                     <Text style={[styles.diningName, { color: theme.foreground }]}>{p.name}</Text>
                     <Text style={[styles.diningType, { color: theme.mutedForeground }]}>{p.type}</Text>
@@ -171,39 +293,38 @@ export default function DealDestinationTab({ deal }: Props) {
         })}
       </Section>
 
-      {/* ── Day Trips ───────────────────────────────────────────── */}
-      <Section title="Day Trips" theme={theme}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.horizontalRow}
-        >
-          {info.dayTrips.map((d) => (
-            <View
-              key={d.name}
-              style={[styles.dayTripCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-            >
-              <Text style={styles.dayTripEmoji}>{d.emoji}</Text>
-              <Text style={[styles.dayTripName, { color: theme.foreground }]}>{d.name}</Text>
-              <Text style={[styles.dayTripTime, { color: theme.mutedForeground }]}>{d.time}</Text>
-            </View>
-          ))}
-        </ScrollView>
+      {/* ── Daily Budget ─────────────────────────────────────────────── */}
+      <Section title="Daily Budget" theme={theme}>
+        <View style={styles.budgetRow}>
+          {(["budget", "midRange", "luxury"] as const).map((tier) => {
+            const b = info.dailyBudget[tier];
+            const config = {
+              budget:   { label: "Budget",   emoji: "🟢" },
+              midRange: { label: "Mid-Range", emoji: "🟡" },
+              luxury:   { label: "Luxury",   emoji: "🔴" },
+            }[tier];
+            return (
+              <View key={tier} style={[styles.budgetCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Text style={styles.budgetEmoji}>{config.emoji}</Text>
+                <Text style={[styles.budgetLabel, { color: theme.mutedForeground }]}>{config.label}</Text>
+                <Text style={[styles.budgetAmount, { color: theme.foreground }]}>{b.amount}</Text>
+                <Text style={[styles.budgetDesc, { color: theme.mutedForeground }]}>{b.description}</Text>
+              </View>
+            );
+          })}
+        </View>
       </Section>
 
-      {/* ── Getting Around ──────────────────────────────────────── */}
+      {/* ── Getting Around ───────────────────────────────────────────── */}
       <Section title="Getting Around" theme={theme}>
         {info.gettingAround.map((g, i) => (
-          <View
-            key={i}
-            style={[styles.aroundCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-          >
+          <View key={i} style={[styles.aroundCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <View style={styles.aroundHeader}>
               <Text style={styles.aroundIcon}>{g.icon}</Text>
               <Text style={[styles.aroundMode, { color: theme.foreground }]}>{g.mode}</Text>
               {!!g.cost && (
-                <View style={[styles.aroundCostBadge, { backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }]}>
-                  <Text style={[styles.aroundCostText, { color: theme.mutedForeground }]}>{g.cost}</Text>
+                <View style={[styles.costBadge, { backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)" }]}>
+                  <Text style={[styles.costText, { color: theme.mutedForeground }]}>{g.cost}</Text>
                 </View>
               )}
             </View>
@@ -212,71 +333,74 @@ export default function DealDestinationTab({ deal }: Props) {
         ))}
       </Section>
 
+      {/* ── Day Trips ────────────────────────────────────────────────── */}
+      <Section title="Day Trips" theme={theme}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hRow}>
+          {info.dayTrips.map((d) => (
+            <View key={d.name} style={[styles.dayTripCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={styles.dayTripEmoji}>{d.emoji}</Text>
+              <Text style={[styles.dayTripName, { color: theme.foreground }]}>{d.name}</Text>
+              <Text style={[styles.dayTripTime, { color: theme.mutedForeground }]}>{d.time}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </Section>
+
+      {/* ── What to Avoid ────────────────────────────────────────────── */}
+      <Section title="What to Avoid" theme={theme}>
+        <View style={[styles.listCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          {info.whatToAvoid.map((item, i) => (
+            <View
+              key={i}
+              style={[styles.avoidRow, { borderBottomColor: theme.border }, i === info.whatToAvoid.length - 1 && { borderBottomWidth: 0 }]}
+            >
+              <Text style={styles.avoidIcon}>⚠️</Text>
+              <Text style={[styles.avoidTip, { color: theme.foreground }]}>{item.tip}</Text>
+            </View>
+          ))}
+        </View>
+      </Section>
+
     </View>
   );
 }
 
-function Section({
-  title,
-  children,
-  theme,
-}: {
-  title: string;
-  children: React.ReactNode;
-  theme: Theme;
-}) {
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: theme.mutedForeground }]}>{title.toUpperCase()}</Text>
-      {children}
-    </View>
-  );
-}
-
-function EssRow({
-  label,
-  value,
-  theme,
-  last,
-}: {
-  label: string;
-  value: string;
-  theme: Theme;
-  last?: boolean;
-}) {
+function EssRow({ label, value, theme, last }: { label: string; value: string; theme: any; last?: boolean }) {
   return (
     <View style={[styles.essRow, { borderBottomColor: theme.border }, last && { borderBottomWidth: 0 }]}>
       <Text style={[styles.essLabel, { color: theme.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.essValue, { color: theme.foreground }]}>{value}</Text>
+      {!!value && <Text style={[styles.essValue, { color: theme.foreground }]}>{value}</Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { paddingVertical: 8 },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
-    gap: 12,
-  },
-  loadingText: { fontSize: 14 },
+  root: { paddingTop: 8, paddingBottom: 40 },
+
+  errorContainer: { padding: 40, alignItems: "center" },
+  errorText: { fontSize: 14, textAlign: "center", lineHeight: 21 },
 
   section: { paddingHorizontal: 20, marginBottom: 28 },
-  sectionTitle: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-    marginBottom: 10,
-  },
+  sectionTitle: { fontSize: 10, fontWeight: "700", letterSpacing: 1.4, marginBottom: 10 },
 
-  // Essentials
-  essentialsGrid: {
+  hRow: { paddingRight: 20, gap: 10 },
+
+  // For You
+  forYouCard: {
+    width: 200,
     borderRadius: 14,
     borderWidth: 1,
-    overflow: "hidden",
+    padding: 14,
+    gap: 6,
   },
+  forYouTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  forYouEmoji: { fontSize: 24 },
+  forYouBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  forYouBadgeText: { fontSize: 10, fontWeight: "700" },
+  forYouName: { fontSize: 14, fontWeight: "700" },
+  forYouDesc: { fontSize: 12, lineHeight: 18 },
+
+  // Essentials
   essRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -286,111 +410,76 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
-  essLabel: { fontSize: 13, fontWeight: "500", flexShrink: 0 },
+  essLabel: { fontSize: 13, fontWeight: "500" },
   essValue: { fontSize: 13, fontWeight: "600", flex: 1, textAlign: "right" },
-  insiderCard: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  insiderIcon: { fontSize: 14, lineHeight: 20 },
-  insiderText: { fontSize: 13, lineHeight: 19, flex: 1 },
 
-  // Neighbourhoods
-  horizontalRow: { paddingRight: 20, gap: 10 },
-  hoodCard: {
-    width: 130,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    gap: 4,
-  },
+  // Neighborhoods
+  hoodCard: { width: 130, borderRadius: 14, borderWidth: 1, padding: 14, gap: 4 },
   hoodEmoji: { fontSize: 24, marginBottom: 4 },
-  hoodName: { fontSize: 14, fontWeight: "700" },
+  hoodName: { fontSize: 13, fontWeight: "700" },
   hoodVibe: { fontSize: 11, fontWeight: "500" },
-  hoodExpanded: {
-    marginTop: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    gap: 8,
-  },
+  hoodExpanded: { marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 16, gap: 6 },
   hoodExpandedTitle: { fontSize: 15, fontWeight: "700" },
   hoodExpandedDesc: { fontSize: 13, lineHeight: 20 },
 
-  // Attractions / generic list
-  listCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  listRow: {
+  // Generic list card
+  listCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+
+  // Things to Do
+  todoRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 12,
   },
-  listEmoji: { fontSize: 18, width: 28, textAlign: "center" },
-  listLabel: { fontSize: 14, fontWeight: "600", flex: 1 },
+  todoEmoji: { fontSize: 18, width: 26, textAlign: "center", marginTop: 1 },
+  todoText: { flex: 1, gap: 2 },
+  todoName: { fontSize: 14, fontWeight: "600" },
+  todoDesc: { fontSize: 12, lineHeight: 18 },
 
   // Dining
   diningBlock: { marginBottom: 12 },
-  diningTierHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 6,
-  },
-  diningSymbol: { fontSize: 14, fontWeight: "800", width: 36 },
+  diningTierRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  diningSymbol: { fontSize: 13, fontWeight: "800", width: 32 },
   diningTierLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.8 },
-  diningRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 2,
-  },
+  diningRow: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, gap: 2 },
   diningName: { fontSize: 14, fontWeight: "600" },
   diningType: { fontSize: 12 },
 
-  // Day trips
-  dayTripCard: {
-    width: 140,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    gap: 4,
-  },
+  // Daily Budget
+  budgetRow: { flexDirection: "row", gap: 10 },
+  budgetCard: { flex: 1, borderRadius: 14, borderWidth: 1, padding: 12, gap: 4 },
+  budgetEmoji: { fontSize: 16, marginBottom: 2 },
+  budgetLabel: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6 },
+  budgetAmount: { fontSize: 15, fontWeight: "800" },
+  budgetDesc: { fontSize: 11, lineHeight: 16 },
+
+  // Getting Around
+  aroundCard: { borderRadius: 14, borderWidth: 1, padding: 16, marginBottom: 10, gap: 8 },
+  aroundHeader: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  aroundIcon: { fontSize: 20 },
+  aroundMode: { fontSize: 14, fontWeight: "700", flex: 1 },
+  costBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  costText: { fontSize: 11, fontWeight: "600" },
+  aroundTip: { fontSize: 13, lineHeight: 19 },
+
+  // Day Trips
+  dayTripCard: { width: 140, borderRadius: 14, borderWidth: 1, padding: 14, gap: 4 },
   dayTripEmoji: { fontSize: 24, marginBottom: 4 },
   dayTripName: { fontSize: 13, fontWeight: "700" },
   dayTripTime: { fontSize: 11, fontWeight: "500" },
 
-  // Getting around
-  aroundCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 10,
-    gap: 8,
-  },
-  aroundHeader: {
+  // What to Avoid
+  avoidRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flexWrap: "wrap",
+    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
-  aroundIcon: { fontSize: 22 },
-  aroundMode: { fontSize: 15, fontWeight: "700", flex: 1 },
-  aroundCostBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  aroundCostText: { fontSize: 11, fontWeight: "600" },
-  aroundTip: { fontSize: 13, lineHeight: 20 },
+  avoidIcon: { fontSize: 14, marginTop: 1 },
+  avoidTip: { fontSize: 13, lineHeight: 19, flex: 1 },
 });

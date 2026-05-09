@@ -8,8 +8,6 @@
     "icon": "./assets/icon.jpeg",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
@@ -26,9 +24,7 @@
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json"
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "web": {},
     "runtimeVersion": "1.1.0",
     "updates": {
       "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab"

@@ -284,7 +284,7 @@ export default function ExpandedDeal({
           </View>
 
           {activeTab === "destination" ? (
-            <DealDestinationTab deal={deal} />
+            <DealDestinationTab deal={deal} userProfile={userProfile} />
           ) : (
             <>
           {/* ── Content ───────────────────────────────────────────────── */}

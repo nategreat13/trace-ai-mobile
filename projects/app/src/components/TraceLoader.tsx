@@ -10,14 +10,16 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 
-const ICON = require("../../assets/android-icon-monochrome.png");
-
-const COLORS = ["#FF655B", "#FD297B", "#00D665", "#8b5cf6", "#F59E0B"];
+const IMAGES = [
+  require("../../assets/1.png"),
+  require("../../assets/2.png"),
+  require("../../assets/4.png"),
+];
 
 let loadCount = 0;
 
-export default function TraceLoader({ size = 72 }: { size?: number }) {
-  const colorIndex = useRef(loadCount % COLORS.length);
+export default function TraceLoader({ size = 120 }: { size?: number }) {
+  const imageIndex = useRef(loadCount % IMAGES.length);
 
   useEffect(() => {
     loadCount += 1;
@@ -54,10 +56,9 @@ export default function TraceLoader({ size = 72 }: { size?: number }) {
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
       <Animated.View style={animStyle}>
         <Image
-          source={ICON}
+          source={IMAGES[imageIndex.current]}
           style={{ width: size, height: size }}
           contentFit="contain"
-          tintColor={COLORS[colorIndex.current]}
         />
       </Animated.View>
     </View>

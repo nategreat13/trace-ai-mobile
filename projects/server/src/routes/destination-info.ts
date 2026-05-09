@@ -6,6 +6,19 @@ export const destinationInfoRoutes = Router();
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+const MONTH_NAMES: Record<string, string> = {
+  jan: "January", feb: "February", mar: "March", apr: "April",
+  may: "May", jun: "June", jul: "July", aug: "August",
+  sep: "September", oct: "October", nov: "November", dec: "December",
+  january: "January", february: "February", march: "March", april: "April",
+  june: "June", july: "July", august: "August", september: "September",
+  october: "October", november: "November", december: "December",
+};
+
+function resolveMonth(month: string): string {
+  return MONTH_NAMES[month.toLowerCase()] ?? month;
+}
+
 destinationInfoRoutes.get(
   "/destination-info/:destinationCode",
   async (req: Request, res: Response) => {
@@ -54,7 +67,7 @@ async function generateDestinationInfo(
 
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2000,
+    max_tokens: 3000,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -65,93 +78,135 @@ async function generateDestinationInfo(
 }
 
 function buildDomesticPrompt(destination: string, code: string, month: string): string {
-  const monthContext = month !== "any" ? `The traveler is visiting in ${month}.` : "";
-  return `You are a travel content writer with deep local knowledge. Generate a destination guide for ${destination} (airport: ${code}) for US travelers flying domestically. ${monthContext}
+  const monthLabel = resolveMonth(month);
+  const monthContext = month !== "any" ? `The traveler is visiting in ${monthLabel}.` : "";
 
-Since they're traveling within the US, skip currency, language, timezone, and power plug info — they know those. Focus entirely on local knowledge.
+  return `You are a travel expert with deep local knowledge. Generate a destination guide for ${destination} (airport: ${code}) for US travelers flying domestically. ${monthContext}
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+Since this is domestic US travel, skip currency, language, timezone, and power plug — travelers already know those.
+
+Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 
 {
-  "essentials": {
-    "insiderNote": "one specific insider tip that locals know and tourists miss — concrete and actionable, not generic"
+  "weather": {
+    "label": "short evocative label for the weather this month (e.g. 'Peak Summer', 'Karl's Back', 'Snowfall Season')",
+    "temp": "low-high°F range for ${monthLabel !== "any" ? monthLabel : "a typical visit"}",
+    "humidity": <average humidity % as integer>,
+    "desc": "one short punchy line describing the weather vibe",
+    "details": "one sentence with the most useful thing to know about the weather this month — specific, not generic",
+    "icon": "one of: sun, rain, snow, cloud, partly",
+    "packingTip": "one sentence on what to pack for the weather"
   },
   "neighborhoods": [
     {
       "name": "neighborhood name",
       "emoji": "single emoji",
-      "vibe": "2-4 word vibe phrase",
-      "description": "2-3 sentences — specific, opinionated, tells you what to actually do and when"
+      "vibe": "2-4 word vibe",
+      "description": "2-3 sentences — specific, opinionated, what to actually do and when"
     }
   ],
-  "attractions": [
-    { "name": "attraction name", "emoji": "single emoji" }
+  "thingsToDo": [
+    {
+      "name": "activity name",
+      "emoji": "single emoji",
+      "description": "one sentence — what makes it worth doing",
+      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"]
+    }
   ],
   "dining": {
-    "budget": [{ "name": "restaurant name", "type": "cuisine/style + short context" }],
-    "moderate": [{ "name": "restaurant name", "type": "cuisine/style + short context" }],
-    "premium": [{ "name": "restaurant name", "type": "cuisine/style + short context" }]
+    "budget": [{ "name": "restaurant name", "type": "cuisine + one-line context" }],
+    "moderate": [{ "name": "restaurant name", "type": "cuisine + one-line context" }],
+    "premium": [{ "name": "restaurant name", "type": "cuisine + one-line context" }]
   },
-  "dayTrips": [
-    { "name": "destination name", "emoji": "single emoji", "time": "X hrs by car/train" }
-  ],
+  "dailyBudget": {
+    "budget": { "amount": "$XX/day", "description": "what budget looks like: accommodation, food, transport" },
+    "midRange": { "amount": "$XXX/day", "description": "what mid-range looks like" },
+    "luxury": { "amount": "$XXX+/day", "description": "what luxury looks like" }
+  },
   "gettingAround": [
     { "icon": "single emoji", "mode": "transport mode", "tip": "specific actionable tip", "cost": "rough cost or omit if not applicable" }
   ],
-  "seasonalActivities": [
-    { "title": "activity name", "description": "2-3 sentences — what it is, why it's worth doing, any practical tips (hours, cost, how to get there)" }
+  "dayTrips": [
+    { "name": "destination", "emoji": "single emoji", "time": "X hrs by car/train" }
+  ],
+  "whatToAvoid": [
+    { "tip": "one specific thing to avoid — tourist trap, safety note, common mistake, or scam" }
   ]
 }
 
-Include 3-4 neighborhoods, 5-6 attractions, 2-3 dining options per tier, 2-4 day trips, 2-3 getting around options, and 5-6 seasonal activities.
-Seasonal activities must be specifically appropriate for ${month !== "any" ? month : "a general visit"} — no fall festivals in June, no beach days in January, etc. Name real events, parks, or experiences.
-Be specific and opinionated. Name real places. Avoid generic tourist advice.`;
+Rules:
+- 3-4 neighborhoods, 5-6 things to do, 2-3 dining per tier, 3 daily budget tiers, 2-3 getting around, 2-4 day trips, 4-5 things to avoid
+- Weather must be accurate for ${destination} specifically in ${monthLabel !== "any" ? monthLabel : "a typical month"} — not generic regional data
+- Things to do must be tagged accurately so we can personalize for different traveler types
+- Be specific and opinionated. Name real places. No generic advice.`;
 }
 
 function buildInternationalPrompt(destination: string, code: string, month: string): string {
-  const monthContext = month !== "any" ? `The traveler is visiting in ${month}.` : "";
-  return `You are a travel content writer with deep local knowledge. Generate a destination guide for ${destination} (airport: ${code}) for US travelers visiting internationally. ${monthContext}
+  const monthLabel = resolveMonth(month);
+  const monthContext = month !== "any" ? `The traveler is visiting in ${monthLabel}.` : "";
 
-Return ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+  return `You are a travel expert with deep local knowledge. Generate a destination guide for ${destination} (airport: ${code}) for US travelers visiting internationally. ${monthContext}
+
+Return ONLY valid JSON with this exact structure (no markdown, no explanation):
 
 {
   "essentials": {
     "flag": "country flag emoji",
     "currency": "currency name and symbol, e.g. Euro (€)",
-    "language": "primary language (note if English is widely spoken)",
-    "timezone": "timezone name and UTC offset, e.g. CET/CEST (UTC+1/UTC+2)",
-    "plug": "plug type and brief description, e.g. Type F (2-pin round)",
-    "needsAdapter": true or false,
-    "insiderNote": "one specific insider tip that locals know and tourists miss — concrete and actionable"
+    "language": "primary language, note if English is widely spoken",
+    "timezone": "timezone name and UTC offset, e.g. CET/CEST (UTC+1/+2)",
+    "plug": "plug type, e.g. Type F (2-pin round)",
+    "needsAdapter": true or false
+  },
+  "weather": {
+    "label": "short evocative label for the weather this month",
+    "temp": "low-high°F range for ${monthLabel !== "any" ? monthLabel : "a typical visit"}",
+    "humidity": <average humidity % as integer>,
+    "desc": "one short punchy line describing the weather vibe",
+    "details": "one sentence with the most useful thing to know about the weather this month — specific, not generic",
+    "icon": "one of: sun, rain, snow, cloud, partly",
+    "packingTip": "one sentence on what to pack for the weather"
   },
   "neighborhoods": [
     {
       "name": "neighborhood name",
       "emoji": "single emoji",
-      "vibe": "2-4 word vibe phrase",
-      "description": "2-3 sentences — specific, opinionated, tells you what to actually do and when"
+      "vibe": "2-4 word vibe",
+      "description": "2-3 sentences — specific, opinionated, what to actually do and when"
     }
   ],
-  "attractions": [
-    { "name": "attraction name", "emoji": "single emoji" }
+  "thingsToDo": [
+    {
+      "name": "activity name",
+      "emoji": "single emoji",
+      "description": "one sentence — what makes it worth doing",
+      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"]
+    }
   ],
   "dining": {
-    "budget": [{ "name": "restaurant name", "type": "cuisine/style + short context" }],
-    "moderate": [{ "name": "restaurant name", "type": "cuisine/style + short context" }],
-    "premium": [{ "name": "restaurant name", "type": "cuisine/style + short context" }]
+    "budget": [{ "name": "restaurant name", "type": "cuisine + one-line context" }],
+    "moderate": [{ "name": "restaurant name", "type": "cuisine + one-line context" }],
+    "premium": [{ "name": "restaurant name", "type": "cuisine + one-line context" }]
   },
-  "dayTrips": [
-    { "name": "destination name", "emoji": "single emoji", "time": "X hrs by car/train/ferry" }
-  ],
+  "dailyBudget": {
+    "budget": { "amount": "$XX/day", "description": "what budget looks like: accommodation, food, transport" },
+    "midRange": { "amount": "$XXX/day", "description": "what mid-range looks like" },
+    "luxury": { "amount": "$XXX+/day", "description": "what luxury looks like" }
+  },
   "gettingAround": [
-    { "icon": "single emoji", "mode": "transport mode", "tip": "specific actionable tip", "cost": "rough cost in local currency or omit if not applicable" }
+    { "icon": "single emoji", "mode": "transport mode", "tip": "specific actionable tip", "cost": "rough cost in local currency or omit" }
   ],
-  "seasonalActivities": [
-    { "title": "activity name", "description": "2-3 sentences — what it is, why it's worth doing, any practical tips (hours, cost, how to get there)" }
+  "dayTrips": [
+    { "name": "destination", "emoji": "single emoji", "time": "X hrs by car/train/ferry" }
+  ],
+  "whatToAvoid": [
+    { "tip": "one specific thing to avoid — tourist trap, safety note, common mistake, cultural faux pas, or scam" }
   ]
 }
 
-Include 3-4 neighborhoods, 5-6 attractions, 2-3 dining options per tier, 2-4 day trips, 2-3 getting around options, and 5-6 seasonal activities.
-Seasonal activities must be specifically appropriate for ${month !== "any" ? month : "a general visit"} — no fall festivals in June, no beach days in January, etc. Name real events, parks, or experiences.
-Be specific and opinionated. Name real places. Avoid generic tourist advice.`;
+Rules:
+- 3-4 neighborhoods, 5-6 things to do, 2-3 dining per tier, 3 daily budget tiers, 2-3 getting around, 2-4 day trips, 4-5 things to avoid
+- Weather must be accurate for ${destination} specifically in ${monthLabel !== "any" ? monthLabel : "a typical month"} — not generic regional data
+- Things to do must be tagged accurately so we can personalize for different traveler types
+- Be specific and opinionated. Name real places. No generic advice.`;
 }

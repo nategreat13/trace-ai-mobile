@@ -3,17 +3,21 @@ import { Deal } from "@trace/shared";
 import { DestinationInfo } from "../lib/destinationData";
 import { fetchDestinationInfo } from "../services/destinationApi";
 
-// In-memory cache so re-opening the same deal doesn't re-fetch
 const cache: Record<string, DestinationInfo> = {};
 
-export function useDestinationInfo(deal: Deal) {
-  const cacheKey = `${deal.destination_code}_${deal.domestic_or_international}`;
+export function useDestinationInfo(deal: Deal | null) {
+  const cacheKey = deal
+    ? `${deal.destination_code}_${deal.domestic_or_international}_${deal.travel_window ?? "any"}`
+    : null;
 
-  const [info, setInfo] = useState<DestinationInfo | null>(cache[cacheKey] ?? null);
-  const [loading, setLoading] = useState(!cache[cacheKey]);
+  const [info, setInfo] = useState<DestinationInfo | null>(
+    cacheKey && cache[cacheKey] ? cache[cacheKey] : null
+  );
+  const [loading, setLoading] = useState(!!(cacheKey && !cache[cacheKey]));
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    if (!deal || !cacheKey) return;
     if (cache[cacheKey]) return;
 
     let cancelled = false;

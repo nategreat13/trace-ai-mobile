@@ -772,61 +772,7 @@ export default function ProfileScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Dev-only tier switcher */}
-          {__DEV__ && (
-            <View
-              style={{
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: theme.border,
-                overflow: "hidden",
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: "700",
-                  color: theme.mutedForeground,
-                  letterSpacing: 1,
-                  paddingHorizontal: 14,
-                  paddingTop: 10,
-                  paddingBottom: 6,
-                }}
-              >
-                DEV · SET TIER
-              </Text>
-              {(["free", "premium", "business"] as const).map((tier) => (
-                <TouchableOpacity
-                  key={tier}
-                  onPress={() => updateProfile({ subscriptionStatus: tier })}
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingVertical: 10,
-                    backgroundColor:
-                      profile?.subscriptionStatus === tier
-                        ? colors.brand.traceRed + "22"
-                        : "transparent",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: profile?.subscriptionStatus === tier ? "700" : "500",
-                      color:
-                        profile?.subscriptionStatus === tier
-                          ? colors.brand.traceRed
-                          : theme.foreground,
-                      textTransform: "capitalize",
-                    }}
-                  >
-                    {profile?.subscriptionStatus === tier ? "✓ " : ""}{tier}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* Actions */}
+{/* Actions */}
           <TouchableOpacity
             onPress={handleLogout}
             style={{

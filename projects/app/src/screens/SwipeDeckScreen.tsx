@@ -52,23 +52,32 @@ import type { Deal } from "@trace/shared";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const LOADING_IMAGES = [
+  require("../../assets/1.png"),
+  require("../../assets/2.png"),
+  require("../../assets/4.png"),
+];
+let swipeDeckLoadCount = 0;
+
 function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.light | typeof colors.dark }) {
+  const imageIndex = React.useRef(swipeDeckLoadCount % LOADING_IMAGES.length);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(0.7);
 
   React.useEffect(() => {
+    swipeDeckLoadCount += 1;
     scale.value = withRepeat(
       withSequence(
-        withTiming(1.18, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) })
+        withTiming(1.1, { duration: 750, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 750, easing: Easing.inOut(Easing.ease) })
       ),
       -1,
       false
     );
     opacity.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 700, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.6, { duration: 700, easing: Easing.inOut(Easing.ease) })
+        withTiming(1, { duration: 750, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.5, { duration: 750, easing: Easing.inOut(Easing.ease) })
       ),
       -1,
       false
@@ -85,10 +94,12 @@ function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.l
       style={{ flex: 1, backgroundColor: theme.background, justifyContent: "center", alignItems: "center" }}
       edges={["top", "left", "right"]}
     >
-      <Animated.Image
-        source={require("../../assets/Bluelogo.png")}
-        style={[{ width: 80, height: 80, resizeMode: "contain" }, animatedStyle]}
-      />
+      <Animated.View style={animatedStyle}>
+        <Image
+          source={LOADING_IMAGES[imageIndex.current]}
+          style={{ width: 120, height: 120, resizeMode: "contain" }}
+        />
+      </Animated.View>
       <Text style={{ marginTop: 20, color: theme.mutedForeground, fontSize: 14 }}>
         Finding the best deals for{" "}
         <Text style={{ fontWeight: "700", color: colors.brand.traceRed }}>{today}</Text>
