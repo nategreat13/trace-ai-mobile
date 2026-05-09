@@ -370,46 +370,38 @@ export default function ExpandedDeal({
 
             {/* Personal AI Fit */}
             {!!userProfile && !!fitData && (() => {
-              const fc =
+              const matchConfig =
                 fitData.level.color === "green"
-                  ? {
-                      gradient: ["rgba(22,163,74,0.20)", "rgba(5,150,105,0.08)", "rgba(16,185,129,0.02)"] as const,
-                      border: "rgba(22,163,74,0.28)",
-                      accent: "#16a34a",
-                    }
+                  ? { label: "Strong Match", dot: "#16a34a", dotBg: "rgba(22,163,74,0.12)" }
                   : fitData.level.color === "yellow"
-                  ? {
-                      gradient: ["rgba(202,138,4,0.20)", "rgba(234,179,8,0.08)", "rgba(249,115,22,0.02)"] as const,
-                      border: "rgba(202,138,4,0.28)",
-                      accent: "#b45309",
-                    }
-                  : {
-                      gradient: ["rgba(255,101,91,0.20)", "rgba(236,72,153,0.08)", "rgba(139,92,246,0.02)"] as const,
-                      border: "rgba(255,101,91,0.28)",
-                      accent: colors.brand.traceRed,
-                    };
+                  ? { label: "Good Match",   dot: "#b45309", dotBg: "rgba(202,138,4,0.12)" }
+                  : { label: "Mixed Match",  dot: colors.brand.traceRed, dotBg: "rgba(255,101,91,0.12)" };
 
               return (
-                <LinearGradient
-                  colors={fc.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.fitCard, { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 }]}
+                <View
+                  style={[
+                    styles.fitCard,
+                    { backgroundColor: theme.card, borderColor: theme.border },
+                  ]}
                 >
                   <View style={styles.fitHeader}>
-                    <View style={[styles.fitIconWrap, { backgroundColor: fc.accent }]}>
-                      <Sparkles size={12} color="#ffffff" />
+                    <View style={styles.fitTitleRow}>
+                      <Sparkles size={14} color={scheme === "dark" ? "#a78bfa" : "#7c3aed"} />
+                      <Text style={[styles.fitTitle, { color: theme.foreground }]}>Your AI Fit</Text>
                     </View>
-                    <Text style={[styles.fitLabel, { color: fc.accent }]}>Your AI Fit</Text>
+                    <View style={[styles.matchBadge, { backgroundColor: matchConfig.dotBg }]}>
+                      <View style={[styles.matchDot, { backgroundColor: matchConfig.dot }]} />
+                      <Text style={[styles.matchLabel, { color: matchConfig.dot }]}>{matchConfig.label}</Text>
+                    </View>
                   </View>
-                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.foreground }]}>
+                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.mutedForeground }]}>
                     {fitData.segments.map((seg, i) =>
                       seg.bold
-                        ? <Text key={i} style={styles.fitTextBold}>{seg.text}</Text>
+                        ? <Text key={i} style={[styles.fitTextBold, { color: theme.foreground }]}>{seg.text}</Text>
                         : <Text key={i}>{seg.text}</Text>
                     )}
                   </Animated.Text>
-                </LinearGradient>
+                </View>
               );
             })()}
 
@@ -729,29 +721,41 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 18,
     borderWidth: 1,
-    overflow: "hidden",
   },
   fitHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
     marginBottom: 12,
   },
-  fitIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: "center",
+  fitTitleRow: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
-  fitLabel: {
-    fontSize: 10,
+  fitTitle: {
+    fontSize: 14,
     fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
+  },
+  matchBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  matchDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  matchLabel: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   fitText: { fontSize: 14, lineHeight: 22 },
-  fitTextBold: { fontWeight: "800" },
+  fitTextBold: { fontWeight: "700" },
 
   // ── AI Insight card ───────────────────────────────────────────────────────
   aiCard: {
