@@ -194,6 +194,25 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         await profileRef.update(updates);
         console.log("[RC Webhook] Updated profile to:", tier);
 
+        // Welcome push for first paid purchase (not trial starts).
+        // Fires immediately via webhook so the user gets it right after checkout,
+        // not at the next daily cron window.
+        if (type === "INITIAL_PURCHASE" && period_type !== "TRIAL") {
+          try {
+            const template = await getTemplate("welcome_to_premium");
+            if (template?.enabled) {
+              const title = renderString(template.title, {});
+              const body = renderString(template.body, {});
+              const data = template.deepLink
+                ? { deepLink: template.deepLink, templateKey: "welcome_to_premium" }
+                : { templateKey: "welcome_to_premium" };
+              await sendToUser(app_user_id, { title, body, data }, { templateKey: "welcome_to_premium" });
+            }
+          } catch (err) {
+            console.warn("[RC Webhook] welcome_to_premium push failed:", err);
+          }
+        }
+
         // Fire ad platform conversions for INITIAL_PURCHASE (new sub).
         // RENEWAL is excluded — those are not acquisition events.
         if (type === "INITIAL_PURCHASE") {

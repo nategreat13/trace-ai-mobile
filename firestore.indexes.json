@@ -39,6 +39,22 @@
         { "fieldPath": "notificationsEnabled", "order": "ASCENDING" },
         { "fieldPath": "subscriptionStatus", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subscriptionStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subscriptionStatus", "order": "ASCENDING" },
+        { "fieldPath": "firstPurchaseAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

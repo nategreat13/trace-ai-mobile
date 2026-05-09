@@ -46,6 +46,16 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
       "Sent ~24 hours after signup. Reinforces the home airport feed and gives the user a reason to come back.",
     variables: ["dealCount", "homeAirport"],
   },
+  trial_ending_3d: {
+    key: "trial_ending_3d",
+    title: "Your trial ends in 3 days",
+    body: "Keep unlimited swipes and every deal from your home airport. Subscribe before it ends.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent when the user's trial expires in ~3 days. First warning — gives time to decide before the last-minute 24h push.",
+    variables: [],
+  },
   trial_ending_24h: {
     key: "trial_ending_24h",
     title: "Your trial ends tomorrow",
@@ -85,6 +95,126 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
     description:
       "Sent to users who haven't opened the app in ~7 days. Last-ditch reactivation push.",
     variables: ["dealCount", "homeAirport"],
+  },
+  inactivity_14d: {
+    key: "inactivity_14d",
+    title: "Still looking for a deal? ✈️",
+    body: "It's been a while. {{dealCount}} deals are waiting from {{homeAirport}}.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Sent to users who haven't opened the app in ~14 days. Final re-engagement attempt.",
+    variables: ["dealCount", "homeAirport"],
+  },
+  hot_deal_alert: {
+    key: "hot_deal_alert",
+    title: "🔥 {{discount}}% off to {{destination}}",
+    body: "${{price}} from {{homeAirport}}. Limited time — tap to see it.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Sent daily to premium/business users when a deal ≥60% off exists at their home airport. Picks the best deal of the day.",
+    variables: ["discount", "destination", "price", "homeAirport"],
+  },
+  subscription_renewal_24h: {
+    key: "subscription_renewal_24h",
+    title: "Your subscription renews tomorrow",
+    body: "Your Trace subscription will automatically renew in about 24 hours.",
+    deepLink: "/profile",
+    enabled: false,
+    description:
+      "Sent ~24 hours before a paid premium or business subscription renews. Heads-up so users can update payment if needed.",
+    variables: [],
+  },
+  business_class_nudge_5d: {
+    key: "business_class_nudge_5d",
+    title: "Did you know about business class deals?",
+    body: "Trace has lie-flat seats from {{homeAirport}} at up to 70% off. Business tier unlocks them.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to premium users ~5 days after their first purchase. Educational first nudge about the business tier.",
+    variables: ["homeAirport"],
+  },
+  business_class_nudge: {
+    key: "business_class_nudge",
+    title: "Business class deals are waiting ✈️",
+    body: "Upgrade to Business to unlock lie-flat seat deals from {{homeAirport}}.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to premium users ~7 days after their first purchase. Second upsell nudge to upgrade to the business tier.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge: {
+    key: "premium_nudge",
+    title: "You're missing out on deals",
+    body: "Premium unlocks unlimited swipes and every deal from {{homeAirport}}. Upgrade now.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to free users ~5 days after signup. First upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge_10d: {
+    key: "premium_nudge_10d",
+    title: "Still exploring? Go Premium ✈️",
+    body: "You've been with us 10 days. Unlock every deal from {{homeAirport}} — no swipe limits.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to free users ~10 days after signup. Second upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge_20d: {
+    key: "premium_nudge_20d",
+    title: "Your best deals are locked 🔒",
+    body: "20 days in and still on free? Premium gets you everything from {{homeAirport}}.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to free users ~20 days after signup. Third upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  discount_on_premium: {
+    key: "discount_on_premium",
+    title: "Special offer just for you",
+    body: "Upgrade to Premium and get your first month at a special rate.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to free users ~25 days after signup. Last-resort discount push after the regular nudge sequence.",
+    variables: [],
+  },
+  discount_on_business: {
+    key: "discount_on_business",
+    title: "Upgrade to Business for less",
+    body: "You've been with us a month — here's a special rate to unlock business class deals.",
+    deepLink: "/paywall",
+    enabled: false,
+    description:
+      "Sent to premium users ~30 days after their first purchase. Discount-angle push to upgrade to business.",
+    variables: [],
+  },
+  welcome_to_premium: {
+    key: "welcome_to_premium",
+    title: "Welcome to Premium ✈️",
+    body: "Unlimited swipes, every deal, and priority alerts. You're all set.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Fired immediately when a user makes their first paid purchase (non-trial). Sent from the RevenueCat webhook, not the daily cron.",
+    variables: [],
+  },
+  deal_alert_match: {
+    key: "deal_alert_match",
+    title: "Your {{destination}} alert just matched",
+    body: "${{price}} round-trip, {{discount}}% off. Tap to see it.",
+    deepLink: "/dashboard",
+    enabled: false,
+    description:
+      "Sent to premium/business users when a deal appears matching one of their saved alerts. Fires once per alert then marks it matched.",
+    variables: ["destination", "price", "discount"],
   },
 };
 
