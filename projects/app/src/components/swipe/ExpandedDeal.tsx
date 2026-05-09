@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
+import WeatherPreview from "./WeatherPreview";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealTravelTips from "./DealTravelTips";
 import DealDestinationTab from "./DealDestinationTab";
@@ -177,6 +178,14 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = React.useState<"flight" | "destination">("flight");
+
+  const fitData = useMemo(
+    () =>
+      userProfile && deal
+        ? { segments: generateFitSummary(deal, userProfile), level: getDealFitLevel(deal, userProfile) }
+        : null,
+    [deal?.id, userProfile]
+  );
 
   if (!deal) return null;
 
@@ -409,6 +418,41 @@ export default function ExpandedDeal({
                 <Text style={[styles.urgencyText, { color: theme.foreground }]}>This price won't last — deals like this typically sell out within 24–48 hours.</Text>
               </View>
             )}
+
+            {/* Weather */}
+            <WeatherPreview deal={deal} />
+
+            {/* Personal AI Fit */}
+            {!!userProfile && !!fitData && (() => {
+              const fc =
+                fitData.level.color === "green"
+                  ? { gradient: ["rgba(22,163,74,0.20)", "rgba(5,150,105,0.08)", "rgba(16,185,129,0.02)"] as const, border: "rgba(22,163,74,0.28)", accent: "#16a34a" }
+                  : fitData.level.color === "yellow"
+                  ? { gradient: ["rgba(202,138,4,0.20)", "rgba(234,179,8,0.08)", "rgba(249,115,22,0.02)"] as const, border: "rgba(202,138,4,0.28)", accent: "#b45309" }
+                  : { gradient: ["rgba(255,101,91,0.20)", "rgba(236,72,153,0.08)", "rgba(139,92,246,0.02)"] as const, border: "rgba(255,101,91,0.28)", accent: colors.brand.traceRed };
+              return (
+                <LinearGradient
+                  colors={fc.gradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.fitCard, { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 }]}
+                >
+                  <View style={styles.fitHeader}>
+                    <View style={[styles.fitIconWrap, { backgroundColor: fc.accent }]}>
+                      <Sparkles size={12} color="#ffffff" />
+                    </View>
+                    <Text style={[styles.fitLabel, { color: fc.accent }]}>Your AI Fit</Text>
+                  </View>
+                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.foreground }]}>
+                    {fitData.segments.map((seg, i) =>
+                      seg.bold
+                        ? <Text key={i} style={styles.fitTextBold}>{seg.text}</Text>
+                        : <Text key={i}>{seg.text}</Text>
+                    )}
+                  </Animated.Text>
+                </LinearGradient>
+              );
+            })()}
 
             {/* AI Insight */}
             {(!!deal.ai_insight || !!deal.vibe_description) && (
