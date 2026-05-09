@@ -35,8 +35,9 @@ destinationInfoRoutes.get(
       await docRef.set(content);
       res.json(content);
     } catch (error) {
-      console.error("destination-info error:", error);
-      res.status(500).json({ error: "Failed to generate destination info" });
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error("destination-info error:", msg);
+      res.status(500).json({ error: "Failed to generate destination info", detail: msg });
     }
   }
 );
