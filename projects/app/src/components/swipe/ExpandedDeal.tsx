@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -20,17 +20,13 @@ import {
   Bookmark,
   ExternalLink,
   Sparkles,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
-import WeatherPreview from "./WeatherPreview";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealTravelTips from "./DealTravelTips";
 import DealDestinationTab from "./DealDestinationTab";
-import { useDestinationInfo } from "../../hooks/useDestinationInfo";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.65;
@@ -181,16 +177,6 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = React.useState<"flight" | "destination">("flight");
-  const [expandedActivity, setExpandedActivity] = React.useState<number | null>(null);
-  const { info: destinationInfo } = useDestinationInfo(deal);
-
-  const fitData = useMemo(
-    () =>
-      userProfile && deal
-        ? { segments: generateFitSummary(deal, userProfile), level: getDealFitLevel(deal, userProfile) }
-        : null,
-    [deal?.id, userProfile]
-  );
 
   if (!deal) return null;
 
@@ -424,54 +410,6 @@ export default function ExpandedDeal({
               </View>
             )}
 
-            {/* Personal AI Fit */}
-            {!!userProfile && !!fitData && (() => {
-              const fc =
-                fitData.level.color === "green"
-                  ? {
-                      gradient: ["rgba(22,163,74,0.20)", "rgba(5,150,105,0.08)", "rgba(16,185,129,0.02)"] as const,
-                      border: "rgba(22,163,74,0.28)",
-                      accent: "#16a34a",
-                    }
-                  : fitData.level.color === "yellow"
-                  ? {
-                      gradient: ["rgba(202,138,4,0.20)", "rgba(234,179,8,0.08)", "rgba(249,115,22,0.02)"] as const,
-                      border: "rgba(202,138,4,0.28)",
-                      accent: "#b45309",
-                    }
-                  : {
-                      gradient: ["rgba(255,101,91,0.20)", "rgba(236,72,153,0.08)", "rgba(139,92,246,0.02)"] as const,
-                      border: "rgba(255,101,91,0.28)",
-                      accent: colors.brand.traceRed,
-                    };
-
-              return (
-                <LinearGradient
-                  colors={fc.gradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.fitCard, { borderColor: fc.border, borderLeftColor: fc.accent, borderLeftWidth: 4 }]}
-                >
-                  <View style={styles.fitHeader}>
-                    <View style={[styles.fitIconWrap, { backgroundColor: fc.accent }]}>
-                      <Sparkles size={12} color="#ffffff" />
-                    </View>
-                    <Text style={[styles.fitLabel, { color: fc.accent }]}>Your AI Fit</Text>
-                  </View>
-                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.foreground }]}>
-                    {fitData.segments.map((seg, i) =>
-                      seg.bold
-                        ? <Text key={i} style={styles.fitTextBold}>{seg.text}</Text>
-                        : <Text key={i}>{seg.text}</Text>
-                    )}
-                  </Animated.Text>
-                </LinearGradient>
-              );
-            })()}
-
-            {/* Weather */}
-            <WeatherPreview deal={deal} />
-
             {/* AI Insight */}
             {(!!deal.ai_insight || !!deal.vibe_description) && (
               <View
@@ -499,53 +437,6 @@ export default function ExpandedDeal({
                 )}
               </View>
             )}
-            {/* Things To Do — seasonal from destination info, falls back to deal data pre-deploy */}
-            {(() => {
-              const activities = destinationInfo?.seasonalActivities
-                ?? deal.itinerary_ideas?.map((idea) => ({ title: idea, description: "" }));
-              if (!activities || activities.length === 0) return null;
-              return (
-              <View style={[styles.itineraryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <View style={[styles.sectionHeaderRow, { marginBottom: 0, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border }]}>
-                  <Text style={styles.itineraryIcon}>🗓️</Text>
-                  <Text style={[styles.sectionHeaderText, { color: theme.mutedForeground, fontSize: 11, letterSpacing: 1.5 }]}>
-                    THINGS TO DO
-                  </Text>
-                </View>
-                {activities.map((activity, i) => {
-                  const isExpanded = expandedActivity === i;
-                  const isLast = i === activities.length - 1;
-                  const hasDesc = !!activity.description;
-                  return (
-                    <TouchableOpacity
-                      key={i}
-                      activeOpacity={hasDesc ? 0.75 : 1}
-                      onPress={() => hasDesc && setExpandedActivity(isExpanded ? null : i)}
-                      style={[
-                        styles.itineraryRow,
-                        { borderBottomColor: theme.border },
-                        isLast && { borderBottomWidth: 0 },
-                        isExpanded && { backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.025)" },
-                      ]}
-                    >
-                      <Text style={[styles.itineraryNumber, { color: colors.brand.traceRed }]}>
-                        {String(i + 1).padStart(2, "0")}
-                      </Text>
-                      <View style={{ flex: 1, gap: 6 }}>
-                        <Text style={[styles.itineraryText, { color: theme.foreground }]}>{activity.title}</Text>
-                        {isExpanded && hasDesc && (
-                          <Text style={[styles.itineraryDesc, { color: theme.mutedForeground }]}>{activity.description}</Text>
-                        )}
-                      </View>
-                      {hasDesc && (isExpanded
-                        ? <ChevronUp size={14} color={theme.mutedForeground} />
-                        : <ChevronDown size={14} color={theme.mutedForeground} />)}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              );
-            })()}
           </View>
 
           {/* ── Padded sections ───────────────────────────────────────── */}
