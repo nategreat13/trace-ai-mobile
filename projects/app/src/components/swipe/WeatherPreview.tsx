@@ -134,7 +134,8 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
 
   if (!data) return null;
 
-  const monthLabel = deal.travel_window?.split(" - ")[0]?.split(" ")[0] || "";
+  const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthLabel = monthIdx !== null ? MONTH_LABELS[monthIdx] : "";
   const packingTip = PACKING_TIPS[data.icon] ?? PACKING_TIPS.cloud;
   const chevronColor = scheme === "dark" ? "#60a5fa" : "#2563eb";
 
