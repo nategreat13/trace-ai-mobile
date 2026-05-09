@@ -4,8 +4,18 @@ export const MAX_DAILY_SWIPES = 8;
 export const MAX_SAVES = 3;
 export const UNLIMITED_SWIPES = 999999;
 
+const PROD_API_URL = "https://api-7l7vojyykq-uc.a.run.app";
+
+// In dev, app.config.js populates `extra.devApiUrl` with the local server
+// URL ONLY when USE_LOCAL_API=1 is set (typically via `yarn dev2:local`).
+// In production builds and in plain `yarn dev2` runs, devApiUrl is null
+// and we fall back to the production API.
+//
+// This replaces the old workflow of manually editing this constant to
+// localhost and remembering to revert it before commit.
+const devApiUrl = (Constants.expoConfig?.extra as { devApiUrl?: string | null } | undefined)?.devApiUrl;
 // @ts-ignore: __DEV__ is defined by React Native at runtime
-export const API_BASE_URL = "https://api-7l7vojyykq-uc.a.run.app";
+export const API_BASE_URL = __DEV__ && devApiUrl ? devApiUrl : PROD_API_URL;
 
 export const DEAL_TYPES = [
   { value: "family", icon: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}", label: "Family-Friendly", sub: "Kid-approved fun" },

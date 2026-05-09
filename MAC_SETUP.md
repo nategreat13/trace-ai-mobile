@@ -183,12 +183,15 @@ It opens a browser to authenticate. You'll need a **Claude Pro** or **Claude Max
 
 ## Part 4: Running the app
 
-The project uses two commands:
+The project has three local-dev commands, mapped to the three things you can edit:
 
-- **`yarn dev1`** — runs the backend API locally (only needed for server work)
-- **`yarn dev2`** — runs the Expo dev server for the app (always needed)
+| Command | What it runs | When you need it |
+|---|---|---|
+| **`yarn dev2`** | Expo dev server for the mobile app | Anything in `projects/app` (UI, copy, behavior) |
+| **`yarn dev1`** | Backend API on `localhost:3001` | Anything in `projects/server` (push send logic, webhooks, AI routes) |
+| **`yarn dev:web`** | Admin web on `localhost:3002` | Anything in `projects/web` (admin pages, analytics dashboard, broadcast push UI) |
 
-For frontend-only work, `dev2` alone is enough because the app hits the deployed production API by default.
+Each runs independently in its own Terminal tab. **You only need to start the ones you're actively editing.** For copy edits to the mobile app, `dev2` alone is enough — it talks to the deployed production API by default, so the rest of the stack doesn't need to be running.
 
 ### 16. Start the Expo dev server
 
@@ -233,7 +236,11 @@ The Landing page should appear with a deal carousel and airport picker. If yes, 
 
 ### 20. (Optional) Start the backend locally
 
-Only needed if editing server code in `projects/server`. In a **separate** Terminal tab from the repo root:
+Only needed if editing server code in `projects/server`.
+
+**One-time setup**: ask Nate for `projects/server/.env` (it has Firebase Admin credentials and webhook secrets — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
+
+Then in a **separate** Terminal tab from the repo root:
 
 ```
 yarn dev1
@@ -241,13 +248,29 @@ yarn dev1
 
 This builds `@trace/shared`, runs a TypeScript watcher on the server, and starts the server on `http://localhost:3001` with hot reload.
 
-**For the app to actually hit this local server**, temporarily edit `projects/app/src/lib/constants.ts`:
+**To make the mobile app talk to this local server** (instead of production), stop `yarn dev2` and restart it as:
 
-```ts
-export const API_BASE_URL = "http://localhost:3001";
+```
+yarn dev2:local
 ```
 
-Revert this before committing — the app ships with the production URL.
+That sets `USE_LOCAL_API=1`, which tells the app to read the local URL from `app.config.js` instead of the hardcoded prod URL. No more editing `constants.ts` and remembering to revert it. When you want production again, just `yarn dev2`.
+
+### 20a. (Optional) Start the admin web portal locally
+
+Only needed if editing the admin dashboard at `subscribe.tracetravel.co/admin` (analytics, user detail pages, broadcast push UI, exclusion management).
+
+**One-time setup**: ask Nate for `projects/web/.env.local` (it has Stripe keys, Firebase Admin credentials, the admin password, and RevenueCat keys — never commit it; it's gitignored). Drop the file into `projects/web/.env.local`.
+
+In a **separate** Terminal tab from the repo root:
+
+```
+yarn dev:web
+```
+
+The admin portal starts on `http://localhost:3002`. Open `http://localhost:3002/admin` and sign in with the password from `.env.local` (`ANALYTICS_PASSWORD`). Hot reload picks up changes to `projects/web/src` immediately.
+
+⚠️ **The local admin reads and writes the real production Firestore.** Anything you do here — sending a broadcast push, adding an exclusion, generating a promo code — affects real users. Use the same caution you would on the live site. There is no "test" environment on the web side right now.
 
 ---
 
@@ -290,6 +313,17 @@ Ask in plain English:
 cd ~/Documents/trace-ai-mobile
 yarn dev1
 ```
+
+…and restart `yarn dev2` as `yarn dev2:local` so the app talks to your local server.
+
+**Tab 5 (only for admin web work) — admin portal:**
+
+```
+cd ~/Documents/trace-ai-mobile
+yarn dev:web
+```
+
+Open `http://localhost:3002/admin`. Sign in with the password from `.env.local`.
 
 ### 22. Hot reload
 
@@ -407,11 +441,13 @@ Copy the error and paste it to Claude Code in Terminal. It can usually fix shell
 
 | What you want to do | What to type and where |
 |---|---|
-| Start Expo dev server | `yarn dev2` (Tab 1) |
+| Start Expo dev server (uses prod API) | `yarn dev2` (Tab 1) |
+| Start Expo dev server pointed at local backend | `yarn dev2:local` (Tab 1, only when running `dev1` too) |
 | Build + launch simulator | `npx expo run:ios` (Tab 2, first time only) |
 | Start Claude Code | `claude` (Tab 3) |
 | Reload app in simulator | Cmd+R in Simulator |
 | Start backend | `yarn dev1` (Tab 4, only for server work) |
+| Start admin web portal | `yarn dev:web` (Tab 5, only for admin work) → http://localhost:3002/admin |
 | Pull latest code | `git pull` |
 | Save + push changes | `git add . && git commit -m "msg" && git push` |
 | Stop any server | Ctrl+C in its Terminal tab |
