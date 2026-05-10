@@ -84,6 +84,28 @@ const MOCK_DATA: DestinationInfo = {
   ],
 };
 
+/**
+ * Slugify a destination name for use as a stable cache-key path segment
+ * when the deal has no `destination_code`. The server reads `destination`
+ * from the query string for the actual prompt; the path is only used to
+ * key the Firestore cache. So as long as the slug is deterministic per
+ * city, it produces correct unique caches.
+ *
+ * Without this fallback, code-less deals pass the literal string
+ * "undefined" as the path segment, which collapses every such deal into
+ * the same cache entry (UNDEFINED_*) — every destination tab would show
+ * the same guide. Most deals from the current API don't carry an airport
+ * code at all, so this is the common case, not the edge case.
+ */
+function destinationKey(deal: Deal): string {
+  if (deal.destination_code) return deal.destination_code;
+  const slug = (deal.destination ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "unknown";
+}
+
 export async function fetchDestinationInfo(deal: Deal): Promise<DestinationInfo> {
   const isDomestic = deal.domestic_or_international?.toLowerCase() === "domestic";
   const month = extractMonth(deal.travel_window || deal.dateString);
@@ -94,7 +116,7 @@ export async function fetchDestinationInfo(deal: Deal): Promise<DestinationInfo>
   });
   try {
     const response = await fetch(
-      `${API_BASE_URL}/destination-info/${deal.destination_code}?${params}`
+      `${API_BASE_URL}/destination-info/${encodeURIComponent(destinationKey(deal))}?${params}`
     );
     if (response.ok) return response.json();
   } catch {}

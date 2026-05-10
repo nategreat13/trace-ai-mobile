@@ -19,10 +19,18 @@ const revenuecatRestApiKey = defineSecret("REVENUECAT_REST_API_KEY");
 //   firebase functions:secrets:set ADMIN_API_TOKEN
 const adminApiToken = defineSecret("ADMIN_API_TOKEN");
 
+// Anthropic Claude API key. Read by routes/ai.ts (deal-discovery
+// helpers) and routes/destination-info.ts (AI-generated destination
+// guides on the deal-detail destination tab). Without this binding,
+// the routes return HTTP 500 and the mobile client silently falls
+// back to placeholder content. Set with:
+//   firebase functions:secrets:set ANTHROPIC_API_KEY
+const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
+
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey],
   },
   app
 );
