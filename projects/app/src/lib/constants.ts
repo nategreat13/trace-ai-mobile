@@ -7,9 +7,9 @@ export const UNLIMITED_SWIPES = 999999;
 const PROD_API_URL = "https://api-7l7vojyykq-uc.a.run.app";
 
 // In dev, app.config.js populates `extra.devApiUrl` with the local server
-// URL ONLY when USE_LOCAL_API=1 is set (typically via `yarn dev2:local`).
-// In production builds and in plain `yarn dev2` runs, devApiUrl is null
-// and we fall back to the production API.
+// URL when USE_LOCAL_API=1 is set (the default for `yarn dev2`). For
+// `yarn dev:prod` and for production binaries, devApiUrl is null and we
+// fall back to the production API.
 //
 // This replaces the old workflow of manually editing this constant to
 // localhost and remembering to revert it before commit.

@@ -187,11 +187,12 @@ The project has three local-dev commands, mapped to the three things you can edi
 
 | Command | What it runs | When you need it |
 |---|---|---|
-| **`yarn dev2`** | Expo dev server for the mobile app | Anything in `projects/app` (UI, copy, behavior) |
-| **`yarn dev1`** | Backend API on `localhost:3001` | Anything in `projects/server` (push send logic, webhooks, AI routes) |
+| **`yarn dev2`** | Expo dev server for the mobile app, pointed at your **local** backend | Anything in `projects/app` — assumes you also run `dev1` |
+| **`yarn dev:prod`** | Same as `dev2` but pointed at the **deployed production** backend | UI-only edits where you don't want to run `dev1`, or repro'ing prod-only behavior |
+| **`yarn dev1`** | Backend API on `localhost:3001` | Anything in `projects/server` (push send logic, webhooks, AI routes). Required for `dev2` to actually have a backend to talk to |
 | **`yarn dev:web`** | Admin web on `localhost:3002` | Anything in `projects/web` (admin pages, analytics dashboard, broadcast push UI) |
 
-Each runs independently in its own Terminal tab. **You only need to start the ones you're actively editing.** For copy edits to the mobile app, `dev2` alone is enough — it talks to the deployed production API by default, so the rest of the stack doesn't need to be running.
+Each runs independently in its own Terminal tab. **You only need to start the ones you're actively editing.** Day-to-day, `yarn dev1` + `yarn dev2` together is the normal pair so the mobile app talks to your local server and you see your changes immediately.
 
 ### 16. Start the Expo dev server
 
@@ -234,11 +235,19 @@ npx expo run:ios --device "iPhone 16 Pro"
 
 The Landing page should appear with a deal carousel and airport picker. If yes, you're set up.
 
-### 20. (Optional) Start the backend locally
+### 20. Start the backend locally
 
-Only needed if editing server code in `projects/server`.
+The default `yarn dev2` already points at `http://localhost:3001`, so you'll want `yarn dev1` running too — otherwise every API call from the app fails with a connection error.
 
-**One-time setup**: ask Nate for `projects/server/.env` (it has Firebase Admin credentials and webhook secrets — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
+**One-time setup**: ask Nate for `projects/server/.env` (it has the Anthropic API key, RevenueCat secrets, etc. — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
+
+You also need Application Default Credentials so the local server can talk to Firestore as your account:
+
+```
+gcloud auth application-default login
+```
+
+Sign in with whichever Google account Nate added as Editor on the Firebase project.
 
 Then in a **separate** Terminal tab from the repo root:
 
@@ -248,13 +257,13 @@ yarn dev1
 
 This builds `@trace/shared`, runs a TypeScript watcher on the server, and starts the server on `http://localhost:3001` with hot reload.
 
-**To make the mobile app talk to this local server** (instead of production), stop `yarn dev2` and restart it as:
+**If you want the mobile app to skip your local server and hit production instead** (UI-only work, or repro'ing prod-only behavior), stop `yarn dev2` and restart it as:
 
 ```
-yarn dev2:local
+yarn dev:prod
 ```
 
-That sets `USE_LOCAL_API=1`, which tells the app to read the local URL from `app.config.js` instead of the hardcoded prod URL. No more editing `constants.ts` and remembering to revert it. When you want production again, just `yarn dev2`.
+That tells the app to use the production API URL. When you want local again, just `yarn dev2`.
 
 ### 20a. (Optional) Start the admin web portal locally
 
@@ -307,14 +316,14 @@ Ask in plain English:
 - "Make the deal cards show the airline name in bold"
 - "Add a heart icon next to saved deals"
 
-**Tab 4 (only for server work) — backend:**
+**Tab 4 — backend** (you'll usually want this running because `dev2` defaults to local):
 
 ```
 cd ~/Documents/trace-ai-mobile
 yarn dev1
 ```
 
-…and restart `yarn dev2` as `yarn dev2:local` so the app talks to your local server.
+If you don't want to bother with a local backend, run `yarn dev:prod` instead of `yarn dev2` so the app hits the deployed production API.
 
 **Tab 5 (only for admin web work) — admin portal:**
 
@@ -441,12 +450,12 @@ Copy the error and paste it to Claude Code in Terminal. It can usually fix shell
 
 | What you want to do | What to type and where |
 |---|---|
-| Start Expo dev server (uses prod API) | `yarn dev2` (Tab 1) |
-| Start Expo dev server pointed at local backend | `yarn dev2:local` (Tab 1, only when running `dev1` too) |
+| Start Expo dev server (default: hits local backend) | `yarn dev2` (Tab 1, expects `dev1` running too) |
+| Start Expo dev server pointed at production API | `yarn dev:prod` (Tab 1, when you don't want to run `dev1`) |
 | Build + launch simulator | `npx expo run:ios` (Tab 2, first time only) |
 | Start Claude Code | `claude` (Tab 3) |
 | Reload app in simulator | Cmd+R in Simulator |
-| Start backend | `yarn dev1` (Tab 4, only for server work) |
+| Start backend | `yarn dev1` (Tab 4, normal pair with `dev2`) |
 | Start admin web portal | `yarn dev:web` (Tab 5, only for admin work) → http://localhost:3002/admin |
 | Pull latest code | `git pull` |
 | Save + push changes | `git add . && git commit -m "msg" && git push` |

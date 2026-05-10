@@ -1,8 +1,8 @@
-// Set USE_LOCAL_API=1 (e.g. via the `yarn dev2:local` script) when you're
-// also running `yarn dev1` and want the mobile app to talk to your local
-// server instead of production. Without this opt-in, devApiUrl is null and
-// constants.ts falls back to the production API URL — which is the right
-// default 99% of the time (UI/copy work doesn't need a local server).
+// `yarn dev2` sets USE_LOCAL_API=1 — the default for mobile dev so the app
+// talks to your local server (running via `yarn dev1`) and you can iterate
+// on server changes without a deploy. Run `yarn dev:prod` to opt out and
+// point at the deployed production API instead (useful for UI-only work
+// when you don't want to run dev1, or for repro'ing prod-only behavior).
 const useLocalApi =
   process.env.USE_LOCAL_API === "1" || process.env.USE_LOCAL_API === "true";
 
