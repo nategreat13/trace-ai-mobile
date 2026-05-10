@@ -144,10 +144,18 @@ interface Props {
 }
 
 export default function DealDestinationTab({ deal, userProfile }: Props) {
+  // ALL hooks must be declared before any conditional return. React
+  // requires the same hook count + order on every render — adding a
+  // useState below an `if (loading) return` would crash with
+  // "Rendered more hooks than during the previous render" the moment
+  // the loading state flips.
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { info, loading, error } = useDestinationInfo(deal);
   const [expandedNeighborhood, setExpandedNeighborhood] = useState<string | null>(null);
+  const [showAllTodo, setShowAllTodo] = useState(false);
+  const [expandedDining, setExpandedDining] = useState<Record<string, boolean>>({});
+  const [expandedDayTrip, setExpandedDayTrip] = useState<string | null>(null);
 
   if (loading) return <LoadingState scheme={scheme} />;
 
@@ -164,9 +172,6 @@ export default function DealDestinationTab({ deal, userProfile }: Props) {
   const dealTypes: string[] = userProfile?.dealTypes ?? [];
   const forYouItems = getForYouItems(info, dealTypes);
   const isInternational = !!(info.essentials);
-  const [showAllTodo, setShowAllTodo] = useState(false);
-  const [expandedDining, setExpandedDining] = useState<Record<string, boolean>>({});
-  const [expandedDayTrip, setExpandedDayTrip] = useState<string | null>(null);
 
   return (
     <View style={styles.root}>
