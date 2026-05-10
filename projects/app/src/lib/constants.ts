@@ -16,6 +16,12 @@ const PROD_API_URL = "https://api-7l7vojyykq-uc.a.run.app";
 const devApiUrl = (Constants.expoConfig?.extra as { devApiUrl?: string | null } | undefined)?.devApiUrl;
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 export const API_BASE_URL = __DEV__ && devApiUrl ? devApiUrl : PROD_API_URL;
+// @ts-ignore: __DEV__ is defined by React Native at runtime
+if (__DEV__) {
+  console.log(
+    `[constants] API_BASE_URL = ${API_BASE_URL} (devApiUrl from extra: ${devApiUrl ?? "null"})`
+  );
+}
 
 export const DEAL_TYPES = [
   { value: "family", icon: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}", label: "Family-Friendly", sub: "Kid-approved fun" },

@@ -18,6 +18,11 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Encrypted secret bundles for transferring env files to teammates.
+# Should never end up in git history even password-protected.
+envs.zip
+*.env.zip
+
 # Metro
 .metro-health-check*
 
