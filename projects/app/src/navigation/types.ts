@@ -21,6 +21,7 @@ export type RootStackParamList = {
   EditPreferences: undefined;
   DealType: undefined;
   DealCategory: undefined;
+  TripGroup: { groupId: string };
 };
 
 declare global {

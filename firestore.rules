@@ -162,6 +162,24 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ──── Trip Groups ────
+    // Shared deal groups created by premium users and joined via invite link.
+    // Any authenticated user can read and update (join/comment) a group,
+    // but only the creator can delete it.
+    match /tripGroups/{docId} {
+
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+                    && request.resource.data.createdBy == request.auth.uid;
+
+      // Any authenticated user can update (join as member, add comments, toggle isIn)
+      allow update: if request.auth != null;
+
+      allow delete: if request.auth != null
+                    && resource.data.createdBy == request.auth.uid;
+    }
+
     // ──── Deny everything else ────
     match /{document=**} {
       allow read, write: if false;

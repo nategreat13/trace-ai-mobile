@@ -11,6 +11,7 @@ import {
   Modal,
   Animated as RNAnimated,
   PanResponder,
+  Share,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -20,7 +21,7 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing } from "lucide-react-native";
+import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing, Share2 } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
@@ -32,6 +33,7 @@ import {
   deleteSwipeAction,
   getDealAlerts,
   deleteDealAlert,
+  createTripGroup,
 } from "../services/firestore";
 import { ALL_BADGES } from "../lib/constants";
 
@@ -104,6 +106,34 @@ export default function DashboardScreen() {
       const swipe = swipes.find((s: any) => s.dealId === dealId && s.action === "super");
       if (swipe) await deleteSwipeAction(swipe.id);
     }, 250);
+  };
+
+  const handleShareDeal = async (item: any) => {
+    if (!isPremium) {
+      navigation.navigate("Paywall", { entryPoint: "trip_groups_share" });
+      return;
+    }
+    if (!user || !profile) return;
+    try {
+      const groupId = await createTripGroup({
+        deal: item,
+        createdBy: user.uid,
+        createdByName: profile.displayName || profile.firstName || "Traveler",
+        members: [{
+          userId: user.uid,
+          displayName: profile.displayName || profile.firstName || "Traveler",
+          profilePictureUrl: profile.profilePictureUrl ?? null,
+          joinedAt: new Date(),
+          isIn: false,
+        }],
+        comments: [],
+      });
+      await Share.share({
+        message: `Join my trip to ${item.destination} ✈️\n$${item.price} ${item.travelWindow ? `· ${item.travelWindow}` : ""}\n\nOpen in Trace: tracetravel://group/${groupId}`,
+      });
+    } catch (err) {
+      console.error("Failed to create trip group:", err);
+    }
   };
 
   const handleClearAll = () => {
@@ -285,6 +315,23 @@ export default function DashboardScreen() {
           }}
         >
           <Trash2 color="#fff" size={14} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleShareDeal(item)}
+          disabled={isDeleting}
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            width: 32,
+            height: 32,
+            borderRadius: 16,
+            backgroundColor: "rgba(0,0,0,0.45)",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Share2 color="#fff" size={14} />
         </TouchableOpacity>
       </Animated.View>
     );

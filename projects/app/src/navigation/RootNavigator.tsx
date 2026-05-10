@@ -15,6 +15,7 @@ import PaywallScreen from "../screens/PaywallScreen";
 import PremiumWelcomeScreen from "../screens/PremiumWelcomeScreen";
 import BusinessWelcomeScreen from "../screens/BusinessWelcomeScreen";
 import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
+import TripGroupScreen from "../screens/TripGroupScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -87,6 +88,11 @@ export default function RootNavigator() {
             name="EditPreferences"
             component={OnboardingScreen}
             options={{ presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            name="TripGroup"
+            component={TripGroupScreen}
+            options={{ presentation: "modal" }}
           />
         </>
       )}

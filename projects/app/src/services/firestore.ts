@@ -11,13 +11,14 @@ import {
   orderBy,
   limit,
   onSnapshot,
+  arrayUnion,
   Timestamp,
   DocumentData,
   QuerySnapshot,
   Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { UserProfile, DealAlert } from "@trace/shared";
+import { UserProfile, DealAlert, TripGroup, TripGroupMember, TripGroupComment } from "@trace/shared";
 
 // ──── User Profiles ────
 
@@ -195,6 +196,67 @@ export async function updateDealAlert(docId: string, data: Partial<DealAlert>): 
 
 export async function deleteDealAlert(docId: string): Promise<void> {
   await deleteDoc(doc(db, "dealAlerts", docId));
+}
+
+// ──── Trip Groups ────
+
+export async function createTripGroup(
+  data: Omit<TripGroup, "id" | "createdAt">
+): Promise<string> {
+  const ref = await addDoc(collection(db, "tripGroups"), stripUndefined({
+    ...data,
+    createdAt: Timestamp.now(),
+  }));
+  return ref.id;
+}
+
+export async function getTripGroup(groupId: string): Promise<(TripGroup & { id: string }) | null> {
+  const snap = await getDoc(doc(db, "tripGroups", groupId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as TripGroup & { id: string };
+}
+
+export function subscribeTripGroup(
+  groupId: string,
+  callback: (group: (TripGroup & { id: string }) | null) => void
+): Unsubscribe {
+  return onSnapshot(doc(db, "tripGroups", groupId), (snap) => {
+    if (!snap.exists()) {
+      callback(null);
+    } else {
+      callback({ id: snap.id, ...snap.data() } as TripGroup & { id: string });
+    }
+  });
+}
+
+export async function joinTripGroup(
+  groupId: string,
+  member: TripGroupMember
+): Promise<void> {
+  await updateDoc(doc(db, "tripGroups", groupId), {
+    members: arrayUnion(stripUndefined(member as any)),
+  });
+}
+
+export async function addGroupComment(
+  groupId: string,
+  comment: TripGroupComment
+): Promise<void> {
+  await updateDoc(doc(db, "tripGroups", groupId), {
+    comments: arrayUnion(stripUndefined(comment as any)),
+  });
+}
+
+export async function toggleIsIn(
+  groupId: string,
+  userId: string,
+  isIn: boolean,
+  currentMembers: TripGroupMember[]
+): Promise<void> {
+  const updated = currentMembers.map((m) =>
+    m.userId === userId ? { ...m, isIn } : m
+  );
+  await updateDoc(doc(db, "tripGroups", groupId), { members: updated });
 }
 
 // ──── Helpers ────

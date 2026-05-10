@@ -30,6 +30,9 @@ function handleDeepLink(
     const plan = parsed.searchParams.get("plan");
     if (plan === "business") nav.navigate("BusinessWelcome");
     else nav.navigate("PremiumWelcome");
+  } else if (parsed.hostname === "group") {
+    const groupId = parsed.pathname.replace(/^\//, "");
+    if (groupId) nav.navigate("TripGroup", { groupId });
   }
 }
 
