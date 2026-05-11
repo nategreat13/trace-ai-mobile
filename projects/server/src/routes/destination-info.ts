@@ -67,14 +67,45 @@ async function generateDestinationInfo(
 
   const message = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 3000,
+    // Bumped from 3000. The guide has 3-4 neighborhoods + 5-6 things
+    // to do + 9 dining entries + 3 budget tiers + 2-3 transport + 2-4
+    // day trips + 4-5 avoidance tips, all as structured JSON. 3000
+    // tokens was getting truncated mid-array for content-dense cities
+    // like Las Vegas, producing unparseable JSON. 6000 leaves comfortable
+    // headroom; cost per request is still trivial.
+    max_tokens: 6000,
     messages: [{ role: "user", content: prompt }],
   });
+
+  // Catch truncation before we get a cryptic JSON.parse error 10k
+  // characters in. If Claude hit the token cap, stop_reason will be
+  // "max_tokens" and the JSON is almost certainly incomplete.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error(
+      `Claude response truncated at max_tokens; raise the cap (current ${6000})`
+    );
+  }
 
   const text = (message.content[0] as { type: string; text: string }).text.trim();
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("No JSON found in Claude response");
-  return JSON.parse(jsonMatch[0]);
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Log a window around the parse failure point so we can see the
+    // malformed slice without dumping the whole 10k-char response.
+    const posMatch = msg.match(/position (\d+)/);
+    if (posMatch) {
+      const pos = Number(posMatch[1]);
+      const start = Math.max(0, pos - 80);
+      const end = Math.min(jsonMatch[0].length, pos + 80);
+      console.error(
+        `[destination-info] JSON parse failed at pos ${pos}. Context:\n...${jsonMatch[0].slice(start, end)}...`
+      );
+    }
+    throw err;
+  }
 }
 
 function buildDomesticPrompt(destination: string, code: string, month: string): string {
