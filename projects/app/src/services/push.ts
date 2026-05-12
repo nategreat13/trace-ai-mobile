@@ -53,7 +53,16 @@ export async function requestNotificationPermission(): Promise<
 > {
   const existing = await Notifications.getPermissionsAsync();
   let status = existing.status;
-  if (status === "undetermined") {
+  // Trigger the OS dialog when the user can still be asked. On iOS
+  // that's only the initial "undetermined" state. On Android 13+ a
+  // first-launch app reports "denied" + canAskAgain=true — there's
+  // no "undetermined" path on Android the way there is on iOS, so
+  // gating on status alone meant we never actually called
+  // requestPermissionsAsync on Android, the OS dialog never appeared,
+  // and the soft prompt's "Enable" button silently set the user to
+  // denied without ever asking. Match the gate's logic: ask whenever
+  // the OS says we can.
+  if (status !== "granted" && existing.canAskAgain) {
     const requested = await Notifications.requestPermissionsAsync({
       ios: {
         allowAlert: true,
