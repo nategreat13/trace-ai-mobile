@@ -77,8 +77,13 @@ export function useDeviceNotificationGate(
       }
 
       try {
-        const { status } = await Notifications.getPermissionsAsync();
-        console.log("[gate] OS permission status:", status);
+        const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+        console.log(
+          "[gate] OS permission status:",
+          status,
+          "canAskAgain:",
+          canAskAgain
+        );
 
         if (status === "granted") {
           // OS already granted on this device. Resolve the gate
@@ -96,17 +101,25 @@ export function useDeviceNotificationGate(
           return;
         }
 
-        if (status === "denied") {
-          // Can't re-prompt programmatically. Profile screen guides the
-          // user to Settings if they want to flip it back on.
+        // "denied" alone isn't enough to give up. On Android 13+ a
+        // freshly-installed app's POST_NOTIFICATIONS permission often
+        // starts in `{ status: "denied", canAskAgain: true }` — Android
+        // doesn't expose "undetermined" the way iOS does. We can still
+        // call requestPermissionsAsync to trigger the OS dialog. Only
+        // when canAskAgain is false (iOS after one denial, Android
+        // after multiple denials or "Don't ask again") is the user
+        // truly locked out and must visit Settings.
+        if (status === "denied" && !canAskAgain) {
           if (!cancelled) {
             setState({ resolved: true, shouldShowSoftPrompt: false });
           }
           return;
         }
 
-        // status === "undetermined" — show soft prompt unless the user
-        // dismissed it on this device.
+        // Either status === "undetermined" (typical iOS first launch)
+        // OR status === "denied" with canAskAgain (typical Android 13+
+        // first launch). Show the soft prompt unless the user already
+        // dismissed it on this install.
         const dismissedAt = await AsyncStorage.getItem(
           SOFT_PROMPT_DISMISSED_KEY
         );
