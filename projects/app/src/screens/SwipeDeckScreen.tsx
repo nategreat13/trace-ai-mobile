@@ -957,9 +957,13 @@ export default function SwipeDeckScreen() {
       />
 
       {/* Level Up Notification */}
+      {/* swipeCount was being passed but LevelUpNotification doesn't
+          accept it (and currently doesn't reference total swipes in
+          its UI). Removed to make TypeScript happy; if we ever want
+          to surface swipe count on this modal, add the prop to
+          LevelUpNotificationProps + the UI first. */}
       <LevelUpNotification
         level={newLevel}
-        swipeCount={profile?.swipeCount || 0}
         visible={showLevelUp}
         onDismiss={() => setShowLevelUp(false)}
       />

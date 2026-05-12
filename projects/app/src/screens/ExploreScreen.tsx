@@ -972,7 +972,12 @@ export default function ExploreScreen() {
             .slice(0, 4)
             .map((dest) => ({ label: dest, code: undefined }));
 
-          const allSuggestions = [
+          // Explicit type — without it, TS infers the union of
+          // `{ code: undefined }` (from dealDestMatches' literal `code:
+          // undefined`) and `{ code: string }` (from airportMatches),
+          // which then collapses the array element to `never` and made
+          // `dest.label` below fail type-check.
+          const allSuggestions: { label: string; code?: string }[] = [
             ...dealDestMatches,
             ...airportMatches.filter((a) => !dealDestMatches.some((d) => d.label.toLowerCase().includes(a.label.split(",")[0].toLowerCase()))),
           ];
@@ -995,57 +1000,46 @@ export default function ExploreScreen() {
                     Select a destination to track:
                   </Text>
                   <View style={{ gap: 8 }}>
-                    {allSuggestions.map((dest) => {
-                      const isSelected = pendingAlertDest?.label === dest.label;
-                      return (
-                        <TouchableOpacity
-                          key={dest.label}
-                          onPress={() => setPendingAlertDest(isSelected ? null : dest)}
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            paddingHorizontal: 14,
-                            paddingVertical: 11,
-                            borderRadius: 12,
-                            borderWidth: 1.5,
-                            borderColor: isSelected ? colors.brand.traceRed : theme.border,
-                            backgroundColor: isSelected ? colors.brand.traceRed + "10" : theme.muted,
-                            gap: 10,
-                          }}
-                        >
-                          <Search size={14} color={isSelected ? colors.brand.traceRed : theme.mutedForeground} />
-                          <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: isSelected ? colors.brand.traceRed : theme.foreground }}>
-                            {dest.label}
+                    {/* Suggestion picker. By the time we render this,
+                        pendingAlertDest is guaranteed null — the
+                        early-return above (`if (pendingAlertDest)
+                        return ...`) handles the "already selected"
+                        case with a different UI. So `isSelected` is
+                        always false here; the styling that branched
+                        on it is dead code, dropped. */}
+                    {allSuggestions.map((dest) => (
+                      <TouchableOpacity
+                        key={dest.label}
+                        onPress={() => setPendingAlertDest(dest)}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 14,
+                          paddingVertical: 11,
+                          borderRadius: 12,
+                          borderWidth: 1.5,
+                          borderColor: theme.border,
+                          backgroundColor: theme.muted,
+                          gap: 10,
+                        }}
+                      >
+                        <Search size={14} color={theme.mutedForeground} />
+                        <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: theme.foreground }}>
+                          {dest.label}
+                        </Text>
+                        {dest.code && (
+                          <Text style={{ fontSize: 11, fontWeight: "700", color: theme.mutedForeground }}>
+                            {dest.code}
                           </Text>
-                          {dest.code && (
-                            <Text style={{ fontSize: 11, fontWeight: "700", color: isSelected ? colors.brand.traceRed : theme.mutedForeground }}>
-                              {dest.code}
-                            </Text>
-                          )}
-                          {isSelected && <Bell size={14} color={colors.brand.traceRed} />}
-                        </TouchableOpacity>
-                      );
-                    })}
+                        )}
+                      </TouchableOpacity>
+                    ))}
                   </View>
 
-                  {pendingAlertDest && (
-                    <LinearGradient
-                      colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={{ borderRadius: 12, marginTop: 14 }}
-                    >
-                      <TouchableOpacity
-                        onPress={() => handleCreateAlert(pendingAlertDest)}
-                        style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", paddingVertical: 13, gap: 8 }}
-                      >
-                        <BellRing size={16} color="#fff" />
-                        <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-                          {isPremium ? `Alert me for ${pendingAlertDest.label}` : "Upgrade to get alerts"}
-                        </Text>
-                      </TouchableOpacity>
-                    </LinearGradient>
-                  )}
+                  {/* The "Alert me for X" CTA block lived here, gated on
+                      `pendingAlertDest && ...`. But since the early
+                      return at line ~929 handles the truthy case (with
+                      a similar CTA), this block was unreachable. Removed. */}
                 </View>
               )}
 
