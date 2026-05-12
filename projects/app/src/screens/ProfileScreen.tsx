@@ -13,6 +13,7 @@ import {
   Platform,
   Linking,
   Switch,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -62,6 +63,7 @@ export default function ProfileScreen() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteText, setDeleteText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [tempFirstName, setTempFirstName] = useState("");
   const [tempLastName, setTempLastName] = useState("");
@@ -128,23 +130,33 @@ export default function ProfileScreen() {
   };
 
   const handleDeleteAccount = async () => {
-    if (deleteText !== "DELETE" || !user) return;
+    if (deleteText !== "DELETE" || !user || isDeleting) return;
+    setIsDeleting(true);
     try {
       // Server-side deletion via the /delete-account endpoint. Uses
       // the Firebase Admin SDK on the backend, which bypasses the
       // client-side `auth/requires-recent-login` guardrail — so the
       // user doesn't need to re-enter their password.
-      //
-      // After this call returns, the user's ID token is invalidated.
-      // AuthContext's auth-state listener fires and routes them back
-      // to Landing automatically.
       await deleteAccount();
+      // Force a local sign-out — fixes a real bug where Firebase's
+      // onAuthStateChanged didn't fire (or fired 30-60s late) after
+      // the server invalidated the token. Modal sat open, user
+      // assumed nothing happened, tapped Delete again, server logged
+      // a second "already gone" call. Calling logout() pushes the
+      // auth listener immediately so RootNavigator routes back to
+      // Landing within a frame.
+      await logout();
+      // Modal will unmount as Profile unmounts; clear state defensively
+      // so re-mounting from a fresh signin doesn't carry "DELETE" text.
+      setShowDeleteModal(false);
+      setDeleteText("");
     } catch (error: any) {
       console.error("Error deleting account:", error);
       Alert.alert(
         "Error",
         error?.message ?? "Failed to delete account. Please try again."
       );
+      setIsDeleting(false);
     }
   };
 
@@ -1058,7 +1070,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={handleDeleteAccount}
-                disabled={deleteText !== "DELETE"}
+                disabled={deleteText !== "DELETE" || isDeleting}
                 style={{
                   flex: 1,
                   paddingVertical: 12,
@@ -1066,18 +1078,25 @@ export default function ProfileScreen() {
                   backgroundColor:
                     deleteText === "DELETE" ? "#ef4444" : theme.muted,
                   alignItems: "center",
+                  opacity: isDeleting ? 0.7 : 1,
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "600",
-                    color:
-                      deleteText === "DELETE" ? "#fff" : theme.mutedForeground,
-                  }}
-                >
-                  Delete
-                </Text>
+                {isDeleting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "600",
+                      color:
+                        deleteText === "DELETE"
+                          ? "#fff"
+                          : theme.mutedForeground,
+                    }}
+                  >
+                    Delete
+                  </Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
