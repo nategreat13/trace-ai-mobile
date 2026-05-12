@@ -13,7 +13,12 @@ import {
   listExclusions,
 } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
-import { sendTestPush, removeUserPushToken } from "@/lib/push-admin";
+import {
+  sendTestPush,
+  sendTemplate,
+  removeUserPushToken,
+  KNOWN_TEMPLATE_KEYS,
+} from "@/lib/push-admin";
 import { formatDate, formatMonthDayTime, relativeFromNow } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -109,6 +114,34 @@ async function unexcludeUser(formData: FormData) {
   revalidatePath("/admin/exclusions");
 }
 
+async function sendTemplateAction(formData: FormData) {
+  "use server";
+  const userId = formData.get("uid") as string;
+  const templateKey = formData.get("templateKey") as string;
+  if (!userId || !templateKey) {
+    redirect(
+      `/admin/users/${encodeURIComponent(userId)}?template_error=missing_fields`
+    );
+  }
+  try {
+    const result = await sendTemplate({ userId, templateKey });
+    await logAuditEvent("notification.send_template", userId, {
+      templateKey,
+      attempted: result.attempted,
+      ok: result.ok,
+    });
+    revalidatePath(`/admin/users/${userId}`);
+    redirect(
+      `/admin/users/${encodeURIComponent(userId)}?template_sent=${result.ok}&template_attempted=${result.attempted}&template_key=${encodeURIComponent(templateKey)}`
+    );
+  } catch (err: any) {
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
+    redirect(
+      `/admin/users/${encodeURIComponent(userId)}?template_error=${encodeURIComponent(err?.message ?? "send_failed")}`
+    );
+  }
+}
+
 async function removePushTokenAction(formData: FormData) {
   "use server";
   const uid = formData.get("uid") as string;
@@ -150,6 +183,10 @@ export default async function UserDetailPage({
     token_removed?: string;
     token_remaining?: string;
     token_error?: string;
+    template_sent?: string;
+    template_attempted?: string;
+    template_key?: string;
+    template_error?: string;
   }>;
 }) {
   const { uid } = await params;
@@ -369,10 +406,81 @@ export default async function UserDetailPage({
         </Card>
       </div>
 
+      {/* Fire a saved template — uses the same code path as the daily
+          cron triggers, so what lands on the device is exactly what
+          this user would see when the trigger normally fires.
+          The cleanest way to test all 18 templates without manufacturing
+          conditions (trial about to end, etc.). */}
+      <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+          Fire a template (test any of the {KNOWN_TEMPLATE_KEYS.length} triggers)
+        </h2>
+        {(((user.raw.pushTokens as Array<unknown> | undefined)?.length ?? 0) === 0) ? (
+          <p className="text-sm text-gray-500">
+            This user has no registered push tokens — fire-a-template
+            won&apos;t reach a device. Grant notification permission in
+            the app first.
+          </p>
+        ) : (
+          <>
+            {sp?.template_sent != null && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 text-green-800 text-xs rounded">
+                Fired template <code className="font-mono">{sp.template_key}</code>{" "}
+                — {sp.template_sent} of {sp.template_attempted} delivery
+                {sp.template_sent === "1" ? "" : "s"} accepted by Expo.
+              </div>
+            )}
+            {sp?.template_error && (
+              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 text-red-800 text-xs rounded">
+                {sp.template_error.replace(/_/g, " ")}
+              </div>
+            )}
+            <form
+              action={sendTemplateAction}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <input type="hidden" name="uid" value={user.userId} />
+              <div className="flex-1 min-w-[260px]">
+                <label className="block text-[11px] font-medium text-gray-600 mb-1 uppercase tracking-wider">
+                  Template
+                </label>
+                <select
+                  name="templateKey"
+                  required
+                  defaultValue="welcome"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm bg-white"
+                >
+                  {KNOWN_TEMPLATE_KEYS.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-lg"
+              >
+                Fire template
+              </button>
+            </form>
+            <p className="text-xs text-gray-400 mt-3">
+              Uses the same code path as the daily cron triggers. The
+              template&rsquo;s current copy in Firestore is what gets
+              sent (or the in-code default if not seeded yet). Variables
+              like <code className="font-mono">{`{{name}}`}</code> render
+              literally here unless populated — fine for verifying copy
+              + deepLink. For variable-substituted testing, edit the
+              template body to be more obvious or use a broadcast.
+            </p>
+          </>
+        )}
+      </section>
+
       {/* Send test push */}
       <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
-          Send test push
+          Send test push (free-form)
         </h2>
         {(((user.raw.pushTokens as Array<unknown> | undefined)?.length ?? 0) === 0) ? (
           <p className="text-sm text-gray-500">

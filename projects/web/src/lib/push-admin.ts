@@ -61,6 +61,214 @@ export const KNOWN_TEMPLATE_KEYS = [
   "deal_alert_match",
 ] as const;
 
+/**
+ * Default metadata for every known template. **Manually synced** with
+ * `projects/server/src/lib/notification-templates.ts` (`TEMPLATE_DEFAULTS`).
+ *
+ * Why duplicate: the source of truth lives server-side so the cron and
+ * webhook code paths can read it without an HTTP call. But the admin
+ * web needs the same metadata to render the templates list, populate
+ * default copy in the edit form (so dynamic templates show their
+ * locked copy even before the Firestore doc exists), and surface the
+ * `variables` array for the static/dynamic badge.
+ *
+ * Both copies of the data are static, version-controlled, and small.
+ * The drift risk is a TS engineering tax we pay rather than adding a
+ * server round-trip on every admin page load. TODO: dedupe via
+ * `@trace/shared` when we do a maintenance sweep.
+ */
+const TEMPLATE_DEFAULTS: Record<
+  string,
+  {
+    title: string;
+    body: string;
+    deepLink: string | null;
+    description: string;
+    variables: string[];
+  }
+> = {
+  welcome: {
+    title: "Welcome to Trace 👋",
+    body: "We've found {{dealCount}} deals from {{homeAirport}} since you joined.",
+    deepLink: "/swipe",
+    description:
+      "Sent ~24 hours after signup. Reinforces the home airport feed and gives the user a reason to come back.",
+    variables: ["dealCount", "homeAirport"],
+  },
+  trial_ending_3d: {
+    title: "Your trial ends in 3 days",
+    body: "Keep unlimited swipes and every deal from your home airport. Subscribe before it ends.",
+    deepLink: "/paywall",
+    description:
+      "Sent when the user's trial expires in ~3 days. First warning — gives time to decide before the last-minute 24h push.",
+    variables: [],
+  },
+  trial_ending_24h: {
+    title: "Your trial ends tomorrow",
+    body: "Subscribe to keep unlimited swipes, saves, and deal alerts.",
+    deepLink: "/paywall",
+    description:
+      "Sent when the user's trial expires within the next 24 hours. Highest-leverage trial-to-paid moment.",
+    variables: [],
+  },
+  billing_issue: {
+    title: "There was a problem with your payment",
+    body: "We had trouble charging your card. Tap to update your payment method.",
+    deepLink: "/profile",
+    description:
+      "Fired when the RevenueCat webhook reports a BILLING_ISSUE event. Aimed at recovering failed renewals.",
+    variables: [],
+  },
+  inactivity_3d: {
+    title: "{{dealCount}} new deals waiting",
+    body: "Haven't seen you in a few days. Come check what's new from {{homeAirport}}.",
+    deepLink: "/swipe",
+    description:
+      "Sent to users who haven't opened the app in ~3 days. First-line re-engagement.",
+    variables: ["dealCount", "homeAirport"],
+  },
+  inactivity_7d: {
+    title: "We miss you ✈️",
+    body: "Your home airport has {{dealCount}} new deals this week.",
+    deepLink: "/swipe",
+    description:
+      "Sent to users who haven't opened the app in ~7 days. Last-ditch reactivation push.",
+    variables: ["dealCount", "homeAirport"],
+  },
+  inactivity_14d: {
+    title: "Still looking for a deal? ✈️",
+    body: "It's been a while. {{dealCount}} deals are waiting from {{homeAirport}}.",
+    deepLink: "/swipe",
+    description:
+      "Sent to users who haven't opened the app in ~14 days. Final re-engagement attempt.",
+    variables: ["dealCount", "homeAirport"],
+  },
+  hot_deal_alert: {
+    title: "🔥 {{discount}}% off to {{destination}}",
+    body: "${{price}} from {{homeAirport}}. Limited time — tap to see it.",
+    deepLink: "/swipe",
+    description:
+      "Sent daily to premium/business users when a deal ≥60% off exists at their home airport. Picks the best deal of the day.",
+    variables: ["discount", "destination", "price", "homeAirport"],
+  },
+  subscription_renewal_24h: {
+    title: "Your subscription renews tomorrow",
+    body: "Your Trace subscription will automatically renew in about 24 hours.",
+    deepLink: "/profile",
+    description:
+      "Sent ~24 hours before a paid premium or business subscription renews. Heads-up so users can update payment if needed.",
+    variables: [],
+  },
+  business_class_nudge_5d: {
+    title: "Did you know about business class deals?",
+    body: "Trace has lie-flat seats from {{homeAirport}} at up to 70% off. Business tier unlocks them.",
+    deepLink: "/paywall",
+    description:
+      "Sent to premium users ~5 days after their first purchase. Educational first nudge about the business tier.",
+    variables: ["homeAirport"],
+  },
+  business_class_nudge: {
+    title: "Business class deals are waiting ✈️",
+    body: "Upgrade to Business to unlock lie-flat seat deals from {{homeAirport}}.",
+    deepLink: "/paywall",
+    description:
+      "Sent to premium users ~7 days after their first purchase. Second upsell nudge to upgrade to the business tier.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge: {
+    title: "You're missing out on deals",
+    body: "Premium unlocks unlimited swipes and every deal from {{homeAirport}}. Upgrade now.",
+    deepLink: "/paywall",
+    description:
+      "Sent to free users ~5 days after signup. First upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge_10d: {
+    title: "Still exploring? Go Premium ✈️",
+    body: "You've been with us 10 days. Unlock every deal from {{homeAirport}} — no swipe limits.",
+    deepLink: "/paywall",
+    description:
+      "Sent to free users ~10 days after signup. Second upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  premium_nudge_20d: {
+    title: "Your best deals are locked 🔒",
+    body: "20 days in and still on free? Premium gets you everything from {{homeAirport}}.",
+    deepLink: "/paywall",
+    description:
+      "Sent to free users ~20 days after signup. Third upsell push to convert to premium.",
+    variables: ["homeAirport"],
+  },
+  discount_on_premium: {
+    title: "Special offer just for you",
+    body: "Upgrade to Premium and get your first month at a special rate.",
+    deepLink: "/paywall",
+    description:
+      "Sent to free users ~25 days after signup. Last-resort discount push after the regular nudge sequence.",
+    variables: [],
+  },
+  discount_on_business: {
+    title: "Upgrade to Business for less",
+    body: "You've been with us a month — here's a special rate to unlock business class deals.",
+    deepLink: "/paywall",
+    description:
+      "Sent to premium users ~30 days after their first purchase. Discount-angle push to upgrade to business.",
+    variables: [],
+  },
+  welcome_to_premium: {
+    title: "Welcome to Premium ✈️",
+    body: "Unlimited swipes, every deal, and priority alerts. You're all set.",
+    deepLink: "/swipe",
+    description:
+      "Fired immediately when a user makes their first paid purchase (non-trial). Sent from the RevenueCat webhook, not the daily cron.",
+    variables: [],
+  },
+  deal_alert_match: {
+    title: "Your {{destination}} alert just matched",
+    body: "${{price}} round-trip, {{discount}}% off. Tap to see it.",
+    deepLink: "/dashboard",
+    description:
+      "Sent to premium/business users when a deal appears matching one of their saved alerts. Fires once per alert then marks it matched.",
+    variables: ["destination", "price", "discount"],
+  },
+};
+
+/**
+ * Build a NotificationTemplate from the in-code default metadata.
+ * Used when no Firestore doc exists for a key — gives the admin UI
+ * real title/body/variables/description from the start instead of
+ * blanks, and makes the static/dynamic badge accurate from page-load.
+ *
+ * `enabled` is always false in the default (the server enforces this
+ * too — templates start disabled). `updatedAt` is null because the
+ * Firestore doc, not the in-code default, owns mutation time.
+ */
+function defaultTemplate(key: string): NotificationTemplate {
+  const meta = TEMPLATE_DEFAULTS[key];
+  if (!meta) {
+    return {
+      key,
+      title: "",
+      body: "",
+      deepLink: null,
+      enabled: false,
+      description: "(no metadata — check TEMPLATE_DEFAULTS)",
+      variables: [],
+      updatedAt: null,
+    };
+  }
+  return {
+    key,
+    title: meta.title,
+    body: meta.body,
+    deepLink: meta.deepLink,
+    enabled: false,
+    description: meta.description,
+    variables: meta.variables,
+    updatedAt: null,
+  };
+}
+
 export async function listTemplates(): Promise<NotificationTemplate[]> {
   const db = getDb();
   const snap = await db.collection("notificationTemplates").get();
@@ -78,38 +286,38 @@ export async function listTemplates(): Promise<NotificationTemplate[]> {
       updatedAt: d.updatedAt?.toDate?.() ?? null,
     };
   });
-  // Always show every known key, even if not yet seeded in Firestore.
-  // This way Trevor can edit a template before its first send.
-  return KNOWN_TEMPLATE_KEYS.map(
-    (k) =>
-      byKey[k] ?? {
-        key: k,
-        title: "",
-        body: "",
-        deepLink: null,
-        enabled: false,
-        description: "(not seeded — save once to create)",
-        variables: [],
-        updatedAt: null,
-      }
-  );
+  // Fall back to in-code defaults when Firestore is empty for a key —
+  // matches how the server's getTemplate behaves at send time.
+  return KNOWN_TEMPLATE_KEYS.map((k) => byKey[k] ?? defaultTemplate(k));
 }
 
 export async function getTemplate(key: string): Promise<NotificationTemplate | null> {
   const db = getDb();
   const snap = await db.collection("notificationTemplates").doc(key).get();
-  if (!snap.exists) return null;
-  const d = snap.data()!;
-  return {
-    key,
-    title: d.title ?? "",
-    body: d.body ?? "",
-    deepLink: d.deepLink ?? null,
-    enabled: Boolean(d.enabled),
-    description: d.description ?? "",
-    variables: d.variables ?? [],
-    updatedAt: d.updatedAt?.toDate?.() ?? null,
-  };
+  if (snap.exists) {
+    const d = snap.data()!;
+    // Merge Firestore values over the default. Firestore wins where it
+    // has a value (e.g. an edited title); defaults fill in gaps the
+    // admin hasn't touched yet (e.g. variables, description — those
+    // aren't user-editable so the Firestore doc may not store them).
+    const def = defaultTemplate(key);
+    return {
+      key,
+      title: d.title ?? def.title,
+      body: d.body ?? def.body,
+      deepLink: d.deepLink ?? def.deepLink,
+      enabled: Boolean(d.enabled),
+      description: d.description ?? def.description,
+      variables: d.variables ?? def.variables,
+      updatedAt: d.updatedAt?.toDate?.() ?? null,
+    };
+  }
+  // No Firestore doc — return the default if the key is known, else
+  // null so callers can 404.
+  if (!KNOWN_TEMPLATE_KEYS.includes(key as (typeof KNOWN_TEMPLATE_KEYS)[number])) {
+    return null;
+  }
+  return defaultTemplate(key);
 }
 
 export async function upsertTemplate(
@@ -238,6 +446,30 @@ export async function sendBroadcast(opts: {
   templateKey?: string;
 }): Promise<BroadcastResult> {
   return callAdminApi<BroadcastResult>("/admin/send-broadcast", opts);
+}
+
+/**
+ * Fire a saved notification template at a specific user RIGHT NOW.
+ * Uses the same code path as the daily cron triggers — same template
+ * lookup, same variable substitution, same deepLink wiring — so what
+ * the user sees on their device is exactly what they'd see in the
+ * wild when the trigger fires for real.
+ *
+ * Lets you test all 18 templates by clicking a dropdown + send,
+ * without having to manufacture the conditions that would normally
+ * trigger them (e.g. "trial 3 days from ending", "inactive 14 days").
+ *
+ * If the template has {{vars}} placeholders that aren't supplied in
+ * `vars`, they render as literal `{{name}}` — fine for testing copy
+ * + deepLink. Supply specific vars when you need to test rendered
+ * substitution.
+ */
+export async function sendTemplate(opts: {
+  userId: string;
+  templateKey: string;
+  vars?: Record<string, string | number>;
+}): Promise<SendResult> {
+  return callAdminApi<SendResult>("/admin/send-template", opts);
 }
 
 export async function seedTemplates(): Promise<{ created: string[] }> {

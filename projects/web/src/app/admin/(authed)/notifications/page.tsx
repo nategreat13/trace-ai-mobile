@@ -1,36 +1,23 @@
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { listTemplates, seedTemplates } from "@/lib/push-admin";
-import { logAuditEvent } from "@/lib/audit";
+import { listTemplates } from "@/lib/push-admin";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-async function seedAction() {
-  "use server";
-  try {
-    const result = await seedTemplates();
-    await logAuditEvent("notification.seed_templates", null, result);
-    revalidatePath("/admin/notifications");
-    redirect(`/admin/notifications?seeded=${result.created.length}`);
-  } catch (err: any) {
-    // redirect() above throws a NEXT_REDIRECT marker that Next catches
-    // at the framework boundary. Don't swallow it here — re-throw so
-    // Next can do the actual HTTP redirect.
-    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
-    redirect(
-      `/admin/notifications?error=${encodeURIComponent(err?.message ?? "seed_failed")}`
-    );
-  }
-}
+// Seeding removed from the UI on 2026-05-12 after an accidental click
+// duplicated in-code defaults into Firestore. getTemplate() in
+// notification-templates.ts already falls back to TEMPLATE_DEFAULTS when
+// the Firestore doc doesn't exist, so the seeding flow was never required
+// for triggers to fire — it just meant "have a doc you can edit". The
+// edit page upserts the doc on first save, which covers the same need
+// without an explicit seed action.
+//
+// The /admin/seed-templates server endpoint and seedTemplates() client
+// helper are still defined, so a future admin who wants to bulk-create
+// docs (e.g., for bulk copy review) can call them directly. They're
+// just no longer surfaced in the UI.
 
-export default async function NotificationsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ seeded?: string; error?: string }>;
-}) {
-  const params = await searchParams;
+export default async function NotificationsPage() {
   const templates = await listTemplates();
 
   return (
@@ -61,37 +48,15 @@ export default async function NotificationsPage({
         </div>
       </header>
 
-      {params?.seeded != null && (
-        <div className="mb-4 px-4 py-2 bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg">
-          Seeded {params.seeded} template{params.seeded === "1" ? "" : "s"}.
-        </div>
-      )}
-      {params?.error && (
-        <div className="mb-4 px-4 py-2 bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg">
-          {params.error.replace(/_/g, " ")}
-        </div>
-      )}
-
       <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Triggered notification templates
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {templates.filter((t) => t.enabled).length} of {templates.length}{" "}
-              enabled
-            </p>
-          </div>
-          <form action={seedAction}>
-            <button
-              type="submit"
-              className="text-xs px-3 py-1.5 border border-gray-300 hover:border-gray-400 rounded-lg text-gray-700"
-              title="Create any missing template docs in Firestore. Idempotent — never overwrites edits you've made."
-            >
-              Seed missing templates
-            </button>
-          </form>
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Triggered notification templates
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {templates.filter((t) => t.enabled).length} of {templates.length}{" "}
+            enabled
+          </p>
         </div>
 
         <table className="w-full text-sm">
@@ -99,47 +64,74 @@ export default async function NotificationsPage({
             <tr>
               <th className="px-6 py-3 text-left font-medium">Trigger</th>
               <th className="px-4 py-3 text-left font-medium">Title preview</th>
+              <th className="px-4 py-3 text-left font-medium">Kind</th>
               <th className="px-4 py-3 text-left font-medium">Status</th>
               <th className="px-4 py-3 text-right font-medium">Updated</th>
+              <th className="px-4 py-3 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
-            {templates.map((t) => (
-              <tr key={t.key} className="border-t border-gray-100 align-top">
-                <td className="px-6 py-3">
-                  <Link
-                    href={`/admin/notifications/templates/${encodeURIComponent(t.key)}`}
-                    className="block"
-                  >
-                    <div className="font-mono text-xs font-semibold text-rose-600 hover:text-rose-700">
-                      {t.key}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5 max-w-md">
-                      {t.description}
-                    </div>
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-gray-700 max-w-sm">
-                  {t.title || (
-                    <span className="text-gray-300 italic">— no title yet —</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {t.enabled ? (
-                    <span className="text-xs font-semibold text-green-700">
-                      enabled
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-gray-400">
-                      disabled
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                  {formatDate(t.updatedAt, true)}
-                </td>
-              </tr>
-            ))}
+            {templates.map((t) => {
+              const isDynamic = t.variables.length > 0;
+              return (
+                <tr key={t.key} className="border-t border-gray-100 align-top hover:bg-gray-50">
+                  <td className="px-6 py-3">
+                    <Link
+                      href={`/admin/notifications/templates/${encodeURIComponent(t.key)}`}
+                      className="block"
+                    >
+                      <div className="font-mono text-xs font-semibold text-rose-600 hover:text-rose-700">
+                        {t.key}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5 max-w-md">
+                        {t.description}
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-gray-700 max-w-sm">
+                    {t.title || (
+                      <span className="text-gray-300 italic">— no title yet —</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {isDynamic ? (
+                      <span
+                        className="inline-block px-2 py-0.5 text-[11px] font-medium border rounded bg-amber-50 text-amber-800 border-amber-200"
+                        title={`Uses runtime variables: ${t.variables.map((v) => `{{${v}}}`).join(", ")}. Title/body are locked in the admin to avoid breaking substitution.`}
+                      >
+                        dynamic
+                      </span>
+                    ) : (
+                      <span className="inline-block px-2 py-0.5 text-[11px] font-medium border rounded bg-gray-50 text-gray-700 border-gray-200">
+                        static
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {t.enabled ? (
+                      <span className="text-xs font-semibold text-green-700">
+                        enabled
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-400">
+                        disabled
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                    {formatDate(t.updatedAt, true)}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/admin/notifications/templates/${encodeURIComponent(t.key)}`}
+                      className="text-xs text-rose-600 hover:text-rose-700 font-medium"
+                    >
+                      Edit →
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>
