@@ -64,6 +64,26 @@ export interface UserProfile {
   notificationsEnabled?: boolean;
   /** True after we've shown the in-app permission ask once */
   notificationPermissionAsked?: boolean;
+  /**
+   * Per-category toggles set by the user in Profile → Notifications.
+   * Each defaults to true (we treat missing/undefined as "on"). The
+   * server consults these before firing a templated push — e.g. a
+   * user with `offers: false` won't get premium_nudge_* even if the
+   * cron's matching conditions are met.
+   *
+   * Category → template-key mapping is defined server-side in
+   * lib/notification-preferences.ts.
+   */
+  notificationPreferences?: {
+    /** Deal-driven pushes — hot_deal_alert, deal_alert_match */
+    deals?: boolean;
+    /** Account lifecycle — trial_ending_*, billing_issue, subscription_renewal_24h, welcome_to_premium */
+    account?: boolean;
+    /** Re-engagement when inactive — welcome, inactivity_3d/7d/14d */
+    reengagement?: boolean;
+    /** Upsells & promotional pushes — premium_nudge_*, business_class_nudge_*, discount_on_* */
+    offers?: boolean;
+  };
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   stripeSubscriptionStatus?: string;

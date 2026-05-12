@@ -1,6 +1,7 @@
 import { Expo, ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
 import * as admin from "firebase-admin";
 import { getDb } from "../firebase";
+import { isTemplateAllowedForUser } from "./notification-preferences";
 
 /**
  * Server-side push notification helpers.
@@ -43,12 +44,18 @@ export interface SendResult {
 
 /**
  * Send a push to a specific user. Resolves all of the user's registered
- * push tokens and fans out. Respects `notificationsEnabled` — if the
- * user has disabled notifications in-app, this returns ok: 0 without
- * sending.
+ * push tokens and fans out. Respects two layers of opt-out:
  *
- * `force` bypasses the user's notification toggle. Use sparingly — it
- * exists for the test-send button on the admin user-detail page.
+ *   1. `notificationsEnabled` — master switch. If false, nothing fires.
+ *   2. `notificationPreferences[category]` — per-category toggles set
+ *      in the mobile app's Profile screen. The category for each
+ *      template key is in `notification-preferences.ts`. If the user
+ *      has toggled the relevant category off, this returns ok: 0.
+ *
+ * `force` bypasses BOTH layers. Use sparingly — it exists for the
+ * test-send button on the admin user-detail page and the "Fire a
+ * template" admin tool, where the admin explicitly wants to deliver
+ * regardless of the recipient's settings.
  */
 export async function sendToUser(
   userId: string,
@@ -72,6 +79,17 @@ export async function sendToUser(
       ok: 0,
       removedTokens: [],
       errors: ["user opted out"],
+    };
+  }
+  if (
+    !opts.force &&
+    !isTemplateAllowedForUser(opts.templateKey, data.notificationPreferences)
+  ) {
+    return {
+      attempted: 0,
+      ok: 0,
+      removedTokens: [],
+      errors: ["user opted out of this category"],
     };
   }
   const tokens = ((data.pushTokens ?? []) as Array<{ token: string }>)
