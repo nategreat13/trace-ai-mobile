@@ -20,25 +20,61 @@ import {
   type PushNotificationData,
 } from "./src/services/push";
 
+/**
+ * Manual deep link parser. The previous implementation used the global
+ * `new URL(...)` constructor, which works reliably in browsers but is
+ * inconsistent for custom schemes in React Native — depending on the
+ * Hermes/JSC URL polyfill version, `tracetravel://share/abc` may
+ * produce empty `hostname`/`pathname` or throw. Parsing manually with
+ * a small regex avoids that whole class of bug.
+ *
+ * Returns { host, path, query } for our two known shapes:
+ *   tracetravel://share/<id>         → { host: "share", path: "<id>", ... }
+ *   tracetravel://upgrade-success?plan=premium
+ *                                    → { host: "upgrade-success", path: "", ... }
+ */
+function parseTraceLink(
+  url: string
+): { host: string; path: string; query: URLSearchParams } | null {
+  const SCHEME = "tracetravel://";
+  if (!url.startsWith(SCHEME)) return null;
+  const remainder = url.slice(SCHEME.length);
+  const [beforeQuery, queryStr = ""] = remainder.split("?");
+  const slashIdx = beforeQuery.indexOf("/");
+  const host = slashIdx === -1 ? beforeQuery : beforeQuery.slice(0, slashIdx);
+  const path = slashIdx === -1 ? "" : beforeQuery.slice(slashIdx + 1);
+  const query = new URLSearchParams(queryStr);
+  return { host, path, query };
+}
+
 function handleDeepLink(
   url: string,
   nav: NavigationContainerRef<RootStackParamList> | null
 ) {
-  if (!nav) return;
-  const parsed = new URL(url);
-  if (parsed.hostname === "upgrade-success") {
-    const plan = parsed.searchParams.get("plan");
+  if (!nav) {
+    console.log("[deep-link] no nav ref; dropping", url);
+    return;
+  }
+  const parsed = parseTraceLink(url);
+  if (!parsed) {
+    console.log("[deep-link] unparseable URL", url);
+    return;
+  }
+  console.log("[deep-link] routing", parsed.host, "path=", parsed.path);
+  logEvent("deep_link_routed", { host: parsed.host });
+  if (parsed.host === "upgrade-success") {
+    const plan = parsed.query.get("plan");
     if (plan === "business") nav.navigate("BusinessWelcome");
     else nav.navigate("PremiumWelcome");
-  } else if (parsed.hostname === "share") {
-    // tracetravel://share/SHARE_ID
-    const shareId = parsed.pathname.replace(/^\//, "");
+  } else if (parsed.host === "share") {
+    const shareId = parsed.path;
     if (shareId) nav.navigate("SharedDeal", { shareId });
+    else console.log("[deep-link] share with no id");
   }
 }
 
 /**
- * Returns true if the deep link can be routed in the current auth state.
+ * Returns true if this deep link can be routed in the current auth state.
  * Share links require a fully authed + onboarded user because
  * SharedDealScreen is only mounted in the post-auth navigator stack.
  * Other deep links (Premium/Business welcome) can be routed any time
@@ -49,15 +85,10 @@ function isDeepLinkRoutable(
   user: { uid?: string } | null,
   onboardingComplete: boolean
 ): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname === "share") {
-      return !!(user && onboardingComplete);
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  const parsed = parseTraceLink(url);
+  if (!parsed) return false;
+  if (parsed.host === "share") return !!(user && onboardingComplete);
+  return true;
 }
 
 /**
@@ -72,9 +103,12 @@ function isDeepLinkRoutable(
  * was registered and silently no-op'd, so users tapping a share link
  * landed on Landing instead of the deal.
  *
- * Now we hold the URL in state until auth + onboarding + nav-ready
- * all line up, then route. Lives inside AuthProvider so it can react
- * to auth state changes via useAuth().
+ * Now we hold the URL until auth + onboarding + nav-ready all line up,
+ * then route. Lives inside AuthProvider so it can react to auth state
+ * changes via useAuth(). Uses a setInterval-driven retry instead of
+ * useState because React 18's setState skips re-renders when the value
+ * is identical — so the previous `setPendingUrl((u) => u)` retry was
+ * silently a no-op.
  */
 function DeepLinkHandler({
   navRef,
@@ -87,33 +121,56 @@ function DeepLinkHandler({
   // Capture incoming URLs (cold launch + live).
   useEffect(() => {
     Linking.getInitialURL().then((url) => {
-      if (url) setPendingUrl(url);
+      if (url) {
+        console.log("[deep-link] initial URL:", url);
+        logEvent("deep_link_received", { source: "cold_launch" });
+        setPendingUrl(url);
+      }
     });
     const sub = Linking.addEventListener("url", ({ url }) => {
+      console.log("[deep-link] live URL:", url);
+      logEvent("deep_link_received", { source: "live" });
       setPendingUrl(url);
     });
     return () => sub.remove();
   }, []);
 
-  // Try to route the pending URL whenever auth/profile state changes
-  // (it's the auth resolve that typically unblocks share routing).
+  // Drive a routing attempt whenever auth/profile state changes
+  // (the typical unblocker for share routing). Plus a setInterval
+  // for the window when nav hasn't mounted yet but everything else
+  // is ready.
   useEffect(() => {
     if (!pendingUrl) return;
-    if (authLoading) return;
-    const nav = navRef.current;
-    if (!nav?.isReady?.()) {
-      // Nav not ready yet — try again on next tick. NavigationContainer's
-      // onReady will trigger a re-render via the state-change handler.
-      const t = setTimeout(() => setPendingUrl((u) => u), 100);
-      return () => clearTimeout(t);
+
+    function tryRoute(): boolean {
+      if (authLoading) return false;
+      const nav = navRef.current;
+      if (!nav?.isReady?.()) return false;
+      if (!isDeepLinkRoutable(pendingUrl!, user, !!profile?.onboardingComplete)) {
+        return false;
+      }
+      handleDeepLink(pendingUrl!, nav);
+      setPendingUrl(null);
+      return true;
     }
-    if (!isDeepLinkRoutable(pendingUrl, user, !!profile?.onboardingComplete)) {
-      // Hold the URL — user might sign in or finish onboarding shortly
-      // and this effect re-runs when that happens.
-      return;
-    }
-    handleDeepLink(pendingUrl, nav);
-    setPendingUrl(null);
+
+    // Try immediately on dependency change.
+    if (tryRoute()) return;
+
+    // Otherwise poll until ready or timeout. Caps at 15s so we don't
+    // burn battery if something is genuinely broken.
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (tryRoute() || Date.now() - start > 15000) {
+        clearInterval(interval);
+        if (Date.now() - start > 15000) {
+          console.log("[deep-link] gave up after 15s waiting for nav/auth", pendingUrl);
+          logEvent("deep_link_received", { source: "timeout" });
+        }
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
   }, [pendingUrl, authLoading, user, profile?.onboardingComplete, navRef]);
 
   return null;

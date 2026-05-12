@@ -91,7 +91,12 @@ export type AnalyticsEventName =
   | "push_token_registered"
   | "push_token_register_failed"
   | "notification_received"
-  | "notification_opened";
+  | "notification_opened"
+  // Deep linking — diagnostics for the cold-launch routing flow.
+  // received: a URL came in via Linking.getInitialURL or addEventListener.
+  // routed: the URL was successfully dispatched to a screen.
+  | "deep_link_received"
+  | "deep_link_routed";
 
 /**
  * Kept as a no-op for backwards compatibility. Earlier versions of this
