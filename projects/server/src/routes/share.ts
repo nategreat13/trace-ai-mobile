@@ -33,7 +33,7 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
 
 // GET /share-deal/:shareId
 // Returns the share record so the app can render the deal.
-shareRoutes.get("/share-deal/:shareId", async (req: Request, res: Response) => {
+shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>, res: Response) => {
   const { shareId } = req.params;
   try {
     const db = getDb();
@@ -52,7 +52,7 @@ shareRoutes.get("/share-deal/:shareId", async (req: Request, res: Response) => {
 
 // POST /share-deal/:shareId/opened
 // Marks the share as opened and notifies the original sharer.
-shareRoutes.post("/share-deal/:shareId/opened", async (req: Request, res: Response) => {
+shareRoutes.post("/share-deal/:shareId/opened", async (req: Request<{ shareId: string }>, res: Response) => {
   const { shareId } = req.params;
   const { openedByUserId, openerName } = req.body;
   if (!openedByUserId || !openerName) {
