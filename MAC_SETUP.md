@@ -239,15 +239,23 @@ The Landing page should appear with a deal carousel and airport picker. If yes, 
 
 The default `yarn dev2` already points at `http://localhost:3001`, so you'll want `yarn dev1` running too — otherwise every API call from the app fails with a connection error.
 
-**One-time setup**: ask Nate for `projects/server/.env` (it has the Anthropic API key, RevenueCat secrets, etc. — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
+**One-time setup** — three things:
 
-You also need Application Default Credentials so the local server can talk to Firestore as your account:
+1. **`projects/server/.env`**: ask Nate for it (Anthropic API key, RevenueCat secrets, etc. — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
 
-```
-gcloud auth application-default login
-```
+2. **Install gcloud** (skip if you already have it):
 
-Sign in with whichever Google account Nate added as Editor on the Firebase project.
+   ```
+   brew install --cask gcloud-cli
+   ```
+
+3. **Application Default Credentials** so the local server can talk to Firestore as your account:
+
+   ```
+   gcloud auth application-default login
+   ```
+
+   Sign in with whichever Google account Nate added as Editor on the Firebase project. Skip the "set quota project" prompt — leave that unset; the server pins its own project ID in code.
 
 Then in a **separate** Terminal tab from the repo root:
 
