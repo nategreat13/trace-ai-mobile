@@ -61,6 +61,10 @@ async function broadcastAction(formData: FormData) {
       `/admin/notifications/broadcast?sent=${result.ok}&matched=${result.matchedUsers}`
     );
   } catch (err: any) {
+    // redirect() above throws a NEXT_REDIRECT marker that Next catches
+    // at the framework boundary. Don't swallow it here — re-throw so
+    // Next can do the actual HTTP redirect.
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
     redirect(
       `/admin/notifications/broadcast?error=${encodeURIComponent(err?.message ?? "send_failed")}`
     );

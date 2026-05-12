@@ -27,14 +27,38 @@ export interface NotificationTemplate {
  * The full list of trigger keys the server knows how to fire. Kept in
  * sync manually with projects/server/src/lib/notification-templates.ts —
  * adding a new key requires both a server-side trigger and an entry
- * here. (Could be deduped via @trace/shared eventually.)
+ * here. (TODO: dedupe via @trace/shared — this manual sync has already
+ * caused one bug where new server templates were invisible in the admin.)
+ *
+ * Order roughly matches the user lifecycle:
+ *   onboarding → trial → free upsells → premium → business → re-engagement
  */
 export const KNOWN_TEMPLATE_KEYS = [
+  // First open
   "welcome",
+  // Trial lifecycle
+  "trial_ending_3d",
   "trial_ending_24h",
-  "billing_issue",
+  // Free → Premium upsell sequence
+  "premium_nudge",
+  "premium_nudge_10d",
+  "premium_nudge_20d",
+  "discount_on_premium",
+  // Re-engagement (inactivity)
   "inactivity_3d",
   "inactivity_7d",
+  "inactivity_14d",
+  // Premium → Business upsell sequence
+  "welcome_to_premium",
+  "business_class_nudge_5d",
+  "business_class_nudge",
+  "discount_on_business",
+  // Subscription lifecycle
+  "subscription_renewal_24h",
+  "billing_issue",
+  // Deal-driven (run from cron / matching engine)
+  "hot_deal_alert",
+  "deal_alert_match",
 ] as const;
 
 export async function listTemplates(): Promise<NotificationTemplate[]> {
@@ -161,7 +185,9 @@ async function callAdminApi<T>(path: string, body: unknown): Promise<T> {
   const token = process.env.ADMIN_API_TOKEN;
   if (!token) {
     throw new Error(
-      "ADMIN_API_TOKEN is not set in the web environment. Set it in Vercel env vars."
+      "ADMIN_API_TOKEN is not set. Locally, add it to projects/web/.env.local " +
+        "(fetch with `firebase functions:secrets:access ADMIN_API_TOKEN --project " +
+        "trace-ai-b9cba`). On Vercel, set it in Project Settings → Environment Variables."
     );
   }
   const res = await fetch(`${base}${path}`, {
@@ -216,4 +242,43 @@ export async function sendBroadcast(opts: {
 
 export async function seedTemplates(): Promise<{ created: string[] }> {
   return callAdminApi<{ created: string[] }>("/admin/seed-templates", {});
+}
+
+/**
+ * Remove a specific Expo push token from a user's pushTokens array.
+ * Direct Firestore write via the Admin SDK — consistent with how
+ * exclusions are managed (and unlike sendTestPush which goes through
+ * the Cloud Function because it needs to actually deliver a push).
+ *
+ * Looks the user up by their Firebase Auth uid (the `userId` field
+ * on userProfiles), reads the current array, filters out any record
+ * whose token string matches, and writes back the filtered list.
+ *
+ * Idempotent: passing a token that's already gone is a no-op.
+ *
+ * Returns { found, remaining } so the caller can show useful
+ * feedback ("removed; N tokens left").
+ */
+export async function removeUserPushToken(
+  userId: string,
+  token: string
+): Promise<{ found: boolean; remaining: number }> {
+  const db = getDb();
+  const snap = await db
+    .collection("userProfiles")
+    .where("userId", "==", userId)
+    .limit(1)
+    .get();
+  if (snap.empty) {
+    throw new Error("User profile not found");
+  }
+  const docRef = snap.docs[0].ref;
+  const data = snap.docs[0].data();
+  const current: Array<{ token?: string }> = data.pushTokens ?? [];
+  const next = current.filter((t) => t?.token !== token);
+  if (next.length === current.length) {
+    return { found: false, remaining: current.length };
+  }
+  await docRef.update({ pushTokens: next });
+  return { found: true, remaining: next.length };
 }

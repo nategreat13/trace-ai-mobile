@@ -15,6 +15,10 @@ async function seedAction() {
     revalidatePath("/admin/notifications");
     redirect(`/admin/notifications?seeded=${result.created.length}`);
   } catch (err: any) {
+    // redirect() above throws a NEXT_REDIRECT marker that Next catches
+    // at the framework boundary. Don't swallow it here — re-throw so
+    // Next can do the actual HTTP redirect.
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
     redirect(
       `/admin/notifications?error=${encodeURIComponent(err?.message ?? "seed_failed")}`
     );

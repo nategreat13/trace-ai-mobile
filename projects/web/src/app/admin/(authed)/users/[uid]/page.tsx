@@ -13,7 +13,7 @@ import {
   listExclusions,
 } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
-import { sendTestPush } from "@/lib/push-admin";
+import { sendTestPush, removeUserPushToken } from "@/lib/push-admin";
 import { formatDate, formatMonthDayTime, relativeFromNow } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -84,6 +84,10 @@ async function sendTestPushAction(formData: FormData) {
       `/admin/users/${encodeURIComponent(userId)}?push_sent=${result.ok}&push_attempted=${result.attempted}`
     );
   } catch (err: any) {
+    // redirect() above throws a NEXT_REDIRECT marker that Next catches
+    // at the framework boundary. Don't swallow it here — re-throw so
+    // Next can do the actual HTTP redirect.
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
     redirect(
       `/admin/users/${encodeURIComponent(userId)}?push_error=${encodeURIComponent(err?.message ?? "send_failed")}`
     );
@@ -105,6 +109,35 @@ async function unexcludeUser(formData: FormData) {
   revalidatePath("/admin/exclusions");
 }
 
+async function removePushTokenAction(formData: FormData) {
+  "use server";
+  const uid = formData.get("uid") as string;
+  const token = formData.get("token") as string;
+  if (!uid || !token) {
+    redirect(`/admin/users/${encodeURIComponent(uid)}?token_error=missing_fields`);
+  }
+  try {
+    const { found, remaining } = await removeUserPushToken(uid, token);
+    await logAuditEvent("push_token.remove", uid, {
+      tokenPrefix: token.slice(0, 30),
+      found,
+      remaining,
+    });
+    revalidatePath(`/admin/users/${uid}`);
+    redirect(
+      `/admin/users/${encodeURIComponent(uid)}?token_removed=${found ? "1" : "0"}&token_remaining=${remaining}`
+    );
+  } catch (err: any) {
+    // redirect() above throws a NEXT_REDIRECT marker that Next catches
+    // at the framework boundary. Don't swallow it here — re-throw so
+    // Next can do the actual HTTP redirect.
+    if (err?.digest?.startsWith?.("NEXT_REDIRECT")) throw err;
+    redirect(
+      `/admin/users/${encodeURIComponent(uid)}?token_error=${encodeURIComponent(err?.message ?? "remove_failed")}`
+    );
+  }
+}
+
 export default async function UserDetailPage({
   params,
   searchParams,
@@ -114,6 +147,9 @@ export default async function UserDetailPage({
     push_sent?: string;
     push_attempted?: string;
     push_error?: string;
+    token_removed?: string;
+    token_remaining?: string;
+    token_error?: string;
   }>;
 }) {
   const { uid } = await params;
@@ -422,6 +458,125 @@ export default async function UserDetailPage({
           </>
         )}
       </section>
+
+      {/* Push tokens */}
+      {(() => {
+        // Tokens are stored on userProfile.pushTokens. Older records
+        // have only { token, platform, addedAt }; newer records add
+        // osVersion + deviceName (both JS-derived, no native dep).
+        // Firestore Timestamps come back from the Admin SDK as
+        // objects with .toDate().
+        type PushTokenRecord = {
+          token?: string;
+          platform?: "ios" | "android" | string;
+          osVersion?: string;
+          deviceName?: string | null;
+          addedAt?: { toDate?: () => Date } | null;
+        };
+        const tokens =
+          (user.raw.pushTokens as PushTokenRecord[] | undefined) ?? [];
+        if (tokens.length === 0) return null;
+
+        const platformLabel = (p?: string) => {
+          if (p === "ios") return "iOS";
+          if (p === "android") return "Android";
+          return p ?? "Unknown";
+        };
+        const platformBadgeClass = (p?: string) =>
+          p === "ios"
+            ? "bg-gray-100 text-gray-800 border-gray-200"
+            : p === "android"
+              ? "bg-green-50 text-green-800 border-green-200"
+              : "bg-gray-50 text-gray-500 border-gray-200";
+
+        return (
+          <section className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">
+              Push tokens ({tokens.length})
+            </h2>
+            {sp?.token_removed === "1" && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 text-green-800 text-xs rounded">
+                Token removed. {sp.token_remaining ?? "?"} token
+                {sp.token_remaining === "1" ? "" : "s"} remaining.
+              </div>
+            )}
+            {sp?.token_removed === "0" && (
+              <div className="mb-3 px-3 py-2 bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded">
+                Token wasn&apos;t on the user&apos;s profile (already gone?). No
+                change made.
+              </div>
+            )}
+            {sp?.token_error && (
+              <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 text-red-800 text-xs rounded">
+                {sp.token_error.replace(/_/g, " ")}
+              </div>
+            )}
+            <div className="overflow-x-auto -mx-5">
+              <table className="w-full text-sm">
+                <thead className="text-gray-500 text-xs uppercase tracking-wider">
+                  <tr>
+                    <th className="px-5 py-2 text-left font-medium">Platform</th>
+                    <th className="px-5 py-2 text-left font-medium">OS version</th>
+                    <th className="px-5 py-2 text-left font-medium">Device name</th>
+                    <th className="px-5 py-2 text-left font-medium">Token</th>
+                    <th className="px-5 py-2 text-left font-medium">Registered</th>
+                    <th className="px-5 py-2 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tokens.map((t, i) => (
+                    <tr
+                      key={(t.token ?? "") + i}
+                      className="border-t border-gray-100 align-top"
+                    >
+                      <td className="px-5 py-2 whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 text-xs font-medium border rounded ${platformBadgeClass(t.platform)}`}
+                        >
+                          {platformLabel(t.platform)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-2 text-xs text-gray-600 whitespace-nowrap font-mono">
+                        {t.osVersion || "—"}
+                      </td>
+                      <td className="px-5 py-2 text-xs text-gray-600 whitespace-nowrap">
+                        {t.deviceName || "—"}
+                      </td>
+                      <td className="px-5 py-2 font-mono text-xs text-gray-700 break-all max-w-md">
+                        {t.token ?? "—"}
+                      </td>
+                      <td className="px-5 py-2 text-xs text-gray-500 whitespace-nowrap">
+                        {formatMonthDayTime(t.addedAt?.toDate?.() ?? null)}
+                      </td>
+                      <td className="px-5 py-2 text-right whitespace-nowrap">
+                        {t.token && (
+                          <form action={removePushTokenAction} className="inline">
+                            <input type="hidden" name="uid" value={user.userId} />
+                            <input type="hidden" name="token" value={t.token} />
+                            <button
+                              type="submit"
+                              className="text-xs text-red-600 hover:text-red-800 hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              OS version + device name are captured from
+              <code className="text-[11px] mx-1">Platform.Version</code>
+              and <code className="text-[11px] mx-1">Constants.deviceName</code> at register time.
+              Records added before this change show <code className="text-[11px] mx-1">—</code>
+              until the user re-registers (next launch + token re-write).
+            </p>
+          </section>
+        );
+      })()}
 
       {/* Recent events */}
       <Card title={`Recent events (last ${events.length})`}>

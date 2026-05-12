@@ -177,6 +177,8 @@ async function doRegisterPushToken(
     const currentTokens = (existing.data()?.pushTokens ?? []) as Array<{
       token: string;
       platform?: string;
+      osVersion?: string;
+      deviceName?: string | null;
       addedAt?: unknown;
     }>;
 
@@ -198,9 +200,24 @@ async function doRegisterPushToken(
     );
 
     if (!alreadyHas) {
+      // Extra fields the admin uses to identify which device a token
+      // belongs to (e.g. "iOS 26.4 · iPhone"). JS-only — no new
+      // native deps, no runtimeVersion bump needed.
+      //
+      // - Platform.Version: numeric/string OS version. iOS returns
+      //   "26.4", Android returns an integer like 34.
+      // - Constants.deviceName: "iPhone" on stock simulators, or the
+      //   user's chosen device name from Settings ("Nate's iPhone").
+      //   Null on web; we coalesce to "Unknown device" for clarity.
+      // The real device model ("iPhone 15 Pro") requires expo-device
+      // which is a native dep — skipped intentionally.
+      const osVersion = String(Platform.Version ?? "");
+      const deviceName = Constants.deviceName ?? null;
       dedup.set(token, {
         token,
         platform: Platform.OS as "ios" | "android",
+        osVersion,
+        deviceName,
         addedAt: Timestamp.now(),
       });
     }
