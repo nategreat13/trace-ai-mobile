@@ -23,6 +23,9 @@ expo-env.d.ts
 envs.zip
 *.env.zip
 
+# Generated documents (test plans, exports). Always regenerable.
+*.pdf
+
 # Metro
 .metro-health-check*
 

@@ -11,7 +11,11 @@ import {
   getSubscriptionLifecycle,
   getPurchaseFailuresByDay,
 } from "@/lib/analytics-queries";
-import { getExcludedSets, getValidUserIds } from "@/lib/exclusions";
+import {
+  getExcludedSets,
+  getExclusionCount,
+  getValidUserIds,
+} from "@/lib/exclusions";
 import AnalyticsDashboardClient from "./dashboard-client";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +36,10 @@ export default async function AnalyticsPage() {
       return new Set<string>();
     }),
   ]);
-  const excludedCount = excluded.userIds.size + excluded.emails.size;
+  // Count exclusion docs directly, not userIds.size + emails.size. The
+  // latter double-counts because each exclusion stores both an email
+  // AND its resolved userId — 7 docs showed up as "14".
+  const excludedCount = await getExclusionCount().catch(() => 0);
 
   // Kick off all the queries in parallel
   const [

@@ -53,6 +53,21 @@ export async function getExcludedSets(): Promise<ExcludedSets> {
 }
 
 /**
+ * Number of excluded accounts — the count of exclusion docs, not
+ * `userIds.size + emails.size`. The latter double-counts because each
+ * exclusion doc carries both an email AND its resolved userId(s), so
+ * 7 excluded accounts came out as "14" on the dashboard.
+ *
+ * One exclusion doc = one excluded account (by definition of how the
+ * admin's "Add by email" / "Add by user ID" actions create them).
+ */
+export async function getExclusionCount(): Promise<number> {
+  const db = getDb();
+  const snap = await db.collection("analyticsExclusions").count().get();
+  return snap.data().count;
+}
+
+/**
  * Loads the full list of exclusion docs for the admin UI.
  */
 export async function listExclusions(): Promise<ExclusionDoc[]> {

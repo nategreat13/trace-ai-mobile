@@ -55,7 +55,10 @@ export async function getSignupsByDay(
   // explicit exclusion list.
   const db = getDb();
   const since = new Date();
-  since.setDate(since.getDate() - days);
+  // "Last N days" means N days ending today (inclusive). The window
+  // starts (N - 1) days ago at midnight so today's signups land in
+  // the final bucket.
+  since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
 
   const snap = await db
@@ -64,6 +67,10 @@ export async function getSignupsByDay(
     .select("createdAt", "userId", "email")
     .get();
 
+  // Generate `days` buckets: since (today-N+1) through today.
+  // Earlier code looped `i < days` producing buckets through
+  // (today-1), which silently dropped today's signups entirely —
+  // the date string for today wasn't a valid key.
   const buckets: Record<string, number> = {};
   for (let i = 0; i < days; i++) {
     const d = new Date(since);
@@ -139,11 +146,19 @@ export async function getFunnelCounts(
 
   // Fetch matching events + userId (rather than count()) so we can filter
   // excluded + orphan users in memory.
+  //
+  // orderBy timestamp DESC is required to use the deployed composite
+  // index `events: (name ASC, timestamp DESC)`. Without an explicit
+  // orderBy, Firestore implicitly orders by the range field ASC and
+  // refuses the query with FAILED_PRECONDITION even though the index
+  // exists. The page-level catch swallows the error as 0, masking
+  // the misconfiguration as "no data".
   async function countEvent(name: string): Promise<number> {
     const snap = await db
       .collection("events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
+      .orderBy("timestamp", "desc")
       .select("userId")
       .get();
     let n = 0;
@@ -359,11 +374,13 @@ export async function getPurchaseFlowFunnel(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
+  // orderBy timestamp DESC — see comment in getFunnelCounts.
   async function countEvent(name: string): Promise<number> {
     const snap = await db
       .collection("events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
+      .orderBy("timestamp", "desc")
       .select("userId")
       .get();
     let n = 0;
@@ -380,6 +397,7 @@ export async function getPurchaseFlowFunnel(
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
+    .orderBy("timestamp", "desc")
     .select("props", "userId")
     .get();
 
@@ -435,6 +453,7 @@ export async function getLoginCount(
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "login")
+    .orderBy("timestamp", "desc")
     .select("userId")
     .get();
   let n = 0;
@@ -462,6 +481,7 @@ async function tierBreakdown(
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", name)
+    .orderBy("timestamp", "desc")
     .select("props", "userId")
     .get();
 
@@ -531,16 +551,22 @@ export async function getPurchaseFailuresByDay(
 ): Promise<Array<{ date: string; count: number }>> {
   const db = getDb();
   const since = new Date();
-  since.setDate(since.getDate() - days);
+  // Shift by (days - 1) so today's bucket is included — see comment
+  // on getSignupsByDay for the off-by-one this fixes.
+  since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
 
   const snap = await db
     .collection("events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
+    .orderBy("timestamp", "desc")
     .select("timestamp", "userId")
     .get();
 
+  // Same "include today's bucket" fix as getSignupsByDay: shift since
+  // by (days - 1) so the loop generates exactly `days` buckets ending
+  // today rather than 30 buckets ending yesterday.
   const buckets: Record<string, number> = {};
   for (let i = 0; i < days; i++) {
     const d = new Date(since);
