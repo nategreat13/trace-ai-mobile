@@ -1,5 +1,5 @@
 import "./global.css";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Linking } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
@@ -9,7 +9,7 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as Updates from "expo-updates";
-import { AuthProvider } from "./src/context/AuthContext";
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/types";
 import { logEvent } from "./src/lib/analytics";
@@ -35,6 +35,88 @@ function handleDeepLink(
     const shareId = parsed.pathname.replace(/^\//, "");
     if (shareId) nav.navigate("SharedDeal", { shareId });
   }
+}
+
+/**
+ * Returns true if the deep link can be routed in the current auth state.
+ * Share links require a fully authed + onboarded user because
+ * SharedDealScreen is only mounted in the post-auth navigator stack.
+ * Other deep links (Premium/Business welcome) can be routed any time
+ * the navigator is ready.
+ */
+function isDeepLinkRoutable(
+  url: string,
+  user: { uid?: string } | null,
+  onboardingComplete: boolean
+): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "share") {
+      return !!(user && onboardingComplete);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Captures incoming deep links (cold-launch and live) and defers
+ * routing until both the NavigationContainer is ready AND the target
+ * screen is actually mounted in the current navigator stack.
+ *
+ * On cold launch via `tracetravel://share/<id>`, the previous
+ * implementation tried to navigate immediately — but the SharedDeal
+ * screen only exists in RootNavigator's authed stack, and auth
+ * resolves asynchronously. The navigate call fired before the screen
+ * was registered and silently no-op'd, so users tapping a share link
+ * landed on Landing instead of the deal.
+ *
+ * Now we hold the URL in state until auth + onboarding + nav-ready
+ * all line up, then route. Lives inside AuthProvider so it can react
+ * to auth state changes via useAuth().
+ */
+function DeepLinkHandler({
+  navRef,
+}: {
+  navRef: React.RefObject<NavigationContainerRef<RootStackParamList> | null>;
+}) {
+  const { user, profile, loading: authLoading } = useAuth();
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+
+  // Capture incoming URLs (cold launch + live).
+  useEffect(() => {
+    Linking.getInitialURL().then((url) => {
+      if (url) setPendingUrl(url);
+    });
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      setPendingUrl(url);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Try to route the pending URL whenever auth/profile state changes
+  // (it's the auth resolve that typically unblocks share routing).
+  useEffect(() => {
+    if (!pendingUrl) return;
+    if (authLoading) return;
+    const nav = navRef.current;
+    if (!nav?.isReady?.()) {
+      // Nav not ready yet — try again on next tick. NavigationContainer's
+      // onReady will trigger a re-render via the state-change handler.
+      const t = setTimeout(() => setPendingUrl((u) => u), 100);
+      return () => clearTimeout(t);
+    }
+    if (!isDeepLinkRoutable(pendingUrl, user, !!profile?.onboardingComplete)) {
+      // Hold the URL — user might sign in or finish onboarding shortly
+      // and this effect re-runs when that happens.
+      return;
+    }
+    handleDeepLink(pendingUrl, nav);
+    setPendingUrl(null);
+  }, [pendingUrl, authLoading, user, profile?.onboardingComplete, navRef]);
+
+  return null;
 }
 
 /**
@@ -93,15 +175,9 @@ export default function App() {
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    const sub = Linking.addEventListener("url", ({ url }) => {
-      handleDeepLink(url, navRef.current);
-    });
-    Linking.getInitialURL().then((url) => {
-      if (url) handleDeepLink(url, navRef.current);
-    });
-    return () => sub.remove();
-  }, []);
+  // Deep link handling moved into <DeepLinkHandler> below — it needs
+  // access to auth state to defer share-link routing until the user is
+  // signed in (otherwise SharedDealScreen isn't in the navigator yet).
 
   // Emits `screen_view` whenever the active route changes. The previous
   // route is included so per-screen drop-off (e.g. "X% who hit Onboarding
@@ -122,6 +198,7 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <AnalyticsLifecycle />
+          <DeepLinkHandler navRef={navRef} />
           <NavigationContainer
             ref={navRef}
             onReady={handleNavigationStateChange}

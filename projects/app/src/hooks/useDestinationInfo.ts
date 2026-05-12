@@ -7,7 +7,22 @@ const cache: Record<string, DestinationInfo> = {};
 const inflight = new Set<string>();
 
 function cacheKey(deal: Deal): string {
-  return `${deal.destination_code}_${deal.domestic_or_international}_${deal.travel_window ?? "any"}`;
+  // Use destination NAME, not destination_code. The current deals API
+  // doesn't return airport codes for most flight deals (the field is
+  // declared in the Deal type but the data is missing), so building
+  // the cache key off `deal.destination_code` produced
+  // "undefined_domestic_any" for nearly every deal. First city
+  // opened got cached under that key; every subsequent open returned
+  // the first city's content — visible especially in Explore where
+  // users flip between many destinations quickly.
+  //
+  // Slugifying the city name (matching destinationApi's destinationKey)
+  // gives a stable, unique key per destination + travel window.
+  const dest = (deal.destination ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "unknown";
+  return `${dest}_${deal.domestic_or_international ?? "unknown"}_${deal.travel_window ?? "any"}`;
 }
 
 export function prefetchDestinationInfo(deal: Deal | null): void {
