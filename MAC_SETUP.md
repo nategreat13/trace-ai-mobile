@@ -241,7 +241,7 @@ The default `yarn dev2` already points at `http://localhost:3001`, so you'll wan
 
 **One-time setup** — three things:
 
-1. **`projects/server/.env`**: ask Nate for it (Anthropic API key, RevenueCat secrets, etc. — never commit it; it's gitignored). Drop the file into `projects/server/.env`.
+1. **`projects/server/.env.local`**: ask Nate for it (Anthropic API key, optional `GOOGLE_CLOUD_PROJECT`, future RevenueCat secrets, etc. — never commit it; it's gitignored). Drop the file into `projects/server/.env.local`. The filename matters: `.env.local` is loaded by our local `yarn dev1` script but is **ignored by `firebase deploy`** — important because some keys (like `GOOGLE_CLOUD_PROJECT`) are reserved by Cloud Run and would fail the deploy if they were in `.env`.
 
 2. **Install gcloud** (skip if you already have it):
 
