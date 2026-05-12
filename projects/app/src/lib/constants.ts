@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 
 export const MAX_DAILY_SWIPES = 8;
-export const MAX_SAVES = 3;
+export const MAX_SAVES = 5;
 export const UNLIMITED_SWIPES = 999999;
 
 const PROD_API_URL = "https://api-7l7vojyykq-uc.a.run.app";
@@ -146,6 +146,33 @@ export const ALL_BADGES: Badge[] = [
   },
 ];
 
+export const LEVEL_TITLES: { title: string; emoji: string }[] = [
+  { title: "Deal Scout",     emoji: "✈️"  }, // 1
+  { title: "Bargain Hunter", emoji: "🔍"  }, // 2
+  { title: "Fare Detective", emoji: "🕵️"  }, // 3
+  { title: "Flight Finder",  emoji: "🛫"  }, // 4
+  { title: "Sky Captain",    emoji: "🎖️"  }, // 5
+  { title: "Jet Setter",     emoji: "💎"  }, // 6
+  { title: "Altitude Ace",   emoji: "🚀"  }, // 7
+  { title: "Frequent Flyer", emoji: "⚡"  }, // 8
+  { title: "Mile Master",    emoji: "🏅"  }, // 9
+  { title: "Trace Legend",   emoji: "👑"  }, // 10+
+];
+
+export const SWIPES_PER_LEVEL = 25;
+
+export function getLevelInfo(level: number, swipeCount: number) {
+  const idx = Math.min(level - 1, LEVEL_TITLES.length - 1);
+  const current = LEVEL_TITLES[idx];
+  const isMax = level >= LEVEL_TITLES.length;
+  const nextIdx = Math.min(level, LEVEL_TITLES.length - 1);
+  const next = LEVEL_TITLES[nextIdx];
+  const swipesIntoLevel = swipeCount % SWIPES_PER_LEVEL;
+  const swipesToNext = isMax ? 0 : SWIPES_PER_LEVEL - swipesIntoLevel;
+  const progress = swipesIntoLevel / SWIPES_PER_LEVEL;
+  return { current, next, isMax, swipesToNext, progress };
+}
+
 export const DEAL_TYPE_LABELS: Record<string, string> = {
   family: "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466} Family",
   luxury: "\u2728 Luxury",
@@ -163,3 +190,107 @@ export const DEST_LABELS: Record<string, string> = {
   international: "\u{1F30D} International",
   both: "\u2708\uFE0F Both",
 };
+
+const DESTINATION_FLAGS: Array<[string[], string]> = [
+  // North America
+  [["new york", "nyc", "manhattan", "brooklyn", "miami", "los angeles", "l.a.", "las vegas", "chicago", "san francisco", "seattle", "boston", "denver", "atlanta", "dallas", "houston", "phoenix", "portland", "nashville", "new orleans", "honolulu", "hawaii", "maui", "austin", "orlando", "washington dc", "washington d.c.", "san diego", "minneapolis", "detroit", "philadelphia"], "\uD83C\uDDFA\uD83C\uDDF8"],
+  [["toronto", "vancouver", "montreal", "calgary", "ottawa", "quebec", "banff", "whistler"], "\uD83C\uDDE8\uD83C\uDDE6"],
+  [["cancun", "mexico city", "tulum", "cabo", "los cabos", "puerto vallarta", "playa del carmen", "oaxaca", "guadalajara", "mazatlan", "mexico"], "\uD83C\uDDF2\uD83C\uDDFD"],
+  [["havana", "cuba"], "\uD83C\uDDE8\uD83C\uDDFA"],
+  [["san jose", "costa rica"], "\uD83C\uDDE8\uD83C\uDDF7"],
+  [["panama city", "panama"], "\uD83C\uDDF5\uD83C\uDDE6"],
+  [["punta cana", "santo domingo", "dominican republic"], "\uD83C\uDDE9\uD83C\uDDF4"],
+  [["montego bay", "kingston", "jamaica"], "\uD83C\uDDEF\uD83C\uDDF2"],
+  [["nassau", "bahamas"], "\uD83C\uDDE7\uD83C\uDDF8"],
+  [["san juan", "puerto rico"], "\uD83C\uDDF5\uD83C\uDDF7"],
+  [["aruba"], "\uD83C\uDDE6\uD83C\uDDFC"],
+  [["barbados"], "\uD83C\uDDE7\uD83C\uDDE7"],
+  [["antigua"], "\uD83C\uDDE6\uD83C\uDDEC"],
+  [["st. lucia", "st lucia"], "\uD83C\uDDF1\uD83C\uDDE8"],
+  [["turks and caicos", "providenciales"], "\uD83C\uDDF9\uD83C\uDDE8"],
+  // South America
+  [["rio", "s\u00E3o paulo", "sao paulo", "brazil", "brasil", "florianopolis", "iguazu"], "\uD83C\uDDE7\uD83C\uDDF7"],
+  [["buenos aires", "patagonia", "argentina"], "\uD83C\uDDE6\uD83C\uDDF7"],
+  [["lima", "machu picchu", "cusco", "peru"], "\uD83C\uDDF5\uD83C\uDDEA"],
+  [["bogota", "bogot\u00E1", "cartagena", "colombia", "medell\u00EDn", "medellin"], "\uD83C\uDDE8\uD83C\uDDF4"],
+  [["santiago", "chile"], "\uD83C\uDDE8\uD83C\uDDF1"],
+  [["quito", "galapagos", "gal\u00E1pagos", "ecuador"], "\uD83C\uDDEA\uD83C\uDDE8"],
+  // Europe
+  [["london", "england", "united kingdom", "uk", "manchester", "edinburgh", "scotland", "wales", "oxford", "cambridge"], "\uD83C\uDDEC\uD83C\uDDE7"],
+  [["paris", "nice", "lyon", "marseille", "bordeaux", "france", "french riviera", "normandy", "provence"], "\uD83C\uDDEB\uD83C\uDDF7"],
+  [["rome", "milan", "venice", "florence", "naples", "amalfi", "sicily", "sardinia", "italy", "italian"], "\uD83C\uDDEE\uD83C\uDDF9"],
+  [["barcelona", "madrid", "seville", "sevilla", "ibiza", "mallorca", "granada", "spain", "canary islands", "tenerife"], "\uD83C\uDDEA\uD83C\uDDF8"],
+  [["amsterdam", "netherlands", "holland"], "\uD83C\uDDF3\uD83C\uDDF1"],
+  [["berlin", "munich", "hamburg", "frankfurt", "germany", "bavarian"], "\uD83C\uDDE9\uD83C\uDDEA"],
+  [["lisbon", "porto", "algarve", "portugal", "azores", "madeira"], "\uD83C\uDDF5\uD83C\uDDF9"],
+  [["athens", "santorini", "mykonos", "crete", "greece", "greek"], "\uD83C\uDDEC\uD83C\uDDF7"],
+  [["dublin", "ireland"], "\uD83C\uDDEE\uD83C\uDDEA"],
+  [["zurich", "geneva", "bern", "switzerland", "swiss alps"], "\uD83C\uDDE8\uD83C\uDDED"],
+  [["vienna", "salzburg", "austria"], "\uD83C\uDDE6\uD83C\uDDF9"],
+  [["prague", "czech", "czechia"], "\uD83C\uDDE8\uD83C\uDDFF"],
+  [["budapest", "hungary"], "\uD83C\uDDED\uD83C\uDDFA"],
+  [["warsaw", "krakow", "krak\u00F3w", "poland"], "\uD83C\uDDF5\uD83C\uDDF1"],
+  [["bucharest", "romania"], "\uD83C\uDDF7\uD83C\uDDF4"],
+  [["copenhagen", "denmark"], "\uD83C\uDDE9\uD83C\uDDF0"],
+  [["stockholm", "sweden"], "\uD83C\uDDF8\uD83C\uDDEA"],
+  [["oslo", "norway", "norwegian"], "\uD83C\uDDF3\uD83C\uDDF4"],
+  [["helsinki", "finland"], "\uD83C\uDDEB\uD83C\uDDEE"],
+  [["reykjavik", "iceland"], "\uD83C\uDDEE\uD83C\uDDF8"],
+  [["brussels", "belgium"], "\uD83C\uDDE7\uD83C\uDDEA"],
+  [["istanbul", "turkey", "t\u00FCrkiye", "cappadocia", "antalya", "bodrum"], "\uD83C\uDDF9\uD83C\uDDF7"],
+  [["tallinn", "estonia"], "\uD83C\uDDEA\uD83C\uDDEA"],
+  [["riga", "latvia"], "\uD83C\uDDF1\uD83C\uDDFB"],
+  [["vilnius", "lithuania"], "\uD83C\uDDF1\uD83C\uDDF9"],
+  [["zagreb", "dubrovnik", "split", "croatia"], "\uD83C\uDDED\uD83C\uDDF7"],
+  [["athens", "thessaloniki"], "\uD83C\uDDEC\uD83C\uDDF7"],
+  [["belgrade", "serbia"], "\uD83C\uDDF7\uD83C\uDDF8"],
+  [["luxembourg"], "\uD83C\uDDF1\uD83C\uDDFA"],
+  [["malta"], "\uD83C\uDDF2\uD83C\uDDF9"],
+  [["monaco"], "\uD83C\uDDF2\uD83C\uDDE8"],
+  // Middle East & Africa
+  [["dubai", "abu dhabi", "uae", "emirates"], "\uD83C\uDDE6\uD83C\uDDEA"],
+  [["doha", "qatar"], "\uD83C\uDDF6\uD83C\uDDE6"],
+  [["tel aviv", "jerusalem", "israel"], "\uD83C\uDDEE\uD83C\uDDF1"],
+  [["cairo", "egypt", "sharm el sheikh", "hurghada"], "\uD83C\uDDEA\uD83C\uDDEC"],
+  [["marrakech", "casablanca", "fez", "morocco"], "\uD83C\uDDF2\uD83C\uDDE6"],
+  [["nairobi", "kenya", "masai mara", "amboseli"], "\uD83C\uDDF0\uD83C\uDDEA"],
+  [["cape town", "johannesburg", "south africa", "kruger"], "\uD83C\uDDFF\uD83C\uDDE6"],
+  [["zanzibar", "tanzania", "serengeti"], "\uD83C\uDDF9\uD83C\uDDFF"],
+  [["victoria falls", "zambia"], "\uD83C\uDDFF\uD83C\uDDF2"],
+  [["accra", "ghana"], "\uD83C\uDDEC\uD83C\uDDED"],
+  [["tunis", "tunisia"], "\uD83C\uDDF9\uD83C\uDDF3"],
+  [["amman", "petra", "jordan"], "\uD83C\uDDEF\uD83C\uDDF4"],
+  // Asia
+  [["tokyo", "osaka", "kyoto", "japan", "hiroshima", "hokkaido", "okinawa", "sapporo"], "\uD83C\uDDEF\uD83C\uDDF5"],
+  [["bali", "jakarta", "lombok", "indonesia", "komodo"], "\uD83C\uDDEE\uD83C\uDDE9"],
+  [["bangkok", "phuket", "chiang mai", "koh samui", "thailand", "thai", "krabi"], "\uD83C\uDDF9\uD83C\uDDED"],
+  [["singapore"], "\uD83C\uDDF8\uD83C\uDDEC"],
+  [["hong kong"], "\uD83C\uDDED\uD83C\uDDF0"],
+  [["seoul", "busan", "jeju", "korea", "south korea"], "\uD83C\uDDF0\uD83C\uDDF7"],
+  [["beijing", "shanghai", "china", "chinese"], "\uD83C\uDDE8\uD83C\uDDF3"],
+  [["taipei", "taiwan"], "\uD83C\uDDF9\uD83C\uDDFC"],
+  [["mumbai", "delhi", "goa", "india", "agra", "jaipur", "kerala"], "\uD83C\uDDEE\uD83C\uDDF3"],
+  [["colombo", "sri lanka", "maldives"], "\uD83C\uDDF1\uD83C\uDDF0"],
+  [["male", "maldives"], "\uD83C\uDDF2\uD83C\uDDFB"],
+  [["kathmandu", "nepal", "himalaya"], "\uD83C\uDDF3\uD83C\uDDF5"],
+  [["kuala lumpur", "malaysia", "penang", "langkawi"], "\uD83C\uDDF2\uD83C\uDDFE"],
+  [["manila", "cebu", "palawan", "boracay", "philippines"], "\uD83C\uDDF5\uD83C\uDDED"],
+  [["hanoi", "ho chi minh", "saigon", "danang", "vietnam", "halong"], "\uD83C\uDDFB\uD83C\uDDF3"],
+  [["phnom penh", "siem reap", "cambodia", "angkor"], "\uD83C\uDDF0\uD83C\uDDED"],
+  [["yangon", "myanmar", "burma", "bagan"], "\uD83C\uDDF2\uD83C\uDDF2"],
+  [["ulaanbaatar", "mongolia"], "\uD83C\uDDF2\uD83C\uDDF3"],
+  [["tashkent", "uzbekistan", "samarkand"], "\uD83C\uDDFA\uD83C\uDDFF"],
+  // Oceania
+  [["sydney", "melbourne", "brisbane", "perth", "cairns", "great barrier reef", "australia"], "\uD83C\uDDE6\uD83C\uDDFA"],
+  [["auckland", "queenstown", "new zealand", "fiordland"], "\uD83C\uDDF3\uD83C\uDDFF"],
+  [["fiji", "suva", "nadi"], "\uD83C\uDDEB\uD83C\uDDEF"],
+  [["bora bora", "tahiti", "french polynesia"], "\uD83C\uDDF5\uD83C\uDDEB"],
+];
+
+export function getDestinationFlag(destination: string): string {
+  const lower = destination.toLowerCase();
+  for (const [keywords, flag] of DESTINATION_FLAGS) {
+    if (keywords.some((kw) => lower.includes(kw))) return flag;
+  }
+  return "";
+}

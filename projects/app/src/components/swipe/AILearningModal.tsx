@@ -80,7 +80,7 @@ export default function AILearningModal({
       -1
     );
 
-    // Each insight shows for 1200ms
+    // Each insight shows for 900ms
     const insightInterval = setInterval(() => {
       setActiveInsight((prev) => {
         if (prev >= insights.length - 1) {
@@ -89,9 +89,9 @@ export default function AILearningModal({
         }
         return prev + 1;
       });
-    }, 1200);
+    }, 900);
 
-    // Progress: 0 to 100 in steps of 2 every 80ms = 4000ms total
+    // Progress: 0 to 100 in steps of 2 every 60ms = ~3000ms total
     const progressInterval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -101,7 +101,7 @@ export default function AILearningModal({
         }
         return prev + 2;
       });
-    }, 80);
+    }, 60);
 
     return () => {
       clearInterval(insightInterval);

@@ -15,6 +15,7 @@ import PaywallScreen from "../screens/PaywallScreen";
 import PremiumWelcomeScreen from "../screens/PremiumWelcomeScreen";
 import BusinessWelcomeScreen from "../screens/BusinessWelcomeScreen";
 import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
+import SharedDealScreen from "../screens/SharedDealScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -86,6 +87,11 @@ export default function RootNavigator() {
           <Stack.Screen
             name="EditPreferences"
             component={OnboardingScreen}
+            options={{ presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            name="SharedDeal"
+            component={SharedDealScreen}
             options={{ presentation: "fullScreenModal" }}
           />
         </>

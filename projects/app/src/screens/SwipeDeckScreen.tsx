@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   useColorScheme,
   ScrollView,
+  Share,
 } from "react-native";
 import Animated, {
   FadeIn,
@@ -47,8 +48,11 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
+import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
+import { createShare } from "../services/shareApi";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -247,6 +251,8 @@ export default function SwipeDeckScreen() {
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
+  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
+  const [pendingShareDeal, setPendingShareDeal] = useState<Deal | null>(null);
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -269,6 +275,35 @@ export default function SwipeDeckScreen() {
     () => (deckMode === "business" ? premiumDeals : deals),
     [deckMode, premiumDeals, deals]
   );
+
+  // Pre-fetch destination info for current + next deal as soon as they're visible,
+  // so the Destination tab loads instantly (or near-instantly) when the user opens it.
+  useEffect(() => {
+    prefetchDestinationInfo(activeDeals[currentIndex] ?? null);
+    prefetchDestinationInfo(activeDeals[currentIndex + 1] ?? null);
+  }, [currentIndex, activeDeals]);
+
+  async function doShare(deal: Deal, name: string) {
+    try {
+      const shareId = await createShare(deal, user!.uid, name);
+      await Share.share({
+        title: `${deal.destination} deal on Trace`,
+        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Check it out on Trace 👉 tracetravel://share/${shareId}`,
+        url: `tracetravel://share/${shareId}`,
+      });
+    } catch {}
+  }
+
+  function handleShareDeal() {
+    if (!expandedDeal || !user) return;
+    const name = profile?.displayName || user.displayName;
+    if (!name) {
+      setPendingShareDeal(expandedDeal);
+      setShowShareNamePrompt(true);
+    } else {
+      doShare(expandedDeal, name);
+    }
+  }
 
   // Initialize swipes left and fetch swipe history
   useEffect(() => {
@@ -421,7 +456,7 @@ export default function SwipeDeckScreen() {
 
       // Track session swipe count for AI learning modal
       sessionSwipeCount.current += 1;
-      if (sessionSwipeCount.current === 4 && !profile.aiLearningShown) {
+      if (sessionSwipeCount.current === 5 && !profile.aiLearningShown) {
         setShowAILearning(true);
       }
 
@@ -924,6 +959,7 @@ export default function SwipeDeckScreen() {
       {/* Level Up Notification */}
       <LevelUpNotification
         level={newLevel}
+        swipeCount={profile?.swipeCount || 0}
         visible={showLevelUp}
         onDismiss={() => setShowLevelUp(false)}
       />
@@ -951,8 +987,20 @@ export default function SwipeDeckScreen() {
               Linking.openURL(expandedDeal.url);
             }
           }}
+          onShare={handleShareDeal}
         />
       )}
+
+      {/* Share name prompt */}
+      <ShareNamePromptModal
+        visible={showShareNamePrompt}
+        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
+        onSave={(name) => {
+          setShowShareNamePrompt(false);
+          if (pendingShareDeal) doShare(pendingShareDeal, name);
+          setPendingShareDeal(null);
+        }}
+      />
 
     </SafeAreaView>
   );

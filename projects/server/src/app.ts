@@ -7,6 +7,7 @@ import { revenuecatWebhookRoutes } from "./routes/revenuecat-webhook";
 import { promoRoutes } from "./routes/promo";
 import { adminPushRoutes } from "./routes/admin-push";
 import { deleteAccountRoutes } from "./routes/delete-account";
+import { shareRoutes } from "./routes/share";
 
 export const app = express();
 
@@ -32,6 +33,7 @@ app.use(revenuecatWebhookRoutes);
 app.use(promoRoutes);
 app.use(adminPushRoutes);
 app.use(deleteAccountRoutes);
+app.use(shareRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

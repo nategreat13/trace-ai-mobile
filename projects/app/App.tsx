@@ -30,6 +30,10 @@ function handleDeepLink(
     const plan = parsed.searchParams.get("plan");
     if (plan === "business") nav.navigate("BusinessWelcome");
     else nav.navigate("PremiumWelcome");
+  } else if (parsed.hostname === "share") {
+    // tracetravel://share/SHARE_ID
+    const shareId = parsed.pathname.replace(/^\//, "");
+    if (shareId) nav.navigate("SharedDeal", { shareId });
   }
 }
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   StyleSheet,
   useColorScheme,
   StatusBar,
+  Animated,
+  Share,
 } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Reanimated, { FadeIn } from "react-native-reanimated";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -18,8 +20,10 @@ import {
   Clock,
   Plane,
   Bookmark,
+  BookmarkCheck,
   ExternalLink,
   Sparkles,
+  Share2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
@@ -39,6 +43,9 @@ interface ExpandedDealProps {
   onSave: () => void;
   onBook: () => void;
   userProfile?: any;
+  sharedBy?: string;
+  bothSaved?: boolean;
+  onShare?: () => void;
 }
 
 type FitLevel = { color: "green" | "yellow" | "red" };
@@ -173,10 +180,29 @@ export default function ExpandedDeal({
   onSave,
   onBook,
   userProfile,
+  sharedBy,
+  bothSaved,
+  onShare,
 }: ExpandedDealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
+
+  const [saved, setSaved] = useState(false);
+  const saveScale = useRef(new Animated.Value(1)).current;
+
+  const handleSave = () => {
+    if (saved) return;
+    setSaved(true);
+    Animated.sequence([
+      Animated.spring(saveScale, { toValue: 0.88, useNativeDriver: true, speed: 40, bounciness: 0 }),
+      Animated.spring(saveScale, { toValue: 1,    useNativeDriver: true, speed: 18, bounciness: 10 }),
+    ]).start();
+    setTimeout(() => {
+      onSave();
+      setSaved(false);
+    }, 900);
+  };
   const [activeTab, setActiveTab] = React.useState<"flight" | "destination">("flight");
 
   const fitData = useMemo(
@@ -201,7 +227,7 @@ export default function ExpandedDeal({
       onRequestClose={onClose}
     >
       <StatusBar barStyle="light-content" />
-      <Animated.View
+      <Reanimated.View
         entering={FadeIn.duration(300)}
         style={[styles.container, { backgroundColor: theme.background }]}
       >
@@ -264,6 +290,23 @@ export default function ExpandedDeal({
               )}
             </View>
           </View>
+
+          {/* ── Shared-by banner ──────────────────────────────────────── */}
+          {!!sharedBy && (
+            <View style={[styles.sharedBanner, { backgroundColor: `${colors.brand.traceRed}12`, borderColor: `${colors.brand.traceRed}30` }]}>
+              <Text style={styles.sharedBannerText}>
+                ✈️ <Text style={{ fontWeight: "700", color: colors.brand.traceRed }}>{sharedBy}</Text>
+                <Text style={{ color: theme.mutedForeground }}> shared this deal with you</Text>
+              </Text>
+            </View>
+          )}
+
+          {/* ── Both-in-on-it indicator ───────────────────────────────── */}
+          {!!bothSaved && (
+            <View style={[styles.bothSavedBanner, { backgroundColor: "#dcfce7", borderColor: "#86efac" }]}>
+              <Text style={styles.bothSavedText}>🎉 You're both in on this one!</Text>
+            </View>
+          )}
 
           {/* ── Tab Row ───────────────────────────────────────────────── */}
           <View style={[styles.tabRow, { backgroundColor: theme.background }]}>
@@ -442,13 +485,13 @@ export default function ExpandedDeal({
                       <Text style={[styles.matchLabel, { color: matchConfig.dot }]}>{matchConfig.label}</Text>
                     </View>
                   </View>
-                  <Animated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.mutedForeground }]}>
+                  <Reanimated.Text entering={FadeIn.duration(400)} style={[styles.fitText, { color: theme.mutedForeground }]}>
                     {fitData.segments.map((seg, i) =>
                       seg.bold
                         ? <Text key={i} style={[styles.fitTextBold, { color: theme.foreground }]}>{seg.text}</Text>
                         : <Text key={i}>{seg.text}</Text>
                     )}
-                  </Animated.Text>
+                  </Reanimated.Text>
                 </View>
               );
             })()}
@@ -507,14 +550,36 @@ export default function ExpandedDeal({
           ]}
         >
           <View style={styles.buttonRow}>
-            <TouchableOpacity
-              onPress={onSave}
-              activeOpacity={0.8}
-              style={[styles.saveButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-            >
-              <Bookmark size={16} color={theme.foreground} />
-              <Text style={[styles.saveButtonText, { color: theme.foreground }]}>Save</Text>
-            </TouchableOpacity>
+            {!!onShare && (
+              <TouchableOpacity
+                onPress={onShare}
+                activeOpacity={0.8}
+                style={[styles.shareButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+              >
+                <Share2 size={18} color={theme.foreground} />
+              </TouchableOpacity>
+            )}
+
+            <Animated.View style={{ flex: 1, transform: [{ scale: saveScale }] }}>
+              <TouchableOpacity
+                onPress={handleSave}
+                activeOpacity={0.85}
+                style={[
+                  styles.saveButton,
+                  saved
+                    ? { backgroundColor: "#16a34a", borderColor: "#16a34a" }
+                    : { backgroundColor: theme.card, borderColor: theme.border },
+                ]}
+              >
+                {saved
+                  ? <BookmarkCheck size={16} color="#fff" />
+                  : <Bookmark size={16} color={theme.foreground} />
+                }
+                <Text style={[styles.saveButtonText, { color: saved ? "#fff" : theme.foreground }]}>
+                  {saved ? "Saved!" : "Save"}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
 
             <TouchableOpacity onPress={onBook} activeOpacity={0.8} style={styles.bookButton}>
               <LinearGradient
@@ -537,7 +602,7 @@ export default function ExpandedDeal({
         >
           <X size={20} color="#1a1a1a" strokeWidth={2.5} />
         </TouchableOpacity>
-      </Animated.View>
+      </Reanimated.View>
     </Modal>
   );
 }
@@ -910,4 +975,31 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bookButtonText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
+
+  // ── Sharing ───────────────────────────────────────────────────────────────
+  sharedBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  sharedBannerText: { fontSize: 14, lineHeight: 20 },
+  bothSavedBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+  },
+  bothSavedText: { fontSize: 14, fontWeight: "700", color: "#16a34a" },
+  shareButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

@@ -315,8 +315,25 @@ export default function ExploreScreen() {
 
   type ListItem = Deal | { type: "paywall" };
 
+  const isFiltered = !!(
+    searchTerm ||
+    filters.search ||
+    filters.months.length > 0 ||
+    filters.dealTypes.length > 0 ||
+    filters.cabinClass !== "all" ||
+    filters.destination !== "both" ||
+    filters.sort !== "newest"
+  );
+
   const listData: ListItem[] = useMemo(() => {
     if (isPremium) return filteredDeals;
+
+    // When search/filters are active, lock all results — free picks only apply
+    // to the unfiltered default view.
+    if (isFiltered) {
+      if (filteredDeals.length === 0) return [];
+      return [{ type: "paywall" as const }, ...filteredDeals.slice(0, FREE_BLURRED)];
+    }
 
     // Curate free sample: 2 cheapest domestic + 1 cheapest international
     const domestic = filteredDeals
@@ -345,7 +362,7 @@ export default function ExploreScreen() {
 
     if (filteredDeals.length <= picks.length) return picks;
     return [...picks, { type: "paywall" as const }, ...blurred];
-  }, [filteredDeals, isPremium]);
+  }, [filteredDeals, isPremium, isFiltered]);
 
   const renderDeal = (baseDeal: Deal, isBlurred: boolean) => {
     const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
@@ -545,7 +562,7 @@ export default function ExploreScreen() {
 
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
     if ("type" in item && item.type === "paywall") return renderPaywall();
-    const isBlurred = !isPremium && index > FREE_NORMAL;
+    const isBlurred = !isPremium && (isFiltered || index > FREE_NORMAL);
     return renderDeal(item as Deal, isBlurred);
   };
 

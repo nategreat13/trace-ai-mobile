@@ -11,6 +11,7 @@ import {
   Modal,
   Animated as RNAnimated,
   PanResponder,
+  Share,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
@@ -20,8 +21,9 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanim
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing } from "lucide-react-native";
+import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing, Plane } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -33,7 +35,8 @@ import {
   getDealAlerts,
   deleteDealAlert,
 } from "../services/firestore";
-import { ALL_BADGES } from "../lib/constants";
+import { ALL_BADGES, getDestinationFlag, getLevelInfo, SWIPES_PER_LEVEL } from "../lib/constants";
+import { createShare } from "../services/shareApi";
 
 export default function DashboardScreen() {
   const scheme = useColorScheme();
@@ -54,6 +57,30 @@ export default function DashboardScreen() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
+  const [pendingShareDeal, setPendingShareDeal] = useState<any | null>(null);
+
+  async function doShare(deal: any, name: string) {
+    try {
+      const shareId = await createShare(deal, user!.uid, name);
+      await Share.share({
+        title: `${deal.destination} deal on Trace`,
+        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Check it out on Trace 👉 tracetravel://share/${shareId}`,
+        url: `tracetravel://share/${shareId}`,
+      });
+    } catch {}
+  }
+
+  function handleShareDeal() {
+    if (!expandedDeal || !user) return;
+    const name = profile?.displayName || user.displayName;
+    if (!name) {
+      setPendingShareDeal(expandedDeal);
+      setShowShareNamePrompt(true);
+    } else {
+      doShare(expandedDeal, name);
+    }
+  }
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -136,7 +163,6 @@ export default function DashboardScreen() {
   const level = profile?.dealHunterLevel || 1;
   const swipeCount = profile?.swipeCount || 0;
   const streakDays = profile?.streakDays || 0;
-  const progressInLevel = (swipeCount % 25) / 25;
 
   if (loading) {
     return (
@@ -202,6 +228,29 @@ export default function DashboardScreen() {
           {item.imageUrl ? (
             <View style={{ position: "relative" }}>
               <Image source={{ uri: item.imageUrl }} style={{ width: "100%", height: 160 }} contentFit="cover" />
+              {/* Destination name overlaid on image */}
+              <View style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                paddingHorizontal: 12, paddingBottom: 12, paddingTop: 32,
+              }}>
+                <View style={{
+                  backgroundColor: "rgba(0,0,0,0.52)",
+                  borderRadius: 10,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  alignSelf: "flex-start",
+                  maxWidth: "80%",
+                }}>
+                  <Text style={{ fontSize: 18, fontWeight: "900", color: "#fff", letterSpacing: -0.3 }} numberOfLines={1}>
+                    {item.destination}
+                  </Text>
+                  {item.origin ? (
+                    <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.72)", fontWeight: "500", marginTop: 1 }}>
+                      {item.origin} → {item.destination}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
               {/* Discount badge */}
               {item.discountPct > 0 && (
                 <View style={{
@@ -217,7 +266,7 @@ export default function DashboardScreen() {
               {/* Duration pill */}
               {item.duration && (
                 <View style={{
-                  position: "absolute", bottom: 10, right: 10,
+                  position: "absolute", top: 10, right: 10,
                   backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8,
                   paddingHorizontal: 8, paddingVertical: 4,
                 }}>
@@ -225,42 +274,54 @@ export default function DashboardScreen() {
                 </View>
               )}
             </View>
-          ) : null}
-          <View style={{ padding: 12 }}>
-            {/* Origin → Destination */}
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 6, gap: 4 }}>
+          ) : (
+            /* No image fallback — show destination prominently */
+            <View style={{ paddingHorizontal: 12, paddingTop: 14, paddingBottom: 4 }}>
+              <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, letterSpacing: -0.4 }} numberOfLines={1}>
+                {item.destination}
+              </Text>
               {item.origin ? (
-                <Text style={{ fontSize: 12, color: theme.mutedForeground, fontWeight: "600" }}>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, fontWeight: "500", marginTop: 2 }}>
                   {item.origin} → {item.destination}
                 </Text>
-              ) : (
-                <Text style={{ fontSize: 15, fontWeight: "800", color: theme.foreground }} numberOfLines={1}>{item.destination}</Text>
-              )}
+              ) : null}
             </View>
-            {/* Price row */}
+          )}
+          <View style={{ padding: 12, paddingTop: 10 }}>
+            {/* Price row + trash */}
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-                <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
+                <Text style={{ fontSize: 22, fontWeight: "800", color: theme.foreground }}>${item.price}</Text>
                 {item.originalPrice > 0 && item.originalPrice !== item.price && (
                   <Text style={{ fontSize: 13, color: theme.mutedForeground, textDecorationLine: "line-through" }}>
                     ${item.originalPrice}
                   </Text>
                 )}
               </View>
-              <ChevronRight size={16} color={theme.mutedForeground} />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                <ChevronRight size={16} color={theme.mutedForeground} />
+                <TouchableOpacity
+                  onPress={() => handleDeleteDeal(item.id)}
+                  disabled={isDeleting}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Trash2 size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
             </View>
-            {/* Travel window */}
-            {item.travelWindow && (
-              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4 }} numberOfLines={1}>
-                📅 {item.travelWindow}
-              </Text>
-            )}
-            {/* Airline */}
-            {item.airlines && (
-              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }} numberOfLines={1}>
-                ✈️ {item.airlines}
-              </Text>
-            )}
+            {/* Travel window + airline */}
+            <View style={{ flexDirection: "row", gap: 12, marginTop: 5 }}>
+              {item.travelWindow && (
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }} numberOfLines={1}>
+                  📅 {item.travelWindow}
+                </Text>
+              )}
+              {item.airlines && (
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }} numberOfLines={1}>
+                  ✈️ {item.airlines}
+                </Text>
+              )}
+            </View>
             {/* Vibe */}
             {item.vibeDescription && (
               <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 4, fontStyle: "italic" }} numberOfLines={2}>
@@ -269,30 +330,35 @@ export default function DashboardScreen() {
             )}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleDeleteDeal(item.id)}
-          disabled={isDeleting}
-          style={{
-            position: "absolute",
-            top: 8,
-            right: 8,
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: "rgba(0,0,0,0.45)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Trash2 color="#fff" size={14} />
-        </TouchableOpacity>
       </Animated.View>
     );
   };
 
   const SwipeableAlert = ({ item }: { item: any }) => {
     const translateX = useRef(new RNAnimated.Value(0)).current;
+    const pulseScale = useRef(new RNAnimated.Value(1)).current;
+    const pulseOpacity = useRef(new RNAnimated.Value(0.6)).current;
     const DELETE_THRESHOLD = -80;
+    const isMatched = item.status === "matched";
+    const accentColor = isMatched ? "#22c55e" : "#3b82f6";
+
+    useEffect(() => {
+      const pulse = RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.parallel([
+            RNAnimated.timing(pulseScale, { toValue: 1.8, duration: 900, useNativeDriver: true }),
+            RNAnimated.timing(pulseOpacity, { toValue: 0, duration: 900, useNativeDriver: true }),
+          ]),
+          RNAnimated.parallel([
+            RNAnimated.timing(pulseScale, { toValue: 1, duration: 0, useNativeDriver: true }),
+            RNAnimated.timing(pulseOpacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+          ]),
+          RNAnimated.delay(500),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }, []);
 
     const panResponder = useRef(
       PanResponder.create({
@@ -316,13 +382,13 @@ export default function DashboardScreen() {
     const deleteOpacity = translateX.interpolate({ inputRange: [-120, -40], outputRange: [1, 0], extrapolate: "clamp" });
 
     return (
-      <View style={{ marginBottom: 8, overflow: "hidden", borderRadius: 12 }}>
+      <View style={{ marginBottom: 8, overflow: "hidden", borderRadius: 14 }}>
         {/* Red delete background */}
         <RNAnimated.View
           style={{
             position: "absolute", top: 0, bottom: 0, right: 0, left: 0,
             backgroundColor: "#ef4444",
-            borderRadius: 12,
+            borderRadius: 14,
             alignItems: "flex-end",
             justifyContent: "center",
             paddingRight: 20,
@@ -339,39 +405,63 @@ export default function DashboardScreen() {
           <View
             style={{
               backgroundColor: theme.card,
-              borderRadius: 12,
+              borderRadius: 14,
               borderWidth: 1,
               borderColor: theme.border,
-              padding: 16,
               flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
+              alignItems: "stretch",
+              overflow: "hidden",
             }}
           >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>{item.destination}</Text>
-              {item.month && (
-                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 2 }}>{item.month}</Text>
-              )}
-              <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 4 }}>Swipe left to delete</Text>
+            {/* Left color stripe */}
+            <View style={{ width: 4, backgroundColor: accentColor }} />
+
+            {/* Plane icon block */}
+            <View style={{
+              width: 52,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: `${accentColor}14`,
+            }}>
+              <Plane size={20} color={accentColor} />
             </View>
-            <View
-              style={{
-                backgroundColor: item.status === "matched" ? "#dcfce7" : theme.muted,
-                borderRadius: 999,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: "600",
-                  color: item.status === "matched" ? "#16a34a" : theme.mutedForeground,
-                }}
-              >
-                {item.status === "matched" ? "Matched!" : "Active"}
-              </Text>
+
+            {/* Content */}
+            <View style={{ flex: 1, paddingVertical: 14, paddingLeft: 10, paddingRight: 4, gap: 3 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={{ fontSize: 17, fontWeight: "800", color: theme.foreground, letterSpacing: -0.3, flexShrink: 1 }} numberOfLines={1}>
+                  {item.destination}
+                </Text>
+                {getDestinationFlag(item.destination) ? (
+                  <Text style={{ fontSize: 18 }}>{getDestinationFlag(item.destination)}</Text>
+                ) : null}
+              </View>
+              {item.month && (
+                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                  📅 {item.month}
+                </Text>
+              )}
+              {/* Pulsing status row */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                <View style={{ width: 10, height: 10, alignItems: "center", justifyContent: "center" }}>
+                  <RNAnimated.View style={{
+                    position: "absolute",
+                    width: 10, height: 10, borderRadius: 5,
+                    borderWidth: 1.5, borderColor: accentColor,
+                    transform: [{ scale: pulseScale }],
+                    opacity: pulseOpacity,
+                  }} />
+                  <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: accentColor }} />
+                </View>
+                <Text style={{ fontSize: 11, fontWeight: "600", color: accentColor }}>
+                  {isMatched ? "Deal matched!" : "Watching for deals"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Swipe hint */}
+            <View style={{ justifyContent: "center", paddingRight: 14 }}>
+              <Text style={{ fontSize: 10, color: theme.mutedForeground, opacity: 0.5 }}>⟵</Text>
             </View>
           </View>
         </RNAnimated.View>
@@ -416,34 +506,67 @@ export default function DashboardScreen() {
               }}
             >
               {/* Header row — always visible */}
-              <TouchableOpacity activeOpacity={0.8} onPress={() => setShowProfile((v) => !v)}>
-                <LinearGradient
-                  colors={["#1e3a8a", "#2563eb", "#3b82f6"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 16,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                  }}
-                >
-                  <Text style={{ fontSize: 30 }}>{personality.emoji || "🌍"}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>
-                      {personality.title || "Explorer"}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 2 }}>
-                      Lv {level}  ·  {earnedBadges.length}/{ALL_BADGES.length} badges earned
-                    </Text>
-                  </View>
-                  {showProfile
-                    ? <ChevronUp size={18} color="rgba(255,255,255,0.6)" />
-                    : <ChevronDown size={18} color="rgba(255,255,255,0.6)" />
-                  }
-                </LinearGradient>
-              </TouchableOpacity>
+              {(() => {
+                const { current, next, isMax, swipesToNext } = getLevelInfo(level, swipeCount);
+                const progress = (swipeCount % SWIPES_PER_LEVEL) / SWIPES_PER_LEVEL;
+                return (
+                  <TouchableOpacity activeOpacity={0.8} onPress={() => setShowProfile((v) => !v)}>
+                    <LinearGradient
+                      colors={["#1e3a8a", "#2563eb", "#3b82f6"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 14, gap: 12 }}
+                    >
+                      {/* Top row: personality + chevron */}
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                        <Text style={{ fontSize: 30 }}>{personality.emoji || "🌍"}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>
+                            {personality.title || "Explorer"}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 2 }}>
+                            {earnedBadges.length}/{ALL_BADGES.length} badges earned
+                          </Text>
+                        </View>
+                        {showProfile
+                          ? <ChevronUp size={18} color="rgba(255,255,255,0.6)" />
+                          : <ChevronDown size={18} color="rgba(255,255,255,0.6)" />
+                        }
+                      </View>
+
+                      {/* Level row — always visible */}
+                      <View style={{
+                        backgroundColor: "rgba(0,0,0,0.2)",
+                        borderRadius: 10,
+                        padding: 10,
+                        gap: 6,
+                      }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={{ fontSize: 16 }}>{current.emoji}</Text>
+                            <Text style={{ fontSize: 14, fontWeight: "800", color: "#fff" }}>
+                              {current.title}
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.6)", letterSpacing: 1 }}>
+                            LVL {level}
+                          </Text>
+                        </View>
+                        {!isMax && (
+                          <>
+                            <View style={{ height: 4, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 2, overflow: "hidden" }}>
+                              <View style={{ height: "100%", width: `${Math.max(4, Math.round(progress * 100))}%`, backgroundColor: "#fff", borderRadius: 2 }} />
+                            </View>
+                            <Text style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}>
+                              {swipesToNext} swipe{swipesToNext === 1 ? "" : "s"} to {next.emoji} {next.title}
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                );
+              })()}
 
               {/* Expanded content */}
               {showProfile && (
@@ -475,28 +598,6 @@ export default function DashboardScreen() {
                         <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 2 }}>{label}</Text>
                       </View>
                     ))}
-                  </View>
-
-                  {/* Level progress */}
-                  <View style={{ paddingHorizontal: 16, paddingBottom: 16, borderTopWidth: 1, borderTopColor: theme.border, paddingTop: 14 }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
-                      <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
-                        Level {level} Deal Hunter
-                      </Text>
-                      <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                        {25 - (swipeCount % 25)} to Lv {level + 1}
-                      </Text>
-                    </View>
-                    <View style={{ height: 5, borderRadius: 999, backgroundColor: theme.muted, overflow: "hidden" }}>
-                      <View
-                        style={{
-                          height: "100%",
-                          borderRadius: 999,
-                          backgroundColor: colors.brand.traceRed,
-                          width: `${Math.max(4, Math.round(progressInLevel * 100))}%`,
-                        }}
-                      />
-                    </View>
                   </View>
 
                   {/* Badges */}
@@ -614,8 +715,19 @@ export default function DashboardScreen() {
           onClose={() => setExpandedDeal(null)}
           onSave={() => setExpandedDeal(null)}
           onBook={() => { if (expandedDeal?.url) Linking.openURL(expandedDeal.url); }}
+          onShare={handleShareDeal}
         />
       )}
+
+      <ShareNamePromptModal
+        visible={showShareNamePrompt}
+        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
+        onSave={(name) => {
+          setShowShareNamePrompt(false);
+          if (pendingShareDeal) doShare(pendingShareDeal, name);
+          setPendingShareDeal(null);
+        }}
+      />
 
       {/* Badge detail popup */}
       <Modal

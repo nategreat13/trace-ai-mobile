@@ -4,30 +4,50 @@ import { DestinationInfo } from "../lib/destinationData";
 import { fetchDestinationInfo } from "../services/destinationApi";
 
 const cache: Record<string, DestinationInfo> = {};
+const inflight = new Set<string>();
+
+function cacheKey(deal: Deal): string {
+  return `${deal.destination_code}_${deal.domestic_or_international}_${deal.travel_window ?? "any"}`;
+}
+
+export function prefetchDestinationInfo(deal: Deal | null): void {
+  if (!deal) return;
+  const key = cacheKey(deal);
+  if (cache[key] || inflight.has(key)) return;
+  inflight.add(key);
+  fetchDestinationInfo(deal)
+    .then((data) => { cache[key] = data; })
+    .catch(() => {})
+    .finally(() => { inflight.delete(key); });
+}
 
 export function useDestinationInfo(deal: Deal | null) {
-  const cacheKey = deal
-    ? `${deal.destination_code}_${deal.domestic_or_international}_${deal.travel_window ?? "any"}`
-    : null;
+  const key = deal ? cacheKey(deal) : null;
 
   const [info, setInfo] = useState<DestinationInfo | null>(
-    cacheKey && cache[cacheKey] ? cache[cacheKey] : null
+    key && cache[key] ? cache[key] : null
   );
-  const [loading, setLoading] = useState(!!(cacheKey && !cache[cacheKey]));
+  const [loading, setLoading] = useState(!!(key && !cache[key]));
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!deal || !cacheKey) return;
-    if (cache[cacheKey]) return;
+    if (!deal || !key) return;
+    if (cache[key]) {
+      setInfo(cache[key]);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    setInfo(null);
     setLoading(true);
     setError(false);
 
     fetchDestinationInfo(deal)
       .then((data) => {
         if (cancelled) return;
-        cache[cacheKey] = data;
+        cache[key] = data;
+        inflight.delete(key);
         setInfo(data);
         setLoading(false);
       })
@@ -38,7 +58,7 @@ export function useDestinationInfo(deal: Deal | null) {
       });
 
     return () => { cancelled = true; };
-  }, [cacheKey]);
+  }, [key]);
 
   return { info, loading, error };
 }

@@ -67,6 +67,7 @@ export default function ProfileScreen() {
   const [tempLastName, setTempLastName] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
+  const [showNotifPrefs, setShowNotifPrefs] = useState(false);
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -149,12 +150,12 @@ export default function ProfileScreen() {
 
   const handleShare = async () => {
     try {
-      const logo = RNImage.resolveAssetSource(require("../../assets/Bluelogo.png"));
+      const img = RNImage.resolveAssetSource(require("../../assets/1.png"));
       await Share.share({
-        title: "Trace — AI Flight Deals",
+        title: "Trace Travel",
         message:
           "🚨 I found a $299 round trip to Europe. No, seriously.\n\nTrace is an AI app that hunts down insane flight deals and serves them up like a dating app — you just swipe. It's kind of unfair how good the deals are.\n\nDownload it and thank me later ✈️💸\nhttps://tracetravel.co",
-        url: logo.uri,
+        url: img.uri,
       });
     } catch {}
   };
@@ -326,59 +327,6 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
-            {/* Stats grid */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-around",
-                paddingTop: 16,
-                borderTopWidth: 1,
-                borderTopColor: theme.border,
-              }}
-            >
-              <View style={{ alignItems: "center" }}>
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontWeight: "800",
-                    color: theme.foreground,
-                  }}
-                >
-                  {profile?.swipeCount || 0}
-                </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                  Swipes
-                </Text>
-              </View>
-              <View style={{ alignItems: "center" }}>
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontWeight: "800",
-                    color: theme.foreground,
-                  }}
-                >
-                  {profile?.streakDays || 0}
-                </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                  Streak
-                </Text>
-              </View>
-              <View style={{ alignItems: "center" }}>
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontWeight: "800",
-                    color: theme.foreground,
-                  }}
-                >
-                  {profile?.dealHunterLevel || 1}
-                </Text>
-                <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                  Level
-                </Text>
-              </View>
-            </View>
           </View>
 
           {/* Subscription with gradient background */}
@@ -514,56 +462,139 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </LinearGradient>
 
-          {/* Notifications toggle */}
+          {/* Notifications */}
           <View
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
               backgroundColor: theme.card,
               borderRadius: 16,
               borderWidth: 1,
               borderColor: theme.border,
-              paddingHorizontal: 18,
-              paddingVertical: 14,
-              gap: 12,
+              overflow: "hidden",
             }}
           >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
-                Push notifications
-              </Text>
-              <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
-                Deal alerts, account updates
-              </Text>
-            </View>
-            <Switch
-              value={profile?.notificationsEnabled === true}
-              onValueChange={async (next) => {
-                if (!profile?.id) return;
-                if (next) {
-                  // Turning on: re-request OS permission if needed and
-                  // re-register the token. If the user had previously
-                  // denied at the OS level, we can't grant it from JS —
-                  // they'd have to flip it in iOS/Android Settings.
-                  const status = await requestNotificationPermission();
-                  if (status === "granted") {
-                    await registerPushToken(profile.id);
-                    await updateProfile({ notificationsEnabled: true });
+            {/* Master toggle */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingHorizontal: 18,
+                paddingVertical: 14,
+                gap: 12,
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
+                  Push notifications
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                  Manage what Trace can send you
+                </Text>
+              </View>
+              <Switch
+                value={profile?.notificationsEnabled === true}
+                onValueChange={async (next) => {
+                  if (!profile?.id) return;
+                  if (next) {
+                    const status = await requestNotificationPermission();
+                    if (status === "granted") {
+                      await registerPushToken(profile.id);
+                      await updateProfile({ notificationsEnabled: true });
+                    } else {
+                      Alert.alert(
+                        "Notifications blocked",
+                        "Push notifications are turned off in your device settings. Open the Settings app to enable them for Trace.",
+                      );
+                      await updateProfile({ notificationsEnabled: false });
+                    }
                   } else {
-                    Alert.alert(
-                      "Notifications blocked",
-                      "Push notifications are turned off in your device settings. Open the Settings app to enable them for Trace.",
-                    );
                     await updateProfile({ notificationsEnabled: false });
                   }
-                } else {
-                  await updateProfile({ notificationsEnabled: false });
-                }
-              }}
-              trackColor={{ false: theme.muted, true: colors.brand.traceRed }}
-              thumbColor="#fff"
-            />
+                }}
+                trackColor={{ false: theme.muted, true: colors.brand.traceRed }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            {/* Customize link — only shown when master is on */}
+            {profile?.notificationsEnabled === true && (
+              <View style={{ borderTopWidth: 1, borderTopColor: theme.border }}>
+                <TouchableOpacity
+                  onPress={() => setShowNotifPrefs((v) => !v)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 18,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 13, color: theme.mutedForeground }}>
+                    Customize notifications
+                  </Text>
+                  <ChevronRight
+                    color={theme.mutedForeground}
+                    size={16}
+                    style={{ transform: [{ rotate: showNotifPrefs ? "90deg" : "0deg" }] }}
+                  />
+                </TouchableOpacity>
+
+                {showNotifPrefs && (() => {
+                  const prefs = profile.notificationPreferences;
+                  const categories: { key: keyof NonNullable<typeof prefs>; label: string; description: string }[] = [
+                    { key: "deals", label: "Deal alerts", description: "Hot deals and saved alert matches" },
+                    { key: "account", label: "Account & billing", description: "Trial, renewals, billing issues" },
+                    { key: "reengagement", label: "Re-engagement", description: "When you haven't opened the app in a while" },
+                    { key: "offers", label: "Tips & recommendations", description: "Upgrade suggestions and tips" },
+                  ];
+                  return (
+                    <View style={{ borderTopWidth: 1, borderTopColor: theme.border }}>
+                      {categories.map((cat, i) => (
+                        <View
+                          key={cat.key}
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            paddingHorizontal: 18,
+                            paddingVertical: 12,
+                            borderTopWidth: i === 0 ? 0 : 1,
+                            borderTopColor: theme.border,
+                            gap: 12,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, fontWeight: "600", color: theme.foreground }}>
+                              {cat.label}
+                            </Text>
+                            <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 1 }}>
+                              {cat.description}
+                            </Text>
+                          </View>
+                          <Switch
+                            value={prefs?.[cat.key] !== false}
+                            onValueChange={async (next) => {
+                              if (!profile?.id) return;
+                              await updateProfile({
+                                notificationPreferences: {
+                                  deals: prefs?.deals !== false,
+                                  account: prefs?.account !== false,
+                                  reengagement: prefs?.reengagement !== false,
+                                  offers: prefs?.offers !== false,
+                                  [cat.key]: next,
+                                },
+                              });
+                            }}
+                            trackColor={{ false: theme.muted, true: colors.brand.traceRed }}
+                            thumbColor="#fff"
+                          />
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
+              </View>
+            )}
           </View>
 
           {/* Promo code redemption */}
