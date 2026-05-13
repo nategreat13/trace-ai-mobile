@@ -1,5 +1,6 @@
-import { getDb } from "./firebase-admin";
+import { colRef } from "./firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import type { TraceEnv } from "@trace/shared";
 
 export type Tier = "premium" | "business";
 
@@ -39,10 +40,8 @@ export function generateRandomCode(): string {
   return `TRACE-${seg(4)}-${seg(4)}-${seg(4)}`;
 }
 
-export async function listPromoCodes(): Promise<PromoCode[]> {
-  const db = getDb();
-  const snap = await db
-    .collection("promoCodes")
+export async function listPromoCodes(env: TraceEnv): Promise<PromoCode[]> {
+  const snap = await colRef(env, "promoCodes")
     .orderBy("createdAt", "desc")
     .get();
   return snap.docs.map((d) => {
@@ -62,11 +61,10 @@ export async function listPromoCodes(): Promise<PromoCode[]> {
 }
 
 export async function listRedemptionsForCode(
+  env: TraceEnv,
   code: string
 ): Promise<PromoRedemption[]> {
-  const db = getDb();
-  const snap = await db
-    .collection("promoRedemptions")
+  const snap = await colRef(env, "promoRedemptions")
     .where("code", "==", code.toUpperCase())
     .orderBy("redeemedAt", "desc")
     .get();
@@ -102,9 +100,9 @@ export interface CreatePromoCodeInput {
  * auto-generated). Throws if the code already exists.
  */
 export async function createPromoCode(
+  env: TraceEnv,
   input: CreatePromoCodeInput
 ): Promise<string> {
-  const db = getDb();
   const tier = input.tier;
   if (tier !== "premium" && tier !== "business") {
     throw new Error("tier must be 'premium' or 'business'");
@@ -125,7 +123,7 @@ export async function createPromoCode(
   }
 
   const code = (input.code?.trim() || generateRandomCode()).toUpperCase();
-  const ref = db.collection("promoCodes").doc(code);
+  const ref = colRef(env, "promoCodes").doc(code);
   const existing = await ref.get();
   if (existing.exists) {
     throw new Error(`Code ${code} already exists`);
@@ -144,14 +142,13 @@ export async function createPromoCode(
 }
 
 export async function setPromoCodeActive(
+  env: TraceEnv,
   code: string,
   active: boolean
 ): Promise<void> {
-  const db = getDb();
-  await db.collection("promoCodes").doc(code.toUpperCase()).update({ active });
+  await colRef(env, "promoCodes").doc(code.toUpperCase()).update({ active });
 }
 
-export async function deletePromoCode(code: string): Promise<void> {
-  const db = getDb();
-  await db.collection("promoCodes").doc(code.toUpperCase()).delete();
+export async function deletePromoCode(env: TraceEnv, code: string): Promise<void> {
+  await colRef(env, "promoCodes").doc(code.toUpperCase()).delete();
 }

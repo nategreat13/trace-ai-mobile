@@ -55,6 +55,63 @@
         { "fieldPath": "subscriptionStatus", "order": "ASCENDING" },
         { "fieldPath": "firstPurchaseAt", "order": "ASCENDING" }
       ]
+    },
+
+    {
+      "collectionGroup": "staging_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "name", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_promoRedemptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "code", "order": "ASCENDING" },
+        { "fieldPath": "redeemedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subscriptionSource", "order": "ASCENDING" },
+        { "fieldPath": "trialEndDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "notificationsEnabled", "order": "ASCENDING" },
+        { "fieldPath": "subscriptionStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subscriptionStatus", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_userProfiles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subscriptionStatus", "order": "ASCENDING" },
+        { "fieldPath": "firstPurchaseAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

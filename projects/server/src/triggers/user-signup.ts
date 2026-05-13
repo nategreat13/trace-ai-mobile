@@ -1,6 +1,7 @@
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
+import { runWithEnv } from "../env";
 
 /**
  * Slack incoming webhook URL — bound at deploy via Secret Manager.
@@ -21,12 +22,9 @@ const slackSignupWebhookUrl = defineSecret("SLACK_SIGNUP_WEBHOOK_URL");
  *     <!date^...> formatter)
  *   - "user #N" — total userProfiles after this signup
  */
-export const onUserProfileCreated = onDocumentCreated(
-  {
-    document: "userProfiles/{id}",
-    secrets: [slackSignupWebhookUrl],
-  },
-  async (event) => {
+async function handleUserSignup(event: {
+  data?: { data: () => any } | undefined;
+}) {
     const data = event.data?.data();
     if (!data) {
       console.warn("[Slack signup] Trigger fired with no doc data");
@@ -45,7 +43,7 @@ export const onUserProfileCreated = onDocumentCreated(
     // so count() reflects it as "user #N".
     let totalUsers = 0;
     try {
-      const snap = await getDb().collection("userProfiles").count().get();
+      const snap = await colRef("userProfiles").count().get();
       totalUsers = snap.data().count;
     } catch (err) {
       console.warn("[Slack signup] Failed to read user count:", err);
@@ -109,4 +107,39 @@ export const onUserProfileCreated = onDocumentCreated(
       console.error("[Slack signup] Webhook POST failed:", err);
     }
   }
+
+/**
+ * Prod signup trigger. Fires on `userProfiles/{id}` (the unprefixed
+ * collection), so it only sees real-user signups.
+ */
+export const onUserProfileCreated = onDocumentCreated(
+  {
+    document: "userProfiles/{id}",
+    secrets: [slackSignupWebhookUrl],
+  },
+  (event) => runWithEnv("prod", () => handleUserSignup(event))
+);
+
+/**
+ * Staging signup trigger. Fires on `staging_userProfiles/{id}`.
+ * Per the staging design (decision 5: "Suppress Slack notifications"),
+ * we deliberately skip the Slack post so the channel isn't noisy with
+ * test accounts. The trigger still exists so any future per-signup
+ * server-side bootstrap logic stays parallel between the two envs.
+ */
+export const onStagingUserProfileCreated = onDocumentCreated(
+  {
+    document: "staging_userProfiles/{id}",
+    secrets: [slackSignupWebhookUrl],
+  },
+  (event) =>
+    runWithEnv("staging", async () => {
+      const data = event.data?.data();
+      if (!data) return;
+      console.log(
+        "[staging signup] new staging userProfile",
+        data.email ?? "(no email)"
+      );
+      // Intentionally no Slack post — see comment above.
+    })
 );

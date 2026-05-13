@@ -1,8 +1,10 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { Platform } from "react-native";
 import * as Updates from "expo-updates";
+import { col } from "@trace/shared";
 import { auth, db } from "../services/firebase";
 import { getSessionId } from "./session";
+import { getEnv } from "./env";
 
 /**
  * Lightweight analytics wrapper — writes events to Firestore's `events`
@@ -163,7 +165,8 @@ export function logEvent(
   // later requires no schema migration on the events collection.
   if (!("experiments" in cleanProps)) cleanProps.experiments = {};
 
-  addDoc(collection(db, "events"), {
+  // Env-aware: staging writes to `staging_events`, prod to `events`.
+  addDoc(collection(db, col(getEnv(), "events")), {
     name,
     // Source from auth.currentUser directly so it always agrees with
     // request.auth.uid in the Firestore security rule. See the comment

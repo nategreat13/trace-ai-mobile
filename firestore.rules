@@ -2,6 +2,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║                        PROD COLLECTIONS                          ║
+    // ║                                                                  ║
+    // ║  These are the real-user collections. Mirror blocks for staging_*║
+    // ║  appear further down. Keep the two sets in sync.                 ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
     // ──── User Profiles ────
     match /userProfiles/{docId} {
 
@@ -161,6 +168,102 @@ service cloud.firestore {
     match /notificationLog/{docId} {
       allow read, write: if false;
     }
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║                      STAGING COLLECTIONS                         ║
+    // ║                                                                  ║
+    // ║  Mirror of the prod blocks above, prefixed with `staging_`. The  ║
+    // ║  logic is identical — only the collection name differs. If you  ║
+    // ║  change a prod rule, change the corresponding staging rule.     ║
+    // ║                                                                  ║
+    // ║  Note: this still uses real Firebase Auth (same user pool as    ║
+    // ║  prod — decision 1), so the same uid checks apply. A staging    ║
+    // ║  user is just a real Firebase Auth user whose userProfile doc   ║
+    // ║  lives under the prefixed collection.                            ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    match /staging_userProfiles/{docId} {
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.subscriptionStatus == "free";
+
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
+                    && request.resource.data.trialEndDate == resource.data.trialEndDate
+                    && stagingUnchangedStripeFields();
+
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+
+      function stagingUnchangedStripeFields() {
+        let after = request.resource.data;
+        let before = resource.data;
+        return (!("stripeCustomerId" in after) || after.stripeCustomerId == before.stripeCustomerId)
+            && (!("stripeSubscriptionId" in after) || after.stripeSubscriptionId == before.stripeSubscriptionId)
+            && (!("stripeSubscriptionStatus" in after) || after.stripeSubscriptionStatus == before.stripeSubscriptionStatus)
+            && (!("stripePriceId" in after) || after.stripePriceId == before.stripePriceId)
+            && (!("stripeCurrentPeriodEnd" in after) || after.stripeCurrentPeriodEnd == before.stripeCurrentPeriodEnd);
+      }
+    }
+
+    match /staging_swipeActions/{docId} {
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    match /staging_flightDeals/{docId} {
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    match /staging_dealAlerts/{docId} {
+      allow read: if request.auth != null
+                  && resource.data.userId == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.userId == resource.data.userId;
+      allow delete: if request.auth != null
+                    && resource.data.userId == request.auth.uid;
+    }
+
+    match /staging_events/{docId} {
+      allow create: if isOwnStagingEventCreate();
+      allow read, update, delete: if false;
+
+      function isOwnStagingEventCreate() {
+        let d = request.resource.data;
+        return !("source" in d)
+          && d.keys().hasAll(["name", "userId", "timestamp"])
+          && (
+            (request.auth != null && d.userId == request.auth.uid)
+            || (request.auth == null && d.userId == "guest")
+          );
+      }
+    }
+
+    // Server-only staging collections — deny all client access. Match
+    // the prod policy block-for-block.
+    match /staging_analyticsExclusions/{docId} { allow read, write: if false; }
+    match /staging_adminAuditLog/{docId}       { allow read, write: if false; }
+    match /staging_promoCodes/{docId}          { allow read, write: if false; }
+    match /staging_promoRedemptions/{docId}    { allow read, write: if false; }
+    match /staging_notificationTemplates/{docId} { allow read, write: if false; }
+    match /staging_notificationLog/{docId}     { allow read, write: if false; }
 
     // ──── Deny everything else ────
     match /{document=**} {

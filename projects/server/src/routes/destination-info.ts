@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 
 export const destinationInfoRoutes = Router();
 
@@ -35,8 +35,7 @@ destinationInfoRoutes.get(
     const cacheKey = `${destinationCode.toUpperCase()}_${isDomestic ? "domestic" : "international"}_${month}`;
 
     try {
-      const db = getDb();
-      const docRef = db.collection("destinationContent").doc(cacheKey);
+      const docRef = colRef("destinationContent").doc(cacheKey);
       const doc = await docRef.get();
 
       if (doc.exists) {

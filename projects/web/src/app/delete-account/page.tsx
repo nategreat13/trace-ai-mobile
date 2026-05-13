@@ -51,8 +51,8 @@ export default function DeleteAccountPage() {
             What We Cannot Delete
           </h2>
           <p>
-            If you have an active subscription, Stripe may retain billing records
-            as required by law. Please{" "}
+            If you have an active subscription, our payment processor may retain
+            billing records as required by law. Please{" "}
             <a
               href="mailto:contact@tracetravel.co"
               className="text-rose-500 underline"

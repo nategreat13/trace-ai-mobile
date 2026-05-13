@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import { colRef, getDb } from "../firebase";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 import { grantPromotionalEntitlement } from "../lib/revenuecat-rest";
 
@@ -51,13 +51,14 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
   // Codes are stored uppercase; normalize on input.
   const code = rawCode.toUpperCase();
 
+  // db is still needed for runTransaction below — transactions can't be
+  // started off a CollectionReference, only off the Firestore instance.
   const db = getDb();
-  const codeRef = db.collection("promoCodes").doc(code);
+  const codeRef = colRef("promoCodes").doc(code);
 
   // Pre-check the user hasn't already redeemed this code (cheap, before the
   // transaction). Final guard is inside the transaction below.
-  const priorRedemptions = await db
-    .collection("promoRedemptions")
+  const priorRedemptions = await colRef("promoRedemptions")
     .where("code", "==", code)
     .where("userId", "==", userId)
     .limit(1)
@@ -136,8 +137,7 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
   // user redeeming a Business code goes to Business, but a Business
   // user redeeming a Premium code keeps Business (don't downgrade).
   try {
-    const profileQuery = await db
-      .collection("userProfiles")
+    const profileQuery = await colRef("userProfiles")
       .where("userId", "==", userId)
       .limit(1)
       .get();
@@ -191,7 +191,7 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
       tx.update(codeRef, {
         redemptionCount: admin.firestore.FieldValue.increment(1),
       });
-      const redemptionRef = db.collection("promoRedemptions").doc();
+      const redemptionRef = colRef("promoRedemptions").doc();
       tx.set(redemptionRef, {
         code,
         userId,

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 import { AppState, AppStateStatus, Platform } from "react-native";
 import { Timestamp, doc, updateDoc } from "firebase/firestore";
+import { col } from "@trace/shared";
 import { db } from "../services/firebase";
 import { logEvent } from "../lib/analytics";
+import { getEnv } from "../lib/env";
 import { resetSessionId } from "../lib/session";
 import { useAuth } from "../context/AuthContext";
 
@@ -34,7 +36,8 @@ export default function AnalyticsLifecycle() {
   function mirrorLastSeenAt() {
     const id = profileIdRef.current;
     if (!id) return;
-    updateDoc(doc(db, "userProfiles", id), {
+    // Env-aware doc path: staging writes to `staging_userProfiles`.
+    updateDoc(doc(db, col(getEnv(), "userProfiles"), id), {
       lastSeenAt: Timestamp.now(),
     }).catch((err) => {
       if (__DEV__) console.warn("[lifecycle] lastSeenAt update failed:", err?.message);

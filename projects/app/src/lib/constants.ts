@@ -1,25 +1,41 @@
 import Constants from "expo-constants";
+import { getEnv } from "./env";
 
 export const MAX_DAILY_SWIPES = 8;
 export const MAX_SAVES = 5;
 export const UNLIMITED_SWIPES = 999999;
 
+/**
+ * Cloud Function URLs.
+ *
+ * Prod is the long-stable URL the function was deployed under. Staging
+ * is the URL Cloud Run assigns to the `apiStaging` function — set once
+ * after the first staging deploy.
+ *
+ * Both functions live in the same Firebase project (`trace-ai-b9cba`)
+ * and use the same secrets bindings; the only difference is the env
+ * scope they read/write inside (via `runWithEnv` in server/src/env.ts).
+ */
 const PROD_API_URL = "https://api-7l7vojyykq-uc.a.run.app";
+const STAGING_API_URL = "https://apistaging-7l7vojyykq-uc.a.run.app";
 
 // In dev, app.config.js populates `extra.devApiUrl` with the local server
 // URL when USE_LOCAL_API=1 is set (the default for `yarn dev2`). For
 // `yarn dev:prod` and for production binaries, devApiUrl is null and we
-// fall back to the production API.
-//
-// This replaces the old workflow of manually editing this constant to
-// localhost and remembering to revert it before commit.
+// fall back to the env-appropriate production API.
 const devApiUrl = (Constants.expoConfig?.extra as { devApiUrl?: string | null } | undefined)?.devApiUrl;
-// @ts-ignore: __DEV__ is defined by React Native at runtime
-export const API_BASE_URL = __DEV__ && devApiUrl ? devApiUrl : PROD_API_URL;
+
+function resolveApiBaseUrl(): string {
+  // @ts-ignore: __DEV__ is defined by React Native at runtime
+  if (__DEV__ && devApiUrl) return devApiUrl;
+  return getEnv() === "staging" ? STAGING_API_URL : PROD_API_URL;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 // @ts-ignore: __DEV__ is defined by React Native at runtime
 if (__DEV__) {
   console.log(
-    `[constants] API_BASE_URL = ${API_BASE_URL} (devApiUrl from extra: ${devApiUrl ?? "null"})`
+    `[constants] API_BASE_URL = ${API_BASE_URL} (env: ${getEnv()}, devApiUrl from extra: ${devApiUrl ?? "null"})`
   );
 }
 

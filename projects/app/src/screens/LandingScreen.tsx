@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   Image,
   Modal,
+  Pressable,
   Animated,
   useColorScheme,
   Linking,
@@ -19,6 +20,7 @@ import { colors } from "../theme/colors";
 import { Deal } from "@trace/shared";
 import SwipeCard from "../components/swipe/SwipeCard";
 import { logEvent } from "../lib/analytics";
+import { getEnv } from "../lib/env";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -132,16 +134,50 @@ export default function LandingScreen() {
         locations={[0, 0.45, 1]}
         style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
       />
-      {/* Logo */}
+      {/* Logo — long-press for 3s opens the hidden diagnostics screen.
+          Delay is intentionally long so it can never trigger accidentally
+          during normal taps/scrolls on this screen. */}
       <View style={{ alignItems: "center", paddingTop: 16, paddingBottom: 4 }}>
-        <Image
-          source={
-            scheme === "dark"
-              ? require("../../assets/TraceLogoLight.png")
-              : require("../../assets/TraceLogoDark.png")
-          }
-          style={{ width: 300, height: 95, resizeMode: "contain" }}
-        />
+        <Pressable
+          onLongPress={() => navigation.navigate("Diagnostics")}
+          delayLongPress={3000}
+          // The Pressable still feels like an Image — no visible feedback.
+          // Devs find this by reading code or being told; users never will.
+          hitSlop={8}
+        >
+          <Image
+            source={
+              scheme === "dark"
+                ? require("../../assets/TraceLogoLight.png")
+                : require("../../assets/TraceLogoDark.png")
+            }
+            style={{ width: 300, height: 95, resizeMode: "contain" }}
+          />
+        </Pressable>
+        {/* Persistent staging badge — defense-in-depth so a tester
+            can never mistake which env they're in. Hidden in prod. */}
+        {getEnv() === "staging" && (
+          <View
+            style={{
+              marginTop: 4,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
+              borderRadius: 10,
+              backgroundColor: "#f59e0b",
+            }}
+          >
+            <Text
+              style={{
+                color: "#1a1a1a",
+                fontSize: 11,
+                fontWeight: "800",
+                letterSpacing: 0.6,
+              }}
+            >
+              STAGING
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Headline */}

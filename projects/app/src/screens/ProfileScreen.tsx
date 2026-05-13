@@ -8,6 +8,7 @@ import {
   ScrollView,
   Share,
   Image as RNImage,
+  Pressable as RNPressable,
   useColorScheme,
   Modal,
   Platform,
@@ -15,6 +16,7 @@ import {
   Switch,
   ActivityIndicator,
 } from "react-native";
+import * as Application from "expo-application";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Image } from "expo-image";
@@ -861,6 +863,23 @@ export default function ProfileScreen() {
               Delete Account
             </Text>
           </TouchableOpacity>
+
+          {/* Hidden diagnostics trigger. Long-press the version line below
+              for 3 seconds to open the diagnostics modal. Same pattern as
+              the logo on LandingScreen — undiscoverable to normal users.
+              Visible label is "Trace" + version so it doubles as a
+              useful footer for testers reporting bugs. */}
+          <RNPressable
+            onLongPress={() => navigation.navigate("Diagnostics")}
+            delayLongPress={3000}
+            hitSlop={8}
+            style={{ alignItems: "center", paddingTop: 24 }}
+          >
+            <Text style={{ color: theme.mutedForeground, fontSize: 11 }}>
+              Trace · v{Application.nativeApplicationVersion ?? "?"} (
+              {Application.nativeBuildVersion ?? "?"})
+            </Text>
+          </RNPressable>
         </View>
       </ScrollView>
 

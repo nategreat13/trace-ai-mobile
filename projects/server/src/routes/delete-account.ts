@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import type { CollectionName } from "@trace/shared";
+import { colRef, getDb } from "../firebase";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 
 export const deleteAccountRoutes = Router();
@@ -18,7 +19,10 @@ export const deleteAccountRoutes = Router();
  *   - `promoRedemptions` — audit trail of redemptions. Useful even after
  *     account deletion for code-level analytics.
  */
-const PER_USER_COLLECTIONS = [
+// Typed as CollectionName[] so the union from @trace/shared enforces
+// that every entry is a real collection — catches typos at compile
+// time before they manifest as "no such collection" runtime errors.
+const PER_USER_COLLECTIONS: CollectionName[] = [
   "userProfiles",
   "swipeActions",
   "flightDeals",
@@ -34,8 +38,7 @@ async function deleteUserDocs(userId: string): Promise<{
   const deleted: Record<string, number> = {};
 
   for (const collection of PER_USER_COLLECTIONS) {
-    const snap = await db
-      .collection(collection)
+    const snap = await colRef(collection)
       .where("userId", "==", userId)
       .get();
     if (snap.empty) {

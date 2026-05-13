@@ -1,12 +1,11 @@
 import { Router } from "express";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 
 export const subscriptionRoutes = Router();
 
 async function getProfileByEmail(email: string) {
-  const snapshot = await getDb()
-    .collection("userProfiles")
+  const snapshot = await colRef("userProfiles")
     .where("email", "==", email)
     .limit(1)
     .get();

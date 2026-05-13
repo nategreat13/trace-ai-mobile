@@ -1,6 +1,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
+import { runWithEnv } from "../env";
 import { sendToUser } from "../lib/push";
 import { getTemplate, renderString } from "../lib/notification-templates";
 
@@ -74,15 +75,21 @@ export const dailyNotificationTriggers = onSchedule(
     secrets: [adminApiToken],
   },
   async () => {
-    const db = getDb();
+    // Cron is prod-only by default. The staging counterpart (gated on
+    // `ENABLE_STAGING_CRON`) wraps `runDailyNotifications` in
+    // `runWithEnv("staging", …)` and lives below.
+    return runWithEnv("prod", () => runDailyNotifications());
+  }
+);
+
+async function runDailyNotifications() {
     const now = new Date();
 
     // ─── Welcome (T+1 day after signup) ───────────────────────────
     {
       const cutoffStart = new Date(now.getTime() - 25 * 60 * 60 * 1000);
       const cutoffEnd = new Date(now.getTime() - 23 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
         .select("userId", "homeAirport", "notificationsEnabled")
@@ -107,8 +114,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() + 73 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() + 71 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
         .where("subscriptionSource", "==", "store")
@@ -129,8 +135,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
         .where("subscriptionSource", "==", "store")
@@ -151,8 +156,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
         .select("userId", "homeAirport", "notificationsEnabled")
@@ -177,8 +181,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
         .select("userId", "homeAirport", "notificationsEnabled")
@@ -203,8 +206,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
         .select("userId", "homeAirport", "notificationsEnabled")
@@ -229,8 +231,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const hotDealTemplate = await getTemplate("hot_deal_alert");
       if (hotDealTemplate?.enabled) {
-        const snap = await db
-          .collection("userProfiles")
+        const snap = await colRef("userProfiles")
           .where("notificationsEnabled", "==", true)
           .select("userId", "homeAirport", "subscriptionStatus")
           .get();
@@ -291,8 +292,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
       const cutoffEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionSource", "==", "store")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
@@ -316,8 +316,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
@@ -341,8 +340,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
@@ -366,8 +364,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
@@ -391,8 +388,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
@@ -416,8 +412,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
@@ -441,8 +436,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 26 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
@@ -463,8 +457,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
@@ -483,8 +476,7 @@ export const dailyNotificationTriggers = onSchedule(
 
     // ─── Deal alert match (premium/business users with saved alerts) ─
     {
-      const alertsSnap = await db
-        .collection("dealAlerts")
+      const alertsSnap = await colRef("dealAlerts")
         .where("status", "==", "active")
         .get();
 
@@ -524,8 +516,7 @@ export const dailyNotificationTriggers = onSchedule(
 
         let sent = 0;
         for (const [userId, alerts] of alertsByUser) {
-          const profileSnap = await db
-            .collection("userProfiles")
+          const profileSnap = await colRef("userProfiles")
             .where("userId", "==", userId)
             .limit(1)
             .select("homeAirport", "subscriptionStatus", "notificationsEnabled")
@@ -559,7 +550,7 @@ export const dailyNotificationTriggers = onSchedule(
               discount: Math.round(match.discount_pct ?? 0),
             });
             // Mark matched so this alert never fires again.
-            await db.collection("dealAlerts").doc(alert.id).update({ status: "matched" });
+            await colRef("dealAlerts").doc(alert.id).update({ status: "matched" });
             sent++;
           }
         }
@@ -568,5 +559,23 @@ export const dailyNotificationTriggers = onSchedule(
         console.log("[cron] deal_alert_match: no active alerts");
       }
     }
-  }
-);
+}
+
+/**
+ * Optional staging cron. Off by default (decision 6: "Off"). Enable on a
+ * per-deploy basis by setting `ENABLE_STAGING_CRON=1` in the function's
+ * env. Reads/writes staging_* collections; otherwise identical to the
+ * prod variant. Useful when QA needs to verify a notification trigger
+ * end-to-end before shipping.
+ */
+export const dailyStagingNotificationTriggers =
+  process.env.ENABLE_STAGING_CRON === "1"
+    ? onSchedule(
+        {
+          schedule: "0 14 * * *",
+          timeZone: "UTC",
+          secrets: [adminApiToken],
+        },
+        async () => runWithEnv("staging", () => runDailyNotifications())
+      )
+    : null;

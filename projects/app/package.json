@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
+    "prestart": "./eas-build-pre-install.sh",
     "start": "REACT_NATIVE_DEVTOOLS=false expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",

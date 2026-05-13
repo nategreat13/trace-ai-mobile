@@ -1,4 +1,5 @@
-import { getDb } from "./firebase-admin";
+import { colRef } from "./firebase-admin";
+import type { TraceEnv } from "@trace/shared";
 import type { ExcludedSets } from "./exclusions";
 
 export interface UserRow {
@@ -28,17 +29,18 @@ export interface UserRow {
  * to server-side pagination + an Algolia/Typesense index for substring
  * email search.
  */
-export async function listUsers(opts: {
-  search?: string;
-  limit?: number;
-  excluded?: ExcludedSets;
-} = {}): Promise<{ rows: UserRow[]; total: number }> {
-  const db = getDb();
+export async function listUsers(
+  env: TraceEnv,
+  opts: {
+    search?: string;
+    limit?: number;
+    excluded?: ExcludedSets;
+  } = {}
+): Promise<{ rows: UserRow[]; total: number }> {
   const limit = opts.limit ?? 200;
   const search = opts.search?.trim().toLowerCase();
 
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef(env, "userProfiles")
     .select(
       "userId",
       "email",
@@ -134,11 +136,12 @@ export interface UserDetail extends UserRow {
  * still render the page from event data. Picks the most recently
  * created userProfile if there are duplicates.
  */
-export async function getUserDetail(userId: string): Promise<UserDetail | null> {
+export async function getUserDetail(
+  env: TraceEnv,
+  userId: string
+): Promise<UserDetail | null> {
   if (!userId) return null;
-  const db = getDb();
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef(env, "userProfiles")
     .where("userId", "==", userId)
     .get();
 
@@ -233,13 +236,12 @@ export interface UserEvent {
  * loads fast — increase the limit param if you need a deeper history.
  */
 export async function getUserEvents(
+  env: TraceEnv,
   userId: string,
   limit = 100
 ): Promise<UserEvent[]> {
   if (!userId) return [];
-  const db = getDb();
-  const snap = await db
-    .collection("events")
+  const snap = await colRef(env, "events")
     .where("userId", "==", userId)
     .orderBy("timestamp", "desc")
     .limit(limit)
@@ -261,15 +263,17 @@ export async function getUserEvents(
  * Counts of saved deals + active alerts for the user (cheap aggregates
  * for the detail page header stats).
  */
-export async function getUserCollectionCounts(userId: string): Promise<{
+export async function getUserCollectionCounts(
+  env: TraceEnv,
+  userId: string
+): Promise<{
   savedDeals: number;
   alerts: number;
 }> {
   if (!userId) return { savedDeals: 0, alerts: 0 };
-  const db = getDb();
   const [savedSnap, alertsSnap] = await Promise.all([
-    db.collection("flightDeals").where("userId", "==", userId).count().get(),
-    db.collection("dealAlerts").where("userId", "==", userId).count().get(),
+    colRef(env, "flightDeals").where("userId", "==", userId).count().get(),
+    colRef(env, "dealAlerts").where("userId", "==", userId).count().get(),
   ]);
   return {
     savedDeals: savedSnap.data().count,

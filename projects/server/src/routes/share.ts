@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 import { sendToUser } from "../lib/push";
 
 export const shareRoutes = Router();
@@ -14,8 +14,7 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const db = getDb();
-    const ref = await db.collection("sharedDeals").add({
+    const ref = await colRef("sharedDeals").add({
       dealSnapshot,
       sharerId,
       sharerName,
@@ -36,8 +35,7 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
 shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>, res: Response) => {
   const { shareId } = req.params;
   try {
-    const db = getDb();
-    const doc = await db.collection("sharedDeals").doc(shareId).get();
+    const doc = await colRef("sharedDeals").doc(shareId).get();
     if (!doc.exists) {
       res.status(404).json({ error: "Share not found" });
       return;
@@ -60,8 +58,7 @@ shareRoutes.post("/share-deal/:shareId/opened", async (req: Request<{ shareId: s
     return;
   }
   try {
-    const db = getDb();
-    const docRef = db.collection("sharedDeals").doc(shareId);
+    const docRef = colRef("sharedDeals").doc(shareId);
     const doc = await docRef.get();
     if (!doc.exists) {
       res.status(404).json({ error: "Share not found" });

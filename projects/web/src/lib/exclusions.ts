@@ -1,5 +1,5 @@
-import { getDb } from "./firebase-admin";
-import type { Firestore } from "firebase-admin/firestore";
+import { colRef } from "./firebase-admin";
+import type { TraceEnv } from "@trace/shared";
 
 /**
  * Analytics exclusions — internal / test / employee accounts that should
@@ -37,9 +37,8 @@ export interface ExcludedSets {
  * query results in memory. Called once per dashboard page load — pass the
  * result through to each query function so they can post-filter.
  */
-export async function getExcludedSets(): Promise<ExcludedSets> {
-  const db = getDb();
-  const snap = await db.collection("analyticsExclusions").get();
+export async function getExcludedSets(env: TraceEnv): Promise<ExcludedSets> {
+  const snap = await colRef(env, "analyticsExclusions").get();
   const userIds = new Set<string>();
   const emails = new Set<string>();
   snap.forEach((doc) => {
@@ -61,19 +60,16 @@ export async function getExcludedSets(): Promise<ExcludedSets> {
  * One exclusion doc = one excluded account (by definition of how the
  * admin's "Add by email" / "Add by user ID" actions create them).
  */
-export async function getExclusionCount(): Promise<number> {
-  const db = getDb();
-  const snap = await db.collection("analyticsExclusions").count().get();
+export async function getExclusionCount(env: TraceEnv): Promise<number> {
+  const snap = await colRef(env, "analyticsExclusions").count().get();
   return snap.data().count;
 }
 
 /**
  * Loads the full list of exclusion docs for the admin UI.
  */
-export async function listExclusions(): Promise<ExclusionDoc[]> {
-  const db = getDb();
-  const snap = await db
-    .collection("analyticsExclusions")
+export async function listExclusions(env: TraceEnv): Promise<ExclusionDoc[]> {
+  const snap = await colRef(env, "analyticsExclusions")
     .orderBy("addedAt", "desc")
     .get();
   return snap.docs.map((d) => {
@@ -95,11 +91,10 @@ export async function listExclusions(): Promise<ExclusionDoc[]> {
  * might also have been used by multiple Firebase Auth users over time.
  */
 export async function resolveUserIdsForEmail(
-  db: Firestore,
+  env: TraceEnv,
   email: string
 ): Promise<string[]> {
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef(env, "userProfiles")
     .where("email", "==", email.toLowerCase())
     .select("userId")
     .get();
@@ -121,15 +116,15 @@ export async function resolveUserIdsForEmail(
  * they sign up. Re-resolution can be done via the admin UI.
  */
 export async function addExclusionByEmail(
+  env: TraceEnv,
   email: string,
   note?: string
 ): Promise<void> {
-  const db = getDb();
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Email is required");
 
-  const userIds = await resolveUserIdsForEmail(db, normalized);
-  await db.collection("analyticsExclusions").add({
+  const userIds = await resolveUserIdsForEmail(env, normalized);
+  await colRef(env, "analyticsExclusions").add({
     email: normalized,
     userIds,
     note: note?.trim() || null,
@@ -142,18 +137,17 @@ export async function addExclusionByEmail(
  * or you only have the UID from a console log.
  */
 export async function addExclusionByUserId(
+  env: TraceEnv,
   userId: string,
   note?: string
 ): Promise<void> {
-  const db = getDb();
   const trimmed = userId.trim();
   if (!trimmed) throw new Error("User ID is required");
 
   // Try to fetch the email so the doc is more readable in the UI.
   let email: string | null = null;
   try {
-    const snap = await db
-      .collection("userProfiles")
+    const snap = await colRef(env, "userProfiles")
       .where("userId", "==", trimmed)
       .select("email")
       .limit(1)
@@ -165,7 +159,7 @@ export async function addExclusionByUserId(
     /* best-effort lookup */
   }
 
-  await db.collection("analyticsExclusions").add({
+  await colRef(env, "analyticsExclusions").add({
     email,
     userIds: [trimmed],
     note: note?.trim() || null,
@@ -173,9 +167,8 @@ export async function addExclusionByUserId(
   });
 }
 
-export async function removeExclusion(docId: string): Promise<void> {
-  const db = getDb();
-  await db.collection("analyticsExclusions").doc(docId).delete();
+export async function removeExclusion(env: TraceEnv, docId: string): Promise<void> {
+  await colRef(env, "analyticsExclusions").doc(docId).delete();
 }
 
 /**
@@ -190,9 +183,8 @@ export async function removeExclusion(docId: string): Promise<void> {
  * Scale note: returns N docs where N = total userProfiles. Cheap up to
  * ~100k users; past that, switch to a maintained counter set.
  */
-export async function getValidUserIds(): Promise<Set<string>> {
-  const db = getDb();
-  const snap = await db.collection("userProfiles").select("userId").get();
+export async function getValidUserIds(env: TraceEnv): Promise<Set<string>> {
+  const snap = await colRef(env, "userProfiles").select("userId").get();
   const ids = new Set<string>();
   snap.forEach((doc) => {
     const uid = doc.data().userId as string | undefined;
@@ -206,15 +198,14 @@ export async function getValidUserIds(): Promise<Set<string>> {
  * was excluded before they signed up, or if an account got new
  * userProfile docs after sign-in/sign-up flow changes.
  */
-export async function refreshAllUserIds(): Promise<{ updated: number }> {
-  const db = getDb();
-  const snap = await db.collection("analyticsExclusions").get();
+export async function refreshAllUserIds(env: TraceEnv): Promise<{ updated: number }> {
+  const snap = await colRef(env, "analyticsExclusions").get();
   let updated = 0;
   for (const doc of snap.docs) {
     const data = doc.data();
     const email = data.email as string | undefined;
     if (!email) continue; // userId-only exclusions don't have an email to resolve
-    const fresh = await resolveUserIdsForEmail(db, email);
+    const fresh = await resolveUserIdsForEmail(env, email);
     const prev = (data.userIds as string[] | undefined) ?? [];
     const same =
       fresh.length === prev.length && fresh.every((id) => prev.includes(id));

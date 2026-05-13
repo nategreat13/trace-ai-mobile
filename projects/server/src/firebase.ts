@@ -1,4 +1,6 @@
 import * as admin from "firebase-admin";
+import { col, envFromCollection, type CollectionName } from "@trace/shared";
+import { getEnv } from "./env";
 
 // Pinned to match `.firebaserc`. Passing it explicitly avoids the
 // "Unable to detect a Project Id in the current environment" error
@@ -24,4 +26,34 @@ export function getAuth() {
 
 export function getDb() {
   return getApp().firestore();
+}
+
+/**
+ * Env-aware top-level CollectionReference accessor. Use everywhere
+ * instead of `getDb().collection("userProfiles")`.
+ *
+ * Reads `getEnv()` from the per-request AsyncLocalStorage context
+ * (see `env.ts`). If you call this outside a `runWithEnv` scope it
+ * resolves to "prod" — the safe default.
+ *
+ * The runtime assertion below catches the worst-case bug: an
+ * accidental write to the prod collection from inside a staging
+ * request. If we ever resolve to a prod name while the env is
+ * staging (or vice versa), throw loudly — better a 500 than corrupted
+ * prod data.
+ */
+export function colRef(
+  name: CollectionName
+): FirebaseFirestore.CollectionReference {
+  const env = getEnv();
+  const resolved = col(env, name);
+  const inferredEnv = envFromCollection(resolved);
+  if (inferredEnv !== env) {
+    throw new Error(
+      `[firebase.colRef] env mismatch: requested env=${env}, ` +
+        `but resolved name "${resolved}" maps to env=${inferredEnv}. ` +
+        `This indicates a bug in @trace/shared/collections.`
+    );
+  }
+  return getDb().collection(resolved);
 }

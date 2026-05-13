@@ -1,6 +1,6 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 import { fanOutConversion } from "../lib/ad-conversions";
 import { listActiveEntitlements } from "../lib/revenuecat-rest";
 import { sendToUser } from "../lib/push";
@@ -27,7 +27,7 @@ async function logAnalyticsEvent(
     if (v !== undefined) cleanProps[k] = v;
   }
   try {
-    await getDb().collection("events").add({
+    await colRef("events").add({
       name,
       userId,
       props: cleanProps,
@@ -106,10 +106,7 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       return;
     }
 
-    const db = getDb();
-
-    const profileQuery = await db
-      .collection("userProfiles")
+    const profileQuery = await colRef("userProfiles")
       .where("userId", "==", app_user_id)
       .limit(1)
       .get();

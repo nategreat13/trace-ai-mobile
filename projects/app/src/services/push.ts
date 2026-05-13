@@ -3,8 +3,10 @@ import * as Device from "expo-application";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
+import { col } from "@trace/shared";
 import { db } from "./firebase";
 import { logEvent } from "../lib/analytics";
+import { getEnv } from "../lib/env";
 
 /**
  * Push notification client.
@@ -180,7 +182,8 @@ async function doRegisterPushToken(
     // different addedAt timestamps. Combined with the in-flight cache
     // above, this also self-heals any pre-existing duplicates on the
     // profile (next launch reads the array, dedupes, writes back).
-    const ref = doc(db, "userProfiles", userProfileDocId);
+    // Env-aware: staging push tokens land on the staging userProfile doc.
+    const ref = doc(db, col(getEnv(), "userProfiles"), userProfileDocId);
     console.log("[push] reading existing userProfile");
     const existing = await getDoc(ref);
     const currentTokens = (existing.data()?.pushTokens ?? []) as Array<{
@@ -268,7 +271,8 @@ export async function unregisterPushToken(
   token: string
 ): Promise<void> {
   try {
-    const ref = doc(db, "userProfiles", userProfileDocId);
+    // Env-aware: staging push tokens land on the staging userProfile doc.
+    const ref = doc(db, col(getEnv(), "userProfiles"), userProfileDocId);
     const existing = await getDoc(ref);
     const tokens = (existing.data()?.pushTokens ?? []) as Array<{
       token: string;

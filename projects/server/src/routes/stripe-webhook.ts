@@ -1,7 +1,7 @@
 import { Router } from "express";
 import express from "express";
 import Stripe from "stripe";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 
 let _stripe: Stripe;
 function getStripe() {
@@ -69,8 +69,7 @@ stripeWebhookRoutes.post(
 );
 
 async function getProfileByCustomerEmail(email: string) {
-  const snapshot = await getDb()
-    .collection("userProfiles")
+  const snapshot = await colRef("userProfiles")
     .where("email", "==", email)
     .limit(1)
     .get();
