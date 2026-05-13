@@ -304,7 +304,15 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
         }).slice(0, 8)
       : [];
 
-  const showDropdown = focused && query.trim().length > 0 && results.length > 0;
+  // Note: dropdown visibility is deliberately decoupled from `focused`.
+  // Earlier this read `focused && query.trim().length > 0 && results.length > 0`,
+  // which broke a real workflow on small phones: keyboard covers the list,
+  // user taps "Done" to dismiss it, onBlur fires → focused becomes false →
+  // dropdown disappears even though there's a perfectly good query and
+  // matching results. Now the dropdown stays visible whenever there's
+  // a query with matches, so the user can pick from it after dismissing
+  // the keyboard.
+  const showDropdown = query.trim().length > 0 && results.length > 0;
 
   const handleSelect = (airport: Airport) => {
     onChange(airport.code);
