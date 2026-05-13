@@ -8,6 +8,8 @@ This is a published mobile app on the iOS App Store and Google Play with **real 
 
 For every action below, propose what you'll do and wait for an explicit go-ahead ("ship it" / "go" / "yes deploy"). Don't infer approval from earlier conversation context.
 
+**Approval is per-action, not per-topic.** "Commit and push" is approval to `git add` + `git commit` + `git push` — NOT to OTA or deploy. "Fix the bug" is approval to write code — NOT to ship that code. Even when a fix is obviously useless until shipped, the deploy is a separate decision that needs its own explicit yes. Ask each time. Never chain code changes and a deploy in the same approval.
+
 | Action | Asks approval? | Examples |
 |--------|----------------|----------|
 | OTA push | **Yes** | `eas update --branch production` |
