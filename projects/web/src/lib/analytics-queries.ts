@@ -144,8 +144,48 @@ export async function getFunnelCounts(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // Fetch matching events + userId (rather than count()) so we can filter
-  // excluded + orphan users in memory.
+  // Build the set of "tainted" session ids — sessions that include at
+  // least one event from an excluded user. Used to attribute pre-signup
+  // (guest) events to the user they eventually became.
+  //
+  // Without this, landing_viewed events from internal testers count
+  // toward the funnel even after we've added them to the exclusion
+  // list, because pre-signup events have userId="guest" and the
+  // standard shouldIncludeUid check unconditionally passes "guest"
+  // through. The session_id prop lets us link a guest event to the
+  // user it eventually belonged to: if any signed-in event in the
+  // same session is from an excluded user, the guest events in that
+  // session were them too.
+  const taintedSessions = new Set<string>();
+  if (excluded && excluded.userIds.size > 0) {
+    // Firestore `in` is capped at 30 values per query; chunk if needed.
+    // Today we have 7 exclusions so this is a single round-trip.
+    const userIdsArr = Array.from(excluded.userIds);
+    for (let i = 0; i < userIdsArr.length; i += 30) {
+      const chunk = userIdsArr.slice(i, i + 30);
+      const snap = await db
+        .collection("events")
+        .where("timestamp", ">=", since)
+        .where("userId", "in", chunk)
+        .orderBy("timestamp", "desc")
+        .select("props.session_id")
+        .get();
+      snap.forEach((doc) => {
+        const sid = doc.get("props.session_id") as string | undefined;
+        if (sid) taintedSessions.add(sid);
+      });
+    }
+  }
+
+  // Fetch matching events + userId + session_id (rather than count())
+  // so we can apply two filters in memory:
+  //   1. Standard userId-based exclusion (shouldIncludeUid).
+  //   2. Tainted-session filter for guest events (above).
+  // For landing_viewed specifically, ALSO dedupe by session_id so a
+  // tester opening the app 5 times in different sessions counts as 5
+  // (1 per session, the closest we can get to "1 per device" without
+  // a real device_id). Other funnel events fire at most once per user
+  // anyway, so no dedup needed there.
   //
   // orderBy timestamp DESC is required to use the deployed composite
   // index `events: (name ASC, timestamp DESC)`. Without an explicit
@@ -159,11 +199,28 @@ export async function getFunnelCounts(
       .where("timestamp", ">=", since)
       .where("name", "==", name)
       .orderBy("timestamp", "desc")
-      .select("userId")
+      .select("userId", "props.session_id")
       .get();
     let n = 0;
+    const dedupeBySession = name === "landing_viewed";
+    const seenSessions = dedupeBySession ? new Set<string>() : null;
     snap.forEach((doc) => {
-      if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
+      const userId = doc.get("userId") as string | undefined;
+      const sessionId = doc.get("props.session_id") as string | undefined;
+
+      // 1. Standard exclusion.
+      if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
+      // 2. Guest event that belongs to an excluded user's session.
+      if (userId === "guest" && sessionId && taintedSessions.has(sessionId)) return;
+      // 3. Per-session dedup (landing_viewed only). Events without a
+      //    session_id (legacy data) get counted as-is rather than
+      //    being silently dropped.
+      if (seenSessions && sessionId) {
+        if (seenSessions.has(sessionId)) return;
+        seenSessions.add(sessionId);
+      }
+
+      n++;
     });
     return n;
   }
