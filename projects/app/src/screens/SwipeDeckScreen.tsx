@@ -812,8 +812,8 @@ export default function SwipeDeckScreen() {
           </View>
 
           {/* Swipes left indicator */}
-          {!isPremium && swipesLeft > 0 && swipesLeft <= 3 && (
-            <Animated.View entering={FadeIn.duration(300)}>
+          {!isPremium && swipesLeft > 0 && swipesLeft <= 8 && (
+            <Animated.View entering={FadeIn.duration(300)} style={{ alignItems: "center", gap: 6, marginBottom: 8 }}>
               <TouchableOpacity
                 onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_low_swipes_warning" })}
                 style={{
@@ -827,7 +827,6 @@ export default function SwipeDeckScreen() {
                   borderRadius: 999,
                   borderWidth: 1,
                   borderColor: colors.brand.amber200,
-                  marginBottom: 8,
                 }}
               >
                 <Text style={{ fontSize: 14 }}>⚡</Text>
@@ -835,6 +834,14 @@ export default function SwipeDeckScreen() {
                   {swipesLeft} swipe{swipesLeft !== 1 ? "s" : ""} left today
                 </Text>
               </TouchableOpacity>
+              {swipesLeft <= 5 && (
+                <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_upgrade_nudge" })}>
+                  <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                    Upgrade for{" "}
+                    <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>unlimited swipes</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           )}
 
