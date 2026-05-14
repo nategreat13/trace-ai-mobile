@@ -21,6 +21,7 @@ import { useAuth } from "../context/AuthContext";
 import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
+import { trendingScore } from "../lib/dealScorer";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
@@ -205,11 +206,8 @@ export default function ExploreScreen() {
     } else if (filters.sort === "discount") {
       deduped.sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0));
     } else {
-      deduped.sort((a, b) => {
-        if ((b.discount_pct || 0) !== (a.discount_pct || 0))
-          return (b.discount_pct || 0) - (a.discount_pct || 0);
-        return (a.price || 0) - (b.price || 0);
-      });
+      // Default: trending score — blends discount, urgency, departure timing, and price trend
+      deduped.sort((a, b) => trendingScore(b) - trendingScore(a));
     }
 
     return { filteredDeals: deduped, dealVariants: variantsMap };
@@ -310,7 +308,7 @@ export default function ExploreScreen() {
     });
   };
 
-  const FREE_NORMAL = 3;
+  const FREE_NORMAL = 5;
   const FREE_BLURRED = 5;
 
   type ListItem = Deal | { type: "paywall" };
@@ -335,7 +333,7 @@ export default function ExploreScreen() {
       return [{ type: "paywall" as const }, ...filteredDeals.slice(0, FREE_BLURRED)];
     }
 
-    // Curate free sample: 2 cheapest domestic + 1 cheapest international
+    // Curate free sample: 3 cheapest domestic + 2 cheapest international
     const domestic = filteredDeals
       .filter((d) => d.domestic_or_international?.toLowerCase().includes("domestic"))
       .sort((a, b) => (a.price || 0) - (b.price || 0));
@@ -344,11 +342,11 @@ export default function ExploreScreen() {
       .sort((a, b) => (a.price || 0) - (b.price || 0));
 
     const picks: Deal[] = [
-      ...domestic.slice(0, 2),
-      ...international.slice(0, 1),
+      ...domestic.slice(0, 3),
+      ...international.slice(0, 2),
     ];
 
-    // Fall back to cheapest deals if we couldn't fill all 3 slots
+    // Fall back to cheapest deals if we couldn't fill all 5 slots
     if (picks.length < FREE_NORMAL) {
       const pickIds = new Set(picks.map((d) => d.id));
       const fallback = filteredDeals.filter((d) => !pickIds.has(d.id));
