@@ -65,8 +65,8 @@ export default function DashboardScreen() {
       const shareId = await createShare(deal, user!.uid, name);
       await Share.share({
         title: `${deal.destination} deal on Trace`,
-        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Check it out on Trace 👉 tracetravel://share/${shareId}`,
-        url: `tracetravel://share/${shareId}`,
+        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Download Trace to see it 👉 https://apps.apple.com/us/app/trace-travel/id6760838076`,
+        url: `https://apps.apple.com/us/app/trace-travel/id6760838076`,
       });
     } catch {}
   }

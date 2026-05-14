@@ -39,8 +39,8 @@ export default function OnboardingScreen() {
   const [data, setData] = useState({
     homeAirport: "",
     destinationPreference: "both" as "domestic" | "international" | "both",
-    dealTypes: [] as string[],
-    travelTimeframe: [] as string[],
+    dealTypes: ["surprise"] as string[],
+    travelTimeframe: ["no_preference"] as string[],
   });
 
   useEffect(() => {

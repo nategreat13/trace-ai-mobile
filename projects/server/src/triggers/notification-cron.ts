@@ -15,6 +15,67 @@ type NotificationPrefs = {
 const DEALS_API_BASE = "https://us-central1-embarckstravel.cloudfunctions.net/api";
 const DEALS_API_KEY = process.env.DEALS_API_KEY || "web-api-key";
 
+type RawDeal = {
+  discount_pct?: number;
+  destination?: string;
+  price?: number;
+  domestic_or_international?: string;
+  deal_type?: string | null;
+};
+
+/**
+ * Returns the deal type tags for a deal based on destination keywords and price.
+ * Mirrors the logic in projects/app/src/lib/dealClassifier.ts — kept in sync manually.
+ */
+function classifyDeal(deal: RawDeal): string[] {
+  const types = new Set<string>();
+  const dest = (deal.destination || "").toLowerCase();
+  const price = deal.price || 0;
+  const discount = deal.discount_pct || 0;
+  const apiType = (deal.deal_type || "").toLowerCase();
+
+  if (apiType) types.add(apiType);
+  if (price > 0 && price <= 350) types.add("budget");
+  if (discount >= 35) types.add("budget");
+  if (price >= 800 || /maldives|bora bora|dubai|mykonos|santorini|seychelles|tahiti|aspen|monaco/.test(dest)) types.add("luxury");
+  if (/patagonia|peru|machu picchu|galapagos|costa rica|kenya|safari|nepal|iceland|faroe|fjord|dolomites|queenstown|milford/.test(dest)) types.add("adventure");
+  if (/rome|paris|athens|istanbul|cairo|florence|venice|kyoto|delhi|agra|marrakech|mexico city|havana|istanbul/.test(dest)) types.add("cultural");
+  if (/cancun|cabo|bali|phuket|hawaii|honolulu|maui|bahamas|aruba|punta cana|maldives|seychelles|riviera|barbados|jamaica/.test(dest)) types.add("relaxation");
+  if (/orlando|disney|universal|san diego|new york|chicago|london|paris|tokyo|sydney|cancun|bahamas|hawaii/.test(dest)) types.add("family");
+
+  return Array.from(types);
+}
+
+/**
+ * Returns the best deal for a user given their preferences.
+ * - Respects destinationPreference (domestic / international / both)
+ * - Respects dealTypes (filters by classified type; "surprise" matches everything)
+ * - Among matching deals, picks the highest discount_pct
+ */
+function pickDealForUser(
+  deals: RawDeal[],
+  dealTypes: string[],
+  destinationPreference: string,
+): RawDeal | null {
+  const wantsSurprise = dealTypes.length === 0 || dealTypes.includes("surprise");
+
+  const filtered = deals.filter((d) => {
+    // Domestic / international filter
+    if (destinationPreference !== "both") {
+      const isdom = (d.domestic_or_international ?? "").toLowerCase() === "domestic";
+      if (destinationPreference === "domestic" && !isdom) return false;
+      if (destinationPreference === "international" && isdom) return false;
+    }
+    // Deal type filter
+    if (wantsSurprise) return true;
+    const tags = classifyDeal(d);
+    return dealTypes.some((t) => tags.includes(t));
+  });
+
+  if (filtered.length === 0) return null;
+  return filtered.reduce((a, b) => (a.discount_pct ?? 0) >= (b.discount_pct ?? 0) ? a : b);
+}
+
 /**
  * Scheduled cron functions that fan out notifications based on user
  * state. Each runs once a day; the queries are scoped tightly so a run
@@ -251,22 +312,34 @@ async function runDailyNotifications() {
       if (hotDealTemplate?.enabled) {
         const snap = await colRef("userProfiles")
           .where("notificationsEnabled", "==", true)
-          .select("userId", "homeAirport", "subscriptionStatus", "notificationPreferences")
+          .select("userId", "homeAirport", "subscriptionStatus", "notificationPreferences", "dealTypes", "destinationPreference")
           .get();
 
         // Group eligible users by home airport to minimise external API calls.
-        const byAirport = new Map<string, Array<{ userId: string; prefs?: NotificationPrefs }>>();
+        const byAirport = new Map<string, Array<{
+          userId: string;
+          prefs?: NotificationPrefs;
+          dealTypes: string[];
+          destinationPreference: string;
+        }>>();
         for (const doc of snap.docs) {
           const data = doc.data() as {
             userId?: string;
             homeAirport?: string;
             subscriptionStatus?: string;
             notificationPreferences?: NotificationPrefs;
+            dealTypes?: string[];
+            destinationPreference?: string;
           };
           if (!data.userId || !data.homeAirport) continue;
           if (data.subscriptionStatus !== "premium" && data.subscriptionStatus !== "business") continue;
           if (!byAirport.has(data.homeAirport)) byAirport.set(data.homeAirport, []);
-          byAirport.get(data.homeAirport)!.push({ userId: data.userId, prefs: data.notificationPreferences });
+          byAirport.get(data.homeAirport)!.push({
+            userId: data.userId,
+            prefs: data.notificationPreferences,
+            dealTypes: data.dealTypes ?? [],
+            destinationPreference: data.destinationPreference ?? "both",
+          });
         }
 
         let sent = 0;
@@ -278,17 +351,35 @@ async function runDailyNotifications() {
             );
             if (!response.ok) continue;
             const raw = await response.json() as unknown;
-            const deals: Array<{ discount_pct?: number; destination?: string; price?: number }> =
-              Array.isArray(raw) ? raw : ((raw as Record<string, unknown>).deals as typeof deals ?? []);
+            const allDeals: RawDeal[] =
+              Array.isArray(raw) ? raw : ((raw as Record<string, unknown>).deals as RawDeal[] ?? []);
 
-            const hotDeals = deals.filter((d) => (d.discount_pct ?? 0) >= 60);
+            const hotDeals = allDeals.filter((d) => (d.discount_pct ?? 0) >= 60);
             if (hotDeals.length === 0) continue;
 
-            const best = hotDeals.reduce((a, b) =>
-              (a.discount_pct ?? 0) >= (b.discount_pct ?? 0) ? a : b
-            );
-
             for (const user of users) {
+              // Pick the best deal matching this user's preferences.
+              const best = pickDealForUser(hotDeals, user.dealTypes, user.destinationPreference);
+              if (!best) continue;
+
+              // Dedup per user — skip if this destination was sent within the last 7 days.
+              const destination = (best.destination ?? "").toLowerCase().trim();
+              const cacheRef = colRef("hotDealCache").doc(user.userId);
+              const cacheDoc = await cacheRef.get();
+              const sentLog: Record<string, number> = cacheDoc.exists
+                ? (cacheDoc.data()?.sentLog ?? {})
+                : {};
+              const lastSent = sentLog[destination] ?? 0;
+              const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+              if (Date.now() - lastSent < sevenDaysMs) continue;
+              sentLog[destination] = Date.now();
+              // Prune entries older than 30 days to keep the doc small.
+              const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+              for (const dest of Object.keys(sentLog)) {
+                if (Date.now() - sentLog[dest] > thirtyDaysMs) delete sentLog[dest];
+              }
+              await cacheRef.set({ sentLog });
+
               await sendForTemplate(user.userId, "hot_deal_alert", {
                 discount: Math.round(best.discount_pct ?? 60),
                 destination: best.destination ?? airport,

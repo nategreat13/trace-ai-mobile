@@ -37,6 +37,7 @@ import {
   Pencil,
   Camera,
   ChevronRight,
+  MessageCircle,
 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -49,7 +50,7 @@ import {
   registerPushToken,
 } from "../services/push";
 import { storage } from "../services/firebase";
-import { DEAL_TYPE_LABELS, DEST_LABELS } from "../lib/constants";
+import { DEAL_TYPE_LABELS, DEST_LABELS, API_BASE_URL } from "../lib/constants";
 import { restorePurchases, hasEntitlement } from "../services/iap";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
@@ -72,6 +73,11 @@ export default function ProfileScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [showPromoModal, setShowPromoModal] = useState(false);
   const [showNotifPrefs, setShowNotifPrefs] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
+  const [supportName, setSupportName] = useState("");
+  const [supportSubject, setSupportSubject] = useState("");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [supportSent, setSupportSent] = useState(false);
 
   const handleSaveName = async () => {
     const first = tempFirstName.trim();
@@ -168,10 +174,29 @@ export default function ProfileScreen() {
       await Share.share({
         title: "Trace Travel",
         message:
-          "🚨 I found a $299 round trip to Europe. No, seriously.\n\nTrace is an AI app that hunts down insane flight deals and serves them up like a dating app — you just swipe. It's kind of unfair how good the deals are.\n\nDownload it and thank me later ✈️💸\nhttps://tracetravel.co",
+          "Found this app called Trace — it finds insane flight deals. Worth downloading ✈️\nhttps://apps.apple.com/us/app/trace-travel/id6760838076",
         url: img.uri,
       });
     } catch {}
+  };
+
+  const handleSendSupport = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/support`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: supportName.trim(),
+          email: user?.email ?? "",
+          subject: supportSubject.trim() || "Support Request",
+          message: supportMessage.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      setSupportSent(true);
+    } catch {
+      Alert.alert("Error", "Couldn't send your message. Please try again.");
+    }
   };
 
   const handleResetPreferences = () => {
@@ -775,6 +800,37 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Contact Support */}
+          <TouchableOpacity
+            onPress={() => setShowSupportModal(true)}
+            activeOpacity={0.85}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              backgroundColor: theme.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: theme.border,
+              paddingHorizontal: 18,
+              paddingVertical: 14,
+              gap: 12,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flex: 1 }}>
+              <MessageCircle color={theme.mutedForeground} size={20} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
+                  Contact Support
+                </Text>
+                <Text style={{ fontSize: 12, color: theme.mutedForeground, marginTop: 1 }}>
+                  Get help from the Trace team
+                </Text>
+              </View>
+            </View>
+            <ChevronRight color={theme.mutedForeground} size={18} />
+          </TouchableOpacity>
+
           {/* Restore Purchases */}
           <TouchableOpacity
             onPress={async () => {
@@ -991,6 +1047,224 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Contact Support modal */}
+      <Modal visible={showSupportModal} transparent animationType="fade">
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            setShowSupportModal(false);
+            setSupportSent(false);
+            setSupportName("");
+            setSupportSubject("");
+            setSupportMessage("");
+          }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            paddingHorizontal: 16,
+          }}
+        >
+          <TouchableOpacity activeOpacity={1}>
+            <View
+              style={{
+                backgroundColor: theme.card,
+                borderRadius: 20,
+                overflow: "hidden",
+                borderWidth: 1,
+                borderColor: theme.border,
+              }}
+            >
+              {/* Colored header */}
+              <LinearGradient
+                colors={[colors.brand.rose500, colors.brand.orange500]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ padding: 24, paddingBottom: 20 }}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <MessageCircle color="#fff" size={22} />
+                  <Text style={{ fontSize: 20, fontWeight: "800", color: "#fff" }}>
+                    Contact Support
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
+                  The Trace team usually responds within 24 hours
+                </Text>
+              </LinearGradient>
+
+              {supportSent ? (
+                /* Confirmation state */
+                <View style={{ padding: 24, alignItems: "center", gap: 12 }}>
+                  <Text style={{ fontSize: 40 }}>✅</Text>
+                  <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, textAlign: "center" }}>
+                    Message received!
+                  </Text>
+                  <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", lineHeight: 20 }}>
+                    We got your message and will follow up at{" "}
+                    <Text style={{ fontWeight: "600", color: theme.foreground }}>{user?.email}</Text>.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowSupportModal(false);
+                      setSupportSent(false);
+                      setSupportSubject("");
+                      setSupportMessage("");
+                    }}
+                    style={{
+                      marginTop: 8,
+                      backgroundColor: colors.brand.traceRed,
+                      borderRadius: 12,
+                      paddingVertical: 13,
+                      paddingHorizontal: 32,
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                /* Form state */
+                <View style={{ padding: 24, gap: 12 }}>
+                  {/* Email — pre-filled, read-only */}
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground, marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Email
+                    </Text>
+                    <TextInput
+                      value={user?.email || ""}
+                      editable={false}
+                      style={{
+                        padding: 12,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        borderRadius: 10,
+                        fontSize: 14,
+                        color: theme.mutedForeground,
+                        backgroundColor: theme.muted,
+                      }}
+                    />
+                  </View>
+                  {/* Name — editable */}
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.rose500, marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Name
+                    </Text>
+                    <TextInput
+                      value={supportName}
+                      onChangeText={setSupportName}
+                      placeholder="Your name"
+                      placeholderTextColor={theme.mutedForeground}
+                      style={{
+                        padding: 12,
+                        borderWidth: 1.5,
+                        borderColor: colors.brand.rose500 + "55",
+                        borderRadius: 10,
+                        fontSize: 14,
+                        color: theme.foreground,
+                        backgroundColor: scheme === "dark" ? "rgba(239,68,68,0.06)" : "rgba(239,68,68,0.04)",
+                      }}
+                    />
+                  </View>
+                  {/* Subject — editable */}
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.rose500, marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Subject
+                    </Text>
+                    <TextInput
+                      value={supportSubject}
+                      onChangeText={setSupportSubject}
+                      placeholder="e.g. Issue with my subscription"
+                      placeholderTextColor={theme.mutedForeground}
+                      style={{
+                        padding: 12,
+                        borderWidth: 1.5,
+                        borderColor: colors.brand.rose500 + "55",
+                        borderRadius: 10,
+                        fontSize: 14,
+                        color: theme.foreground,
+                        backgroundColor: scheme === "dark" ? "rgba(239,68,68,0.06)" : "rgba(239,68,68,0.04)",
+                      }}
+                    />
+                  </View>
+                  {/* Message — editable */}
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.rose500, marginBottom: 5, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      Message
+                    </Text>
+                    <TextInput
+                      value={supportMessage}
+                      onChangeText={setSupportMessage}
+                      placeholder="Describe your issue or question…"
+                      placeholderTextColor={theme.mutedForeground}
+                      multiline
+                      textAlignVertical="top"
+                      style={{
+                        padding: 12,
+                        borderWidth: 1.5,
+                        borderColor: colors.brand.rose500 + "55",
+                        borderRadius: 10,
+                        fontSize: 14,
+                        color: theme.foreground,
+                        minHeight: 110,
+                        backgroundColor: scheme === "dark" ? "rgba(239,68,68,0.06)" : "rgba(239,68,68,0.04)",
+                      }}
+                    />
+                  </View>
+                  {/* Buttons */}
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setShowSupportModal(false);
+                        setSupportSubject("");
+                        setSupportMessage("");
+                      }}
+                      style={{
+                        flex: 1,
+                        paddingVertical: 13,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: theme.border,
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground }}>
+                        Cancel
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={handleSendSupport}
+                      disabled={!supportMessage.trim()}
+                      style={{ flex: 1 }}
+                    >
+                      <LinearGradient
+                        colors={supportMessage.trim()
+                          ? [colors.brand.rose500, colors.brand.orange500]
+                          : [theme.muted, theme.muted]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={{
+                          paddingVertical: 13,
+                          borderRadius: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text style={{
+                          fontSize: 14,
+                          fontWeight: "700",
+                          color: supportMessage.trim() ? "#fff" : theme.mutedForeground,
+                        }}>
+                          Send Message
+                        </Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 

@@ -49,6 +49,7 @@ export const COLLECTION_NAMES = [
   "destinationContent",
   "sharedDeals",
   "adSpend",
+  "hotDealCache",
 ] as const;
 
 export type CollectionName = (typeof COLLECTION_NAMES)[number];
