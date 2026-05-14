@@ -14,7 +14,6 @@ import {
   Clock,
   Trash2,
   ChevronDown,
-  MapPin,
 } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import type { SavedDeal } from "@trace/shared";
@@ -74,39 +73,46 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
             activeOpacity={0.7}
             onPress={() => deal.url && onBook(deal.url)}
           >
-            <Image
-              source={{ uri: deal.imageUrl }}
-              style={styles.dealImage}
-              contentFit="cover"
-              transition={200}
-            />
+            <View style={styles.imageWrap}>
+              <Image
+                source={{ uri: deal.imageUrl }}
+                style={styles.dealImage}
+                contentFit="cover"
+                transition={200}
+              />
+              <View style={styles.priceTag}>
+                <Text style={styles.priceTagText}>${deal.price}</Text>
+              </View>
+            </View>
+
             <View style={styles.cardBody}>
-              <View style={styles.cardHeader}>
-                <View style={styles.destinationRow}>
-                  <Text
-                    style={[styles.destination, { color: theme.foreground }]}
-                    numberOfLines={1}
-                  >
-                    {deal.destination}
-                  </Text>
-                  {deal.isBusinessClass && (
-                    <View style={styles.bizBadge}>
-                      <Text style={styles.bizBadgeText}>Biz</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[styles.price, { color: theme.foreground }]}>
-                  ${deal.price}
+              {/* Destination — the hero */}
+              <View style={styles.destinationRow}>
+                <Text
+                  style={[styles.destination, { color: theme.foreground }]}
+                  numberOfLines={1}
+                >
+                  {deal.destination}
                 </Text>
+                {deal.isBusinessClass && (
+                  <View style={styles.bizBadge}>
+                    <Text style={styles.bizBadgeText}>Biz</Text>
+                  </View>
+                )}
               </View>
 
-              <View style={styles.originRow}>
-                <MapPin size={10} color={theme.mutedForeground} />
-                <Text style={[styles.originText, { color: theme.mutedForeground }]}>
+              {/* Flight route: origin → destination */}
+              <View style={styles.routeRow}>
+                <Text style={[styles.routeText, { color: theme.mutedForeground }]}>
                   {deal.origin || "Your airport"}
                 </Text>
+                <Plane size={10} color={colors.brand.traceRed} style={styles.routePlane} />
+                <Text style={[styles.routeText, { color: theme.mutedForeground }]} numberOfLines={1}>
+                  {deal.destination}
+                </Text>
               </View>
 
+              {/* Chips row */}
               <View style={styles.metaRow}>
                 {deal.duration ? (
                   <View style={[styles.metaChip, { backgroundColor: "rgba(59,130,246,0.1)" }]}>
@@ -229,18 +235,31 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
   },
+  imageWrap: {
+    width: 88,
+    position: "relative",
+  },
   dealImage: {
-    width: 80,
-    height: 88,
+    width: 88,
+    height: 96,
+  },
+  priceTag: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  priceTagText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#fff",
   },
   cardBody: {
     flex: 1,
     padding: 10,
-    justifyContent: "space-between",
-  },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
   },
   destinationRow: {
@@ -250,9 +269,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   destination: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     flexShrink: 1,
+    letterSpacing: -0.3,
   },
   bizBadge: {
     backgroundColor: "rgba(245,158,11,0.15)",
@@ -265,25 +285,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#d97706",
   },
-  price: {
-    fontSize: 16,
-    fontWeight: "800",
-    marginLeft: 8,
-  },
-  originRow: {
+  routeRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    marginTop: 2,
+    gap: 4,
+    marginTop: 3,
   },
-  originText: {
-    fontSize: 10,
+  routePlane: {
+    marginHorizontal: 1,
+  },
+  routeText: {
+    fontSize: 11,
+    fontWeight: "500",
+    flexShrink: 1,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 4,
+    marginTop: 6,
   },
   metaChip: {
     flexDirection: "row",

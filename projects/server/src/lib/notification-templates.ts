@@ -283,3 +283,26 @@ export async function seedTemplatesIfMissing(): Promise<{ created: string[] }> {
 }
 
 export const KNOWN_TEMPLATE_KEYS = KNOWN_KEYS;
+
+export type NotificationCategory = "deals" | "account" | "reengagement" | "offers";
+
+export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
+  welcome: "account",
+  trial_ending_3d: "account",
+  trial_ending_24h: "account",
+  billing_issue: "account",
+  subscription_renewal_24h: "account",
+  welcome_to_premium: "account",
+  inactivity_3d: "reengagement",
+  inactivity_7d: "reengagement",
+  inactivity_14d: "reengagement",
+  hot_deal_alert: "deals",
+  deal_alert_match: "deals",
+  premium_nudge: "offers",
+  premium_nudge_10d: "offers",
+  premium_nudge_20d: "offers",
+  discount_on_premium: "offers",
+  business_class_nudge_5d: "offers",
+  business_class_nudge: "offers",
+  discount_on_business: "offers",
+};

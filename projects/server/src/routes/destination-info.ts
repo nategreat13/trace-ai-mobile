@@ -4,7 +4,11 @@ import { colRef } from "../firebase";
 
 export const destinationInfoRoutes = Router();
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+let client: Anthropic | null = null;
+function getClient() {
+  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return client;
+}
 
 const MONTH_NAMES: Record<string, string> = {
   jan: "January", feb: "February", mar: "March", apr: "April",
@@ -64,7 +68,7 @@ async function generateDestinationInfo(
     ? buildDomesticPrompt(destination, code, month)
     : buildInternationalPrompt(destination, code, month);
 
-  const message = await client.messages.create({
+  const message = await getClient().messages.create({
     model: "claude-sonnet-4-6",
     // Bumped from 3000. The guide has 3-4 neighborhoods + 5-6 things
     // to do + 9 dining entries + 3 budget tiers + 2-3 transport + 2-4

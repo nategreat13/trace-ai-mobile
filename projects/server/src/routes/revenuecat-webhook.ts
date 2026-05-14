@@ -4,7 +4,7 @@ import { colRef } from "../firebase";
 import { fanOutConversion } from "../lib/ad-conversions";
 import { listActiveEntitlements } from "../lib/revenuecat-rest";
 import { sendToUser } from "../lib/push";
-import { getTemplate, renderString } from "../lib/notification-templates";
+import { getTemplate, renderString, TEMPLATE_CATEGORY } from "../lib/notification-templates";
 
 export const revenuecatWebhookRoutes = Router();
 
@@ -196,8 +196,10 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         // not at the next daily cron window.
         if (type === "INITIAL_PURCHASE" && period_type !== "TRIAL") {
           try {
+            const profilePrefs = (profileDoc.data() as any)?.notificationPreferences as Record<string, boolean> | undefined;
             const template = await getTemplate("welcome_to_premium");
-            if (template?.enabled) {
+            const category = TEMPLATE_CATEGORY["welcome_to_premium"];
+            if (template?.enabled && profilePrefs?.[category] !== false) {
               const title = renderString(template.title, {});
               const body = renderString(template.body, {});
               const data = template.deepLink
@@ -396,8 +398,11 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         // payment before access lapses. Gated on the template being
         // enabled in the admin so Trevor can switch this off if desired.
         try {
+          const billingProfileSnap = await colRef("userProfiles").where("userId", "==", app_user_id).limit(1).get();
+          const billingPrefs = billingProfileSnap.empty ? undefined : (billingProfileSnap.docs[0].data()?.notificationPreferences as Record<string, boolean> | undefined);
           const template = await getTemplate("billing_issue");
-          if (template?.enabled) {
+          const billingCategory = TEMPLATE_CATEGORY["billing_issue"];
+          if (template?.enabled && billingPrefs?.[billingCategory] !== false) {
             const title = renderString(template.title, {});
             const body = renderString(template.body, {});
             const data = template.deepLink

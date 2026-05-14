@@ -15,6 +15,7 @@ function getApp() {
   if (!admin.apps.length) {
     admin.initializeApp({
       projectId: FIREBASE_PROJECT_ID,
+      credential: admin.credential.applicationDefault(),
     });
   }
   return admin.app();

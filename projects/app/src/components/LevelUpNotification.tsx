@@ -16,17 +16,19 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { Sparkles } from "lucide-react-native";
 import { colors } from "../theme/colors";
+import { getLevelInfo, SWIPES_PER_LEVEL } from "../lib/constants";
 
 interface LevelUpNotificationProps {
   level: number;
+  swipeCount: number;
   visible: boolean;
   onDismiss: () => void;
 }
 
 export default function LevelUpNotification({
   level,
+  swipeCount,
   visible,
   onDismiss,
 }: LevelUpNotificationProps) {
@@ -40,25 +42,22 @@ export default function LevelUpNotification({
         -1,
         false
       );
-
-      timerRef.current = setTimeout(() => {
-        onDismiss();
-      }, 3000);
+      timerRef.current = setTimeout(onDismiss, 4500);
     } else {
       rotation.value = 0;
     }
-
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [visible, onDismiss, rotation]);
 
-  const crownStyle = useAnimatedStyle(() => ({
+  const emojiStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
   }));
+
+  const { current, next, isMax, swipesToNext } = getLevelInfo(level, swipeCount);
+  // Right after leveling up, swipeCount % 25 === 0 so progress = 0 (fresh start)
+  const progress = (swipeCount % SWIPES_PER_LEVEL) / SWIPES_PER_LEVEL;
 
   return (
     <Modal
@@ -74,58 +73,66 @@ export default function LevelUpNotification({
             entering={ZoomIn.springify().damping(14).stiffness(120)}
             style={styles.card}
           >
-            {/* Spinning crown emoji */}
-            <Animated.View
-              entering={FadeIn.duration(300)}
-              style={[styles.crownContainer, crownStyle]}
-            >
-              <Text style={styles.crownEmoji}>{"\u{1F451}"}</Text>
+            {/* Spinning emoji */}
+            <Animated.View entering={FadeIn.duration(300)} style={emojiStyle}>
+              <Text style={styles.emoji}>{current.emoji}</Text>
             </Animated.View>
 
-            {/* Level Up heading */}
+            {/* Level label */}
             <Animated.Text
-              entering={FadeInUp.duration(400).delay(200)}
-              style={styles.heading}
+              entering={FadeInUp.duration(400).delay(150)}
+              style={styles.levelLabel}
             >
-              Level Up!
+              LEVEL {level}
             </Animated.Text>
 
-            {/* Level number */}
+            {/* Title — the main moment */}
             <Animated.Text
-              entering={ZoomIn.springify().damping(12).stiffness(200).delay(400)}
-              style={styles.levelNumber}
+              entering={ZoomIn.springify().damping(12).stiffness(180).delay(300)}
+              style={styles.title}
             >
-              {level}
+              {current.title}
             </Animated.Text>
 
-            {/* Subtitle */}
-            <Animated.Text
-              entering={FadeIn.duration(400).delay(500)}
-              style={styles.subtitle}
-            >
-              Deal Hunter Level {level}!
-            </Animated.Text>
-
-            {/* Sparkle row */}
+            {/* Divider */}
             <Animated.View
-              entering={FadeIn.duration(400).delay(600)}
-              style={styles.sparkleRow}
-            >
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Animated.View
-                  key={i}
-                  entering={ZoomIn.delay(700 + i * 100)}
-                >
-                  <Sparkles
-                    size={20}
-                    color="#ffffff"
-                    fill="#ffffff"
+              entering={FadeIn.duration(300).delay(500)}
+              style={styles.divider}
+            />
+
+            {/* Next level teaser */}
+            {!isMax ? (
+              <Animated.View
+                entering={FadeInUp.duration(400).delay(600)}
+                style={styles.nextWrap}
+              >
+                <Text style={styles.nextLabel}>Next up</Text>
+                <View style={styles.nextRow}>
+                  <Text style={styles.nextEmoji}>{next.emoji}</Text>
+                  <Text style={styles.nextTitle}>{next.title}</Text>
+                </View>
+                {/* Progress bar */}
+                <View style={styles.barTrack}>
+                  <Animated.View
+                    entering={FadeIn.duration(600).delay(800)}
+                    style={[styles.barFill, { width: `${Math.round(progress * 100)}%` }]}
                   />
-                </Animated.View>
-              ))}
-            </Animated.View>
+                </View>
+                <Text style={styles.swipesHint}>
+                  {swipesToNext === SWIPES_PER_LEVEL
+                    ? `${SWIPES_PER_LEVEL} swipes to unlock`
+                    : `${swipesToNext} more swipe${swipesToNext === 1 ? "" : "s"} to unlock`}
+                </Text>
+              </Animated.View>
+            ) : (
+              <Animated.Text
+                entering={FadeIn.duration(400).delay(600)}
+                style={styles.maxText}
+              >
+                You've reached the top. Legend.
+              </Animated.Text>
+            )}
 
-            {/* Tap to dismiss hint */}
             <Animated.Text
               entering={FadeIn.duration(400).delay(900)}
               style={styles.hint}
@@ -142,7 +149,7 @@ export default function LevelUpNotification({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    backgroundColor: "rgba(0,0,0,0.65)",
     justifyContent: "center",
     alignItems: "center",
     padding: 32,
@@ -151,8 +158,8 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 320,
     borderRadius: 24,
-    paddingVertical: 40,
-    paddingHorizontal: 32,
+    paddingVertical: 36,
+    paddingHorizontal: 28,
     alignItems: "center",
     backgroundColor: colors.brand.amber500,
     shadowColor: "#000",
@@ -160,40 +167,89 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 30,
     elevation: 16,
+    gap: 4,
   },
-  crownContainer: {
-    marginBottom: 16,
-  },
-  crownEmoji: {
-    fontSize: 48,
-  },
-  heading: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#ffffff",
+  emoji: {
+    fontSize: 52,
     marginBottom: 8,
   },
-  levelNumber: {
-    fontSize: 72,
+  levelLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.7)",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 34,
     fontWeight: "900",
     color: "#ffffff",
-    marginBottom: 8,
-    lineHeight: 80,
+    textAlign: "center",
+    letterSpacing: -0.5,
+    marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "rgba(255, 255, 255, 0.9)",
-    marginBottom: 20,
+  divider: {
+    width: 40,
+    height: 2,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: 1,
+    marginVertical: 16,
   },
-  sparkleRow: {
-    flexDirection: "row",
+  nextWrap: {
+    width: "100%",
+    alignItems: "center",
     gap: 6,
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  nextLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.6)",
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+  },
+  nextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  nextEmoji: {
+    fontSize: 18,
+  },
+  nextTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.9)",
+  },
+  barTrack: {
+    width: "100%",
+    height: 5,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  barFill: {
+    height: "100%",
+    backgroundColor: "#ffffff",
+    borderRadius: 3,
+  },
+  swipesHint: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.65)",
+    fontWeight: "500",
+  },
+  maxText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.85)",
+    textAlign: "center",
+    marginBottom: 16,
   },
   hint: {
     fontSize: 12,
     fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.6)",
+    color: "rgba(255,255,255,0.5)",
+    marginTop: 8,
   },
 });

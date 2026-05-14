@@ -32,8 +32,8 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
 
 // GET /share-deal/:shareId
 // Returns the share record so the app can render the deal.
-shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>, res: Response) => {
-  const { shareId } = req.params;
+shareRoutes.get("/share-deal/:shareId", async (req: Request, res: Response) => {
+  const shareId = req.params.shareId as string;
   try {
     const doc = await colRef("sharedDeals").doc(shareId).get();
     if (!doc.exists) {
@@ -50,8 +50,8 @@ shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>
 
 // POST /share-deal/:shareId/opened
 // Marks the share as opened and notifies the original sharer.
-shareRoutes.post("/share-deal/:shareId/opened", async (req: Request<{ shareId: string }>, res: Response) => {
-  const { shareId } = req.params;
+shareRoutes.post("/share-deal/:shareId/opened", async (req: Request, res: Response) => {
+  const shareId = req.params.shareId as string;
   const { openedByUserId, openerName } = req.body;
   if (!openedByUserId || !openerName) {
     res.status(400).json({ error: "openedByUserId, openerName required" });

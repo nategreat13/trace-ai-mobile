@@ -8,8 +8,8 @@ import {
   useColorScheme,
   Animated,
   Easing,
-  Image,
 } from "react-native";
+import { MapPin, Sparkles, UtensilsCrossed, Compass, Plane } from "lucide-react-native";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import { useDestinationInfo } from "../../hooks/useDestinationInfo";
@@ -69,32 +69,95 @@ function getForYouItems(
   });
 }
 
-// ── Pulsing logo loading state ───────────────────────────────────────────────
-function LoadingState({ scheme }: { scheme: "dark" | "light" | null | undefined }) {
-  const pulse = useRef(new Animated.Value(1)).current;
+const LOADING_STEPS = [
+  { Icon: MapPin,          title: "Scouting neighborhoods",   subtitle: "Finding where locals actually hang out…" },
+  { Icon: Sparkles,        title: "Uncovering hidden gems",   subtitle: "Digging past the tourist traps…" },
+  { Icon: UtensilsCrossed, title: "Checking the dining scene", subtitle: "From street food to splurge-worthy spots…" },
+  { Icon: Compass,         title: "Mapping your trip",        subtitle: "Day trips, getting around, what to skip…" },
+  { Icon: Plane,           title: "Almost there",             subtitle: "Putting your personalized guide together…" },
+];
 
+function LoadingState({ scheme }: { scheme: "dark" | "light" | null | undefined }) {
+  const [stepIdx, setStepIdx] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const iconFade = useRef(new Animated.Value(1)).current;
+  const iconScale = useRef(new Animated.Value(1)).current;
+  const rippleScale = useRef(new Animated.Value(1)).current;
+  const rippleOpacity = useRef(new Animated.Value(0.5)).current;
+
+  // Continuous bounce on the icon circle
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.4, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1,   duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(iconScale, { toValue: 1.12, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(iconScale, { toValue: 1,    duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
-  const logo = scheme === "dark"
-    ? require("../../../assets/TraceLogoDark.png")
-    : require("../../../assets/TraceLogoLight.png");
+  // Ripple that expands and fades on repeat
+  useEffect(() => {
+    const fireRipple = () => {
+      rippleScale.setValue(1);
+      rippleOpacity.setValue(0.45);
+      Animated.parallel([
+        Animated.timing(rippleScale,   { toValue: 2.0, duration: 1100, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+        Animated.timing(rippleOpacity, { toValue: 0,   duration: 1100, useNativeDriver: true }),
+      ]).start();
+    };
+    fireRipple();
+    const id = setInterval(fireRipple, 1600);
+    return () => clearInterval(id);
+  }, []);
+
+  // Step cycling with crossfade
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 280, useNativeDriver: true }),
+        Animated.timing(iconFade, { toValue: 0, duration: 280, useNativeDriver: true }),
+      ]).start(() => {
+        setStepIdx((i) => (i + 1) % LOADING_STEPS.length);
+        Animated.parallel([
+          Animated.timing(fadeAnim, { toValue: 1, duration: 380, useNativeDriver: true }),
+          Animated.timing(iconFade, { toValue: 1, duration: 380, useNativeDriver: true }),
+        ]).start();
+      });
+    }, 2800);
+    return () => clearInterval(interval);
+  }, []);
+
+  const step = LOADING_STEPS[stepIdx];
+  const { Icon } = step;
+  const textColor = scheme === "dark" ? "#ffffff" : "#111111";
+  const subtitleColor = scheme === "dark" ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)";
 
   return (
     <View style={loadingStyles.container}>
-      <Animated.Image source={logo} style={[loadingStyles.logo, { opacity: pulse }]} resizeMode="contain" />
-      <Text style={[loadingStyles.title, { color: scheme === "dark" ? "#ffffff" : "#111111" }]}>
-        Building your guide
-      </Text>
-      <Text style={[loadingStyles.subtitle, { color: scheme === "dark" ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.4)" }]}>
-        Our AI is pulling together everything you need to know about this destination…
-      </Text>
+      {/* Icon + ripple stack */}
+      <View style={loadingStyles.iconOuter}>
+        {/* Ripple ring */}
+        <Animated.View
+          style={[
+            loadingStyles.ripple,
+            { opacity: rippleOpacity, transform: [{ scale: rippleScale }] },
+          ]}
+        />
+        {/* Bouncing icon circle */}
+        <Animated.View
+          style={[
+            loadingStyles.iconWrap,
+            { opacity: iconFade, transform: [{ scale: iconScale }] },
+          ]}
+        >
+          <Icon color={colors.brand.traceRed} size={38} strokeWidth={1.5} />
+        </Animated.View>
+      </View>
+
+      <Animated.View style={{ alignItems: "center", gap: 8, opacity: fadeAnim }}>
+        <Text style={[loadingStyles.title, { color: textColor }]}>{step.title}</Text>
+        <Text style={[loadingStyles.subtitle, { color: subtitleColor }]}>{step.subtitle}</Text>
+      </Animated.View>
     </View>
   );
 }
@@ -103,18 +166,36 @@ const loadingStyles = StyleSheet.create({
   container: {
     paddingTop: 60,
     paddingBottom: 80,
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
     alignItems: "center",
-    gap: 16,
+    gap: 28,
   },
-  logo: {
-    width: 72,
-    height: 72,
+  iconOuter: {
+    width: 88,
+    height: 88,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ripple: {
+    position: "absolute",
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "rgba(239,68,68,0.18)",
+  },
+  iconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: "rgba(239,68,68,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
     fontSize: 17,
     fontWeight: "700",
     letterSpacing: -0.3,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 14,
