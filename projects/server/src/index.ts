@@ -28,6 +28,13 @@ const adminApiToken = defineSecret("ADMIN_API_TOKEN");
 //   firebase functions:secrets:set ANTHROPIC_API_KEY
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
+// Slack incoming webhook for the #support channel. Read by
+// routes/support.ts when a user submits the in-app Contact Support
+// form. Without this binding the route 500s and the user's message
+// is dropped silently.
+//   firebase functions:secrets:set SLACK_SUPPORT_WEBHOOK_URL
+const slackSupportWebhookUrl = defineSecret("SLACK_SUPPORT_WEBHOOK_URL");
+
 /**
  * Prod API. Wraps the Express app in `runWithEnv("prod", …)` so every
  * Firestore read/write inside the request handler resolves to the
@@ -36,7 +43,7 @@ const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
   },
   (req, res) => runWithEnv("prod", () => app(req, res))
 );
@@ -57,7 +64,7 @@ export const api = onRequest(
 export const apiStaging = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
   },
   (req, res) => runWithEnv("staging", () => app(req, res))
 );
