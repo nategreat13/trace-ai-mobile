@@ -169,6 +169,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ──── Hot Deal Cache ────
+    // Per-user dedup state for the hot_deal_alert push (keyed by userId).
+    // Written by the daily notification cron via Admin SDK; clients never
+    // touch it directly. Same access pattern as notificationLog.
+    match /hotDealCache/{docId} {
+      allow read, write: if false;
+    }
+
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║                      STAGING COLLECTIONS                         ║
     // ║                                                                  ║
@@ -264,6 +272,7 @@ service cloud.firestore {
     match /staging_promoRedemptions/{docId}    { allow read, write: if false; }
     match /staging_notificationTemplates/{docId} { allow read, write: if false; }
     match /staging_notificationLog/{docId}     { allow read, write: if false; }
+    match /staging_hotDealCache/{docId}        { allow read, write: if false; }
 
     // ──── Deny everything else ────
     match /{document=**} {
