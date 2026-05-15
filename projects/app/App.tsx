@@ -15,6 +15,7 @@ import type { RootStackParamList } from "./src/navigation/types";
 import { logEvent } from "./src/lib/analytics";
 import AnalyticsLifecycle from "./src/components/AnalyticsLifecycle";
 import { initEnvFromStorage } from "./src/lib/env";
+import { initDeviceId } from "./src/lib/device";
 import {
   configureNotificationHandler,
   subscribeToNotifications,
@@ -217,9 +218,15 @@ export default function App() {
   // Gate the entire tree on env hydration. `getEnv()` defaults to "prod"
   // before this resolves, so even if the user had previously toggled to
   // staging we'd briefly read prod data. Render nothing until we know.
+  //
+  // Also hydrate the device_id so every event from this launch carries
+  // the stable per-install UUID (`lib/device.ts`). Done in parallel —
+  // both reads are cheap AsyncStorage lookups.
   const [envHydrated, setEnvHydrated] = useState(false);
   useEffect(() => {
-    initEnvFromStorage().finally(() => setEnvHydrated(true));
+    Promise.all([initEnvFromStorage(), initDeviceId()]).finally(() =>
+      setEnvHydrated(true)
+    );
   }, []);
 
   useEffect(() => {

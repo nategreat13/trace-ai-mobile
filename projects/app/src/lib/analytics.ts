@@ -5,6 +5,7 @@ import { col } from "@trace/shared";
 import { auth, db } from "../services/firebase";
 import { getSessionId } from "./session";
 import { getEnv } from "./env";
+import { getDeviceId } from "./device";
 
 /**
  * Lightweight analytics wrapper — writes events to Firestore's `events`
@@ -142,6 +143,12 @@ function getBaseProps(): Record<string, string | null> {
   const country =
     locale && locale.includes("-") ? locale.split("-")[1] : null;
 
+  // device_id: stable per-install UUID, hydrated at App.tsx startup.
+  // Empty string before hydration; the funnel query treats "" as
+  // un-attributable (counts the event, doesn't filter) so worst case
+  // is parity with pre-device-id behavior.
+  const deviceId = getDeviceId();
+
   return {
     platform: Platform.OS,
     os_version: String(Platform.Version ?? ""),
@@ -149,6 +156,7 @@ function getBaseProps(): Record<string, string | null> {
     locale,
     country,
     session_id: getSessionId(),
+    device_id: deviceId || null,
   };
 }
 

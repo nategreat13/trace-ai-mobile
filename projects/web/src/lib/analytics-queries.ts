@@ -142,22 +142,26 @@ export async function getFunnelCounts(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // Build the set of "tainted" session ids — sessions that include at
-  // least one event from an excluded user. Used to attribute pre-signup
-  // (guest) events to the user they eventually became.
+  // Build two sets of "tainted" identifiers for guest events that
+  // actually belong to an excluded user:
   //
-  // Without this, landing_viewed events from internal testers count
-  // toward the funnel even after we've added them to the exclusion
-  // list, because pre-signup events have userId="guest" and the
-  // standard shouldIncludeUid check unconditionally passes "guest"
-  // through. The session_id prop lets us link a guest event to the
-  // user it eventually belonged to: if any signed-in event in the
-  // same session is from an excluded user, the guest events in that
-  // session were them too.
+  //   taintedSessions  — sessions where a signed-in event from an
+  //                      excluded user was logged. Within-session
+  //                      linking only; can't bridge multiple cold
+  //                      launches from the same device.
+  //   taintedDevices   — devices that have ever logged an event under
+  //                      an excluded user's uid. Cross-session, so it
+  //                      catches multi-cold-launch testing (force-quit
+  //                      + reopen, OTA fetches, etc.) that the
+  //                      session-only logic missed.
+  //
+  // device_id was added in the OTA after staging-env shipped; legacy
+  // events without it fall back to session-only attribution (their
+  // missing device_id just doesn't taint anything).
   const taintedSessions = new Set<string>();
+  const taintedDevices = new Set<string>();
   if (excluded && excluded.userIds.size > 0) {
     // Firestore `in` is capped at 30 values per query; chunk if needed.
-    // Today we have 7 exclusions so this is a single round-trip.
     const userIdsArr = Array.from(excluded.userIds);
     for (let i = 0; i < userIdsArr.length; i += 30) {
       const chunk = userIdsArr.slice(i, i + 30);
@@ -165,11 +169,13 @@ export async function getFunnelCounts(
         .where("timestamp", ">=", since)
         .where("userId", "in", chunk)
         .orderBy("timestamp", "desc")
-        .select("props.session_id")
+        .select("props.session_id", "props.device_id")
         .get();
       snap.forEach((doc) => {
         const sid = doc.get("props.session_id") as string | undefined;
         if (sid) taintedSessions.add(sid);
+        const did = doc.get("props.device_id") as string | undefined;
+        if (did) taintedDevices.add(did);
       });
     }
   }
@@ -195,7 +201,7 @@ export async function getFunnelCounts(
       .where("timestamp", ">=", since)
       .where("name", "==", name)
       .orderBy("timestamp", "desc")
-      .select("userId", "props.session_id")
+      .select("userId", "props.session_id", "props.device_id")
       .get();
     let n = 0;
     const dedupeBySession = name === "landing_viewed";
@@ -203,12 +209,17 @@ export async function getFunnelCounts(
     snap.forEach((doc) => {
       const userId = doc.get("userId") as string | undefined;
       const sessionId = doc.get("props.session_id") as string | undefined;
+      const deviceId = doc.get("props.device_id") as string | undefined;
 
-      // 1. Standard exclusion.
+      // 1. Standard userId-based exclusion.
       if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
-      // 2. Guest event that belongs to an excluded user's session.
+      // 2. Guest event whose session belonged to an excluded user.
       if (userId === "guest" && sessionId && taintedSessions.has(sessionId)) return;
-      // 3. Per-session dedup (landing_viewed only). Events without a
+      // 3. Guest event whose device belonged to an excluded user. This
+      //    is the cross-session attribution that fixes the orphan-
+      //    session bug — see `lib/device.ts` for the persistent UUID.
+      if (userId === "guest" && deviceId && taintedDevices.has(deviceId)) return;
+      // 4. Per-session dedup (landing_viewed only). Events without a
       //    session_id (legacy data) get counted as-is rather than
       //    being silently dropped.
       if (seenSessions && sessionId) {
