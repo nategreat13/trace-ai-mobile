@@ -52,11 +52,34 @@ destinationInfoRoutes.get(
       res.json(content);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.error("destination-info error:", msg);
-      res.status(500).json({ error: "Failed to generate destination info", detail: msg });
+      // AbortError comes back from the AbortController-driven timeout
+      // inside generateDestinationInfo. Distinguishing it lets the
+      // client decide between "retry me" (transient timeout) and a
+      // real generation failure.
+      const isTimeout =
+        error instanceof Error && (error.name === "AbortError" || /aborted/i.test(msg));
+      console.error(
+        `[destination-info] ${isTimeout ? "TIMEOUT" : "ERROR"} for ${cacheKey}:`,
+        msg
+      );
+      res.status(isTimeout ? 504 : 500).json({
+        error: isTimeout
+          ? "Generation timed out — please try again"
+          : "Failed to generate destination info",
+        detail: msg,
+      });
     }
   }
 );
+
+// Hard cap for the Anthropic call. Cloud Functions defaults to a 60s
+// request timeout — once we're past 60s the runtime kills the request
+// abruptly and the client gets a 504 with no body. Aborting at 50s
+// gives us 10s of headroom to log + return a clean 504 with a JSON
+// error payload the mobile app can show + retry from. Real production
+// case: Trevor's San Francisco request hung 59.99s, hit Cloud Run's
+// kill, mobile fell back to generic MOCK_DATA, user saw the wrong city.
+const ANTHROPIC_TIMEOUT_MS = 50_000;
 
 async function generateDestinationInfo(
   destination: string,
@@ -68,17 +91,29 @@ async function generateDestinationInfo(
     ? buildDomesticPrompt(destination, code, month)
     : buildInternationalPrompt(destination, code, month);
 
-  const message = await getClient().messages.create({
-    model: "claude-sonnet-4-6",
-    // Bumped from 3000. The guide has 3-4 neighborhoods + 5-6 things
-    // to do + 9 dining entries + 3 budget tiers + 2-3 transport + 2-4
-    // day trips + 4-5 avoidance tips, all as structured JSON. 3000
-    // tokens was getting truncated mid-array for content-dense cities
-    // like Las Vegas, producing unparseable JSON. 6000 leaves comfortable
-    // headroom; cost per request is still trivial.
-    max_tokens: 6000,
-    messages: [{ role: "user", content: prompt }],
-  });
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), ANTHROPIC_TIMEOUT_MS);
+
+  let message;
+  try {
+    message = await getClient().messages.create(
+      {
+        model: "claude-sonnet-4-6",
+        // Bumped from 3000. The guide has 3-4 neighborhoods + 5-6
+        // things to do + 9 dining entries + 3 budget tiers + 2-3
+        // transport + 2-4 day trips + 4-5 avoidance tips, all as
+        // structured JSON. 3000 tokens was getting truncated mid-array
+        // for content-dense cities like Las Vegas, producing
+        // unparseable JSON. 6000 leaves comfortable headroom; cost per
+        // request is still trivial.
+        max_tokens: 6000,
+        messages: [{ role: "user", content: prompt }],
+      },
+      { signal: ac.signal }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   // Catch truncation before we get a cryptic JSON.parse error 10k
   // characters in. If Claude hit the token cap, stop_reason will be
