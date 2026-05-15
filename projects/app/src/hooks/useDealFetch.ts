@@ -4,6 +4,7 @@ import { dealMatchesType } from "../lib/dealClassifier";
 import { weightedShuffle } from "../lib/dealScorer";
 import { Deal, UserProfile } from "@trace/shared";
 
+
 function isInternationalDeal(deal: Deal): boolean | null {
   if (deal.domestic_or_international) {
     return deal.domestic_or_international.toLowerCase().includes("international");
@@ -49,6 +50,7 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
     try {
       const airportCode = profile.homeAirport || "LAX";
       console.log("[useDealFetch] fetching deals for", airportCode);
+
       let apiDeals = await fetchDeals(airportCode);
       console.log("[useDealFetch] got", apiDeals.length, "deals");
 
@@ -132,7 +134,10 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
           ? [...dedupedPreferred, ...dedupedRemaining]
           : dedupeByDestination(sortByBestDeal(apiDeals));
 
-      const deckDeals = weightedShuffle(finalDeals);
+      const shuffled = weightedShuffle(finalDeals);
+      const deckDeals = SCREENSHOT_MODE
+        ? [...MOCK_DEALS, ...shuffled.filter((d) => !MOCK_DEALS.some((m) => m.id === d.id))]
+        : shuffled;
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
