@@ -15,6 +15,8 @@ import {
   Linking,
   Switch,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import * as Application from "expo-application";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -1052,23 +1054,37 @@ export default function ProfileScreen() {
 
       {/* Contact Support modal */}
       <Modal visible={showSupportModal} transparent animationType="fade">
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => {
-            setShowSupportModal(false);
-            setSupportSent(false);
-            setSupportName("");
-            setSupportSubject("");
-            setSupportMessage("");
-          }}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            paddingHorizontal: 16,
-          }}
+        {/* KeyboardAvoidingView slides the centered card up so the keyboard
+            never covers the inputs. iOS uses "padding" (cleanest); Android
+            uses "height" because "padding" double-counts the soft-input
+            adjustResize already performs at the window level. */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
         >
-          <TouchableOpacity activeOpacity={1}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {
+              // Backdrop tap closes the modal AND dismisses the keyboard
+              // (otherwise the keyboard would linger after close on iOS).
+              Keyboard.dismiss();
+              setShowSupportModal(false);
+              setSupportSent(false);
+              setSupportName("");
+              setSupportSubject("");
+              setSupportMessage("");
+            }}
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "center",
+              paddingHorizontal: 16,
+            }}
+          >
+            {/* Inner wrapper: tap-inside-card dismisses keyboard but does
+                NOT close the modal. Lets the user tap any non-input area
+                of the form to put the keyboard away. */}
+            <TouchableOpacity activeOpacity={1} onPress={() => Keyboard.dismiss()}>
             <View
               style={{
                 backgroundColor: theme.card,
@@ -1264,8 +1280,9 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Delete modal */}
