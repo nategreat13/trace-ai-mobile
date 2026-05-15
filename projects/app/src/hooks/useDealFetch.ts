@@ -134,10 +134,7 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
           ? [...dedupedPreferred, ...dedupedRemaining]
           : dedupeByDestination(sortByBestDeal(apiDeals));
 
-      const shuffled = weightedShuffle(finalDeals);
-      const deckDeals = SCREENSHOT_MODE
-        ? [...MOCK_DEALS, ...shuffled.filter((d) => !MOCK_DEALS.some((m) => m.id === d.id))]
-        : shuffled;
+      const deckDeals = weightedShuffle(finalDeals);
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
