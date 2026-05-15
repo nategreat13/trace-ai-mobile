@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Deal } from "@trace/shared";
 import { DestinationInfo } from "../lib/destinationData";
 import { fetchDestinationInfo } from "../services/destinationApi";
@@ -44,12 +44,18 @@ export function useDestinationInfo(deal: Deal | null) {
   );
   const [loading, setLoading] = useState(!!(key && !cache[key]));
   const [error, setError] = useState(false);
+  // Bump this to force the effect to re-run for a manual retry. Done
+  // via a counter rather than calling fetch directly so the rest of
+  // the hook (cache lookup, cancellation, loading state) stays in
+  // one place.
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
     if (!deal || !key) return;
     if (cache[key]) {
       setInfo(cache[key]);
       setLoading(false);
+      setError(false);
       return;
     }
 
@@ -62,7 +68,6 @@ export function useDestinationInfo(deal: Deal | null) {
       .then((data) => {
         if (cancelled) return;
         cache[key] = data;
-        inflight.delete(key);
         setInfo(data);
         setLoading(false);
       })
@@ -70,10 +75,26 @@ export function useDestinationInfo(deal: Deal | null) {
         if (cancelled) return;
         setError(true);
         setLoading(false);
+      })
+      .finally(() => {
+        // Always release the inflight guard so a retry isn't blocked
+        // by a previous failed prefetch leaving its key set.
+        inflight.delete(key);
       });
 
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, retryTick]);
+
+  /**
+   * Drop any cached value for this key and re-trigger the fetch.
+   * Used by the destination tab's Retry button when a previous
+   * attempt errored.
+   */
+  const refetch = useCallback(() => {
+    if (key) delete cache[key];
+    setRetryTick((t) => t + 1);
   }, [key]);
 
-  return { info, loading, error };
+  return { info, loading, error, refetch };
 }

@@ -232,7 +232,7 @@ export default function DealDestinationTab({ deal, userProfile }: Props) {
   // the loading state flips.
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { info, loading, error } = useDestinationInfo(deal);
+  const { info, loading, error, refetch } = useDestinationInfo(deal);
   const [expandedNeighborhood, setExpandedNeighborhood] = useState<string | null>(null);
   const [showAllTodo, setShowAllTodo] = useState(false);
   const [expandedDining, setExpandedDining] = useState<Record<string, boolean>>({});
@@ -243,9 +243,21 @@ export default function DealDestinationTab({ deal, userProfile }: Props) {
   if (error || !info) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={[styles.errorText, { color: theme.mutedForeground }]}>
-          Couldn't load destination info right now. Try again later.
+        <Text style={styles.errorEmoji}>🌐</Text>
+        <Text style={[styles.errorTitle, { color: theme.foreground }]}>
+          Couldn't load destination info
         </Text>
+        <Text style={[styles.errorText, { color: theme.mutedForeground }]}>
+          The guide is generated on demand and sometimes takes a moment.
+          Tap retry to try again.
+        </Text>
+        <TouchableOpacity
+          onPress={refetch}
+          activeOpacity={0.85}
+          style={[styles.retryButton, { backgroundColor: colors.brand.traceRed }]}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -506,8 +518,17 @@ function EssRow({ label, value, theme, last }: { label: string; value: string; t
 const styles = StyleSheet.create({
   root: { paddingTop: 8, paddingBottom: 40 },
 
-  errorContainer: { padding: 40, alignItems: "center" },
-  errorText: { fontSize: 14, textAlign: "center", lineHeight: 21 },
+  errorContainer: { padding: 40, alignItems: "center", gap: 10 },
+  errorEmoji: { fontSize: 40, marginBottom: 4 },
+  errorTitle: { fontSize: 17, fontWeight: "700", textAlign: "center" },
+  errorText: { fontSize: 14, textAlign: "center", lineHeight: 21, maxWidth: 300 },
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+  },
+  retryButtonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
 
   section: { paddingHorizontal: 20, marginBottom: 28 },
   sectionTitle: { fontSize: 10, fontWeight: "700", letterSpacing: 1.4, marginBottom: 10 },
