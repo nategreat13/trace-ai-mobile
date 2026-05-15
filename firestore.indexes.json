@@ -25,6 +25,14 @@
       ]
     },
     {
+      "collectionGroup": "promoRedemptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "code", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "userProfiles",
       "queryScope": "COLLECTION",
       "fields": [
@@ -79,6 +87,14 @@
       "fields": [
         { "fieldPath": "code", "order": "ASCENDING" },
         { "fieldPath": "redeemedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "staging_promoRedemptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "code", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
       ]
     },
     {
