@@ -267,6 +267,12 @@ export default function SwipeDeckScreen() {
   const [unlockedBadge, setUnlockedBadge] = useState<{ name: string; emoji: string; description: string } | null>(null);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [newLevel, setNewLevel] = useState(1);
+  // Snapshot of swipeCount at the moment of leveling up. The
+  // LevelUpNotification component reads it to render the "X more
+  // swipes to unlock" hint and the progress bar toward the next
+  // level; right after a level-up swipeCount % 25 === 0 so progress
+  // is 0% (fresh start toward the next level).
+  const [newSwipeCount, setNewSwipeCount] = useState(0);
 
   // Track total swipes this session for AI learning modal
   const sessionSwipeCount = useRef(0);
@@ -522,6 +528,10 @@ export default function SwipeDeckScreen() {
         const lvl = (profile.dealHunterLevel || 1) + 1;
         updates.dealHunterLevel = lvl;
         setNewLevel(lvl);
+        // Snapshot the count at level-up time so the modal renders
+        // a stable progress bar even if more swipes happen in the
+        // background before the user dismisses it.
+        setNewSwipeCount(newSwipeCount);
       }
 
       await updateProfile(updates);
@@ -963,14 +973,15 @@ export default function SwipeDeckScreen() {
         onDismiss={() => setUnlockedBadge(null)}
       />
 
-      {/* Level Up Notification */}
-      {/* swipeCount was being passed but LevelUpNotification doesn't
-          accept it (and currently doesn't reference total swipes in
-          its UI). Removed to make TypeScript happy; if we ever want
-          to surface swipe count on this modal, add the prop to
-          LevelUpNotificationProps + the UI first. */}
+      {/* Level Up Notification.
+          The component renders a progress bar + "X more swipes to
+          unlock" text driven by `swipeCount`, so this prop matters
+          to the UI — Trevor's earlier removal silenced the TS error
+          but broke the displayed progress (NaN%, "NaN more swipes").
+          Now snapshotted at level-up time via `newSwipeCount` state. */}
       <LevelUpNotification
         level={newLevel}
+        swipeCount={newSwipeCount}
         visible={showLevelUp}
         onDismiss={() => setShowLevelUp(false)}
       />
