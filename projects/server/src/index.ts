@@ -44,6 +44,12 @@ export const api = onRequest(
   {
     invoker: "public",
     secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
+    // Default is 60s — too short for /destination-info, which calls
+    // Anthropic to generate ~4000 tokens of structured JSON and
+    // routinely takes 60-90s. The route's own AbortController caps
+    // at 280s so we always log + return cleanly under this limit
+    // rather than letting Cloud Run kill mid-request.
+    timeoutSeconds: 300,
   },
   (req, res) => runWithEnv("prod", () => app(req, res))
 );
@@ -65,6 +71,12 @@ export const apiStaging = onRequest(
   {
     invoker: "public",
     secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
+    // Default is 60s — too short for /destination-info, which calls
+    // Anthropic to generate ~4000 tokens of structured JSON and
+    // routinely takes 60-90s. The route's own AbortController caps
+    // at 280s so we always log + return cleanly under this limit
+    // rather than letting Cloud Run kill mid-request.
+    timeoutSeconds: 300,
   },
   (req, res) => runWithEnv("staging", () => app(req, res))
 );

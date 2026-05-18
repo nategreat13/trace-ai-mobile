@@ -172,14 +172,24 @@ destinationInfoRoutes.get(
   }
 );
 
-// Hard cap for the Anthropic call. Cloud Functions defaults to a 60s
-// request timeout — once we're past 60s the runtime kills the request
-// abruptly and the client gets a 504 with no body. Aborting at 50s
-// gives us 10s of headroom to log + return a clean 504 with a JSON
-// error payload the mobile app can show + retry from. Real production
-// case: Trevor's San Francisco request hung 59.99s, hit Cloud Run's
-// kill, mobile fell back to generic MOCK_DATA, user saw the wrong city.
-const ANTHROPIC_TIMEOUT_MS = 50_000;
+// Hard cap for the Anthropic call. The function's `timeoutSeconds` is
+// set to 300 in index.ts (5 min) — Anthropic regularly takes 60-90s
+// for this prompt shape because it generates ~4000 tokens of dense
+// structured JSON serially. We cap our own abort 20s under the
+// function timeout so we can log + return a clean 504 with a JSON
+// error payload the mobile app can show + retry from, instead of
+// letting Cloud Run kill the request abruptly with an empty 504.
+//
+// History:
+//   - The very first version had no cap; Cloud Run's default 60s
+//     timeout killed slow requests with empty 504s.
+//   - Then 50s — too tight; legitimate Anthropic responses for
+//     popular destinations regularly took 60-80s and ALL were
+//     timing out. Trevor's Madrid + Mexico City were the canary.
+//   - Now 280s — covers the 99th percentile of real Anthropic
+//     latencies for this prompt shape with 20s of headroom under
+//     the 300s function timeout.
+const ANTHROPIC_TIMEOUT_MS = 280_000;
 
 /**
  * Returns the parsed destination JSON plus the metadata the route
