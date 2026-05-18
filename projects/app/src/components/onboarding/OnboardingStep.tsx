@@ -2,7 +2,6 @@ import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
-  Image,
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
@@ -20,7 +19,6 @@ interface OnboardingStepProps {
   onNext: () => void;
   onBack: () => void;
   children: React.ReactNode;
-  showLogo?: boolean;
 }
 
 export default function OnboardingStep({
@@ -32,7 +30,6 @@ export default function OnboardingStep({
   onNext,
   onBack,
   children,
-  showLogo,
 }: OnboardingStepProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -59,16 +56,6 @@ export default function OnboardingStep({
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      {/* Logo — first step of fresh signup only */}
-      {showLogo && (
-        <View style={styles.logoRow}>
-          <Image
-            source={require("../../../assets/Bluelogo.png")}
-            style={styles.logo}
-          />
-        </View>
-      )}
-
       {/* Progress dots */}
       <View style={styles.progressRow}>
         {Array.from({ length: totalSteps }).map((_, i) => (
@@ -131,16 +118,6 @@ export default function OnboardingStep({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  logoRow: {
-    alignItems: "center",
-    paddingTop: 20,
-    paddingBottom: 4,
-  },
-  logo: {
-    width: 48,
-    height: 48,
-    resizeMode: "contain",
   },
   progressRow: {
     flexDirection: "row",
