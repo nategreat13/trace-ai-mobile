@@ -130,14 +130,14 @@ export default function LoginScreen() {
                   onPress={() => setIsSignup(label === "Sign Up")}
                   style={{
                     flex: 1,
-                    paddingVertical: 9,
+                    paddingVertical: 7,
                     alignItems: "center",
                     borderRadius: 10,
                     backgroundColor: active ? theme.background : "transparent",
                   }}
                 >
                   <Text style={{
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: active ? "700" : "500",
                     color: active ? colors.brand.traceRed : theme.mutedForeground,
                   }}>{label}</Text>
