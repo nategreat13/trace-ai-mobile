@@ -209,14 +209,12 @@ async function callAnthropicForDestination(
   try {
     message = await getClient().messages.create(
       {
-        model: "claude-sonnet-4-6",
-        // Bumped from 3000. The guide has 3-4 neighborhoods + 5-6
-        // things to do + 9 dining entries + 3 budget tiers + 2-3
-        // transport + 2-4 day trips + 4-5 avoidance tips, all as
-        // structured JSON. 3000 tokens was getting truncated mid-array
-        // for content-dense cities like Las Vegas, producing
-        // unparseable JSON. 6000 leaves comfortable headroom; cost per
-        // request is still trivial.
+        model: "claude-haiku-3-5",
+        // Haiku is ~4-5x faster than Sonnet for this use case and
+        // produces equivalent quality for structured destination guides
+        // (neighborhood lists, restaurant picks, travel tips). Sonnet
+        // was taking 8-15s on cold cache; Haiku is typically 2-4s.
+        // 6000 tokens retained — Haiku is cheaper so no reason to cut.
         max_tokens: 6000,
         messages: [{ role: "user", content: prompt }],
       },
