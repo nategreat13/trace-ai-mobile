@@ -37,6 +37,7 @@ import {
 } from "../services/firestore";
 import { ALL_BADGES, getDestinationFlag, getLevelInfo, SWIPES_PER_LEVEL } from "../lib/constants";
 import { createShare } from "../services/shareApi";
+import { fetchDeals } from "../services/dealsApi";
 
 export default function DashboardScreen() {
   const scheme = useColorScheme();
@@ -46,6 +47,7 @@ export default function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [deals, setDeals] = useState<any[]>([]);
+  const [dealStatuses, setDealStatuses] = useState<Record<string, { status: "ok" | "price_changed" | "past"; livePrice?: number }>>({});
   const [swipes, setSwipes] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [showAlertsUpgrade, setShowAlertsUpgrade] = useState(false);
@@ -93,13 +95,67 @@ export default function DashboardScreen() {
       setDeals(savedDeals);
       setSwipes(swipeData);
       setAlerts(alertData);
+
+      // Cross-reference saved deals against live API
+      const airportCode = profile?.homeAirport || "LAX";
+      try {
+        const liveDeals = await fetchDeals(airportCode);
+        const liveByDest = new Map<string, any>();
+        for (const d of liveDeals) {
+          liveByDest.set(d.destination?.toLowerCase(), d);
+        }
+
+        const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+        const now = new Date();
+
+        const statuses: Record<string, { status: "ok" | "price_changed" | "past"; livePrice?: number }> = {};
+        for (const saved of savedDeals) {
+          // Check if travel date is in the past
+          const dateStr = (saved.travelWindow || saved.dateString || "").toLowerCase();
+          const monthIdx = MONTHS.findIndex((m) => dateStr.includes(m));
+          if (monthIdx !== -1) {
+            let year = now.getFullYear();
+            const yearMatch = dateStr.match(/20\d\d/);
+            if (yearMatch) year = parseInt(yearMatch[0]);
+            const dealDate = new Date(year, monthIdx, 28); // end of month
+            if (dealDate < now && !yearMatch) {
+              // Try next year before marking past
+              const nextYear = new Date(year + 1, monthIdx, 1);
+              if (nextYear < now) {
+                statuses[saved.id] = { status: "past" };
+                continue;
+              }
+            } else if (dealDate < now) {
+              statuses[saved.id] = { status: "past" };
+              continue;
+            }
+          }
+
+          // Check if deal still exists and if price changed
+          const liveDeal = liveByDest.get(saved.destination?.toLowerCase());
+          if (!liveDeal) {
+            statuses[saved.id] = { status: "price_changed" };
+          } else {
+            const savedPrice = saved.price || 0;
+            const livePrice = liveDeal.dealPriceUSD || liveDeal.price || 0;
+            if (livePrice > 0 && Math.abs(livePrice - savedPrice) > 5) {
+              statuses[saved.id] = { status: "price_changed", livePrice };
+            } else {
+              statuses[saved.id] = { status: "ok" };
+            }
+          }
+        }
+        setDealStatuses(statuses);
+      } catch {
+        // Silent fail — statuses just won't show
+      }
     } catch (err) {
       console.error("Failed to load dashboard:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.homeAirport]);
 
   // Reload every time the Dashboard tab gains focus. Using useFocusEffect
   // (instead of a one-shot useEffect) is required because tab screens stay
@@ -209,6 +265,9 @@ export default function DashboardScreen() {
 
   const renderSavedDeal = ({ item }: { item: any }) => {
     const isDeleting = deletingIds.has(item.id);
+    const dealStatus = dealStatuses[item.id];
+    const isPast = dealStatus?.status === "past";
+    const isPriceChanged = dealStatus?.status === "price_changed";
     return (
       <Animated.View
         entering={FadeIn.duration(200)}
@@ -218,10 +277,10 @@ export default function DashboardScreen() {
           backgroundColor: theme.card,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: theme.border,
+          borderColor: isPast ? theme.border : isPriceChanged ? "#F59E0B40" : theme.border,
           overflow: "hidden",
           marginBottom: 12,
-          opacity: isDeleting ? 0.4 : 1,
+          opacity: isDeleting ? 0.4 : isPast ? 0.5 : 1,
         }}
       >
         <TouchableOpacity activeOpacity={0.85} onPress={() => setExpandedDeal(savedDealToDeal(item))}>
@@ -264,13 +323,34 @@ export default function DashboardScreen() {
                 </View>
               )}
               {/* Duration pill */}
-              {item.duration && (
+              {item.duration && !isPast && !isPriceChanged && (
                 <View style={{
                   position: "absolute", top: 10, right: 10,
                   backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8,
                   paddingHorizontal: 8, paddingVertical: 4,
                 }}>
                   <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>{item.duration}</Text>
+                </View>
+              )}
+              {/* Status badges */}
+              {isPast && (
+                <View style={{
+                  position: "absolute", top: 10, right: 10,
+                  backgroundColor: "rgba(0,0,0,0.65)", borderRadius: 8,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "700" }}>📅 Dates passed</Text>
+                </View>
+              )}
+              {isPriceChanged && (
+                <View style={{
+                  position: "absolute", top: 10, right: 10,
+                  backgroundColor: "#F59E0B", borderRadius: 8,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>
+                    {dealStatus?.livePrice ? `Now $${dealStatus.livePrice}` : "Price changed"}
+                  </Text>
                 </View>
               )}
             </View>
