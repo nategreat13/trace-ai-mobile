@@ -219,12 +219,20 @@ async function callAnthropicForDestination(
   try {
     message = await getClient().messages.create(
       {
-        model: "claude-haiku-3-5",
-        // Haiku is ~4-5x faster than Sonnet for this use case and
-        // produces equivalent quality for structured destination guides
-        // (neighborhood lists, restaurant picks, travel tips). Sonnet
-        // was taking 8-15s on cold cache; Haiku is typically 2-4s.
-        // 6000 tokens retained — Haiku is cheaper so no reason to cut.
+        // claude-haiku-4-5 — Haiku is ~4-5x faster than Sonnet for
+        // this use case and produces equivalent quality for structured
+        // destination guides (neighborhood lists, restaurant picks,
+        // travel tips). Sonnet was taking 8-15s on cold cache; Haiku
+        // is typically 2-4s. 6000 tokens retained — Haiku is cheaper
+        // so no reason to cut.
+        //
+        // Was `claude-haiku-3-5` briefly (Trevor's commit 6474413) —
+        // that's not a valid Anthropic model id. The 3.5 generation
+        // uses the format `claude-3-5-haiku-*` and has been retired
+        // from the API anyway. The 4-5 generation drops the leading
+        // version dash, matching the same naming as
+        // `claude-sonnet-4-6`.
+        model: "claude-haiku-4-5",
         max_tokens: 6000,
         messages: [{ role: "user", content: prompt }],
       },
