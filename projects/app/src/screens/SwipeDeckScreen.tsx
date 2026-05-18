@@ -282,11 +282,12 @@ export default function SwipeDeckScreen() {
     [deckMode, premiumDeals, deals]
   );
 
-  // Pre-fetch destination info for current + next deal as soon as they're visible,
-  // so the Destination tab loads instantly (or near-instantly) when the user opens it.
+  // Pre-fetch destination info for current + next 2 deals as soon as they're
+  // visible, so the Destination tab loads instantly when the user opens it.
   useEffect(() => {
     prefetchDestinationInfo(activeDeals[currentIndex] ?? null);
     prefetchDestinationInfo(activeDeals[currentIndex + 1] ?? null);
+    prefetchDestinationInfo(activeDeals[currentIndex + 2] ?? null);
   }, [currentIndex, activeDeals]);
 
   async function doShare(deal: Deal, name: string) {

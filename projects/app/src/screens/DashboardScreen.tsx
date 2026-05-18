@@ -38,6 +38,7 @@ import {
 import { ALL_BADGES, getDestinationFlag, getLevelInfo, SWIPES_PER_LEVEL } from "../lib/constants";
 import { createShare } from "../services/shareApi";
 import { fetchDeals } from "../services/dealsApi";
+import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
 
 export default function DashboardScreen() {
   const scheme = useColorScheme();
@@ -95,6 +96,10 @@ export default function DashboardScreen() {
       setDeals(savedDeals);
       setSwipes(swipeData);
       setAlerts(alertData);
+
+      // Kick off destination-info prefetch for saved deals so the
+      // Destination tab opens instantly instead of showing a spinner.
+      for (const d of savedDeals) prefetchDestinationInfo(d as any);
 
       // Cross-reference saved deals against live API
       const airportCode = profile?.homeAirport || "LAX";
