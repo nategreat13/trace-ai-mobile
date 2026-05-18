@@ -2,6 +2,7 @@ import React from "react";
 import {
   View,
   Text,
+  Image,
   Modal,
   TouchableOpacity,
   StyleSheet,
@@ -14,7 +15,7 @@ import Animated, {
   FadeInUp,
   ZoomIn,
 } from "react-native-reanimated";
-import { X, Heart, Star, Eye } from "lucide-react-native";
+import { X, Heart, Eye } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
 interface HowToSwipeModalProps {
@@ -51,7 +52,7 @@ export default function HowToSwipeModal({
     },
     {
       bgColor: isDark ? "rgba(1, 173, 255, 0.15)" : "#DBEAFE",
-      icon: <Star size={24} color="#01ADFF" fill="#01ADFF" />,
+      icon: <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />,
       title: "Tap the center button",
       desc: "Save deal to your list",
     },
