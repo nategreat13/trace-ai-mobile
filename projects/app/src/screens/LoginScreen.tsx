@@ -139,7 +139,7 @@ export default function LoginScreen() {
                   <Text style={{
                     fontSize: 13,
                     fontWeight: active ? "700" : "500",
-                    color: active ? colors.brand.traceRed : theme.mutedForeground,
+                    color: active ? (label === "Sign Up" ? colors.brand.traceRed : "#4A90D9") : theme.mutedForeground,
                   }}>{label}</Text>
                 </TouchableOpacity>
               );
