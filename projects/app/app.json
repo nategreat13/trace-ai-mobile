@@ -6,7 +6,7 @@
     "scheme": "tracetravel",
     "orientation": "portrait",
     "icon": "./assets/icon.jpeg",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "backgroundColor": "#ffffff"
     },

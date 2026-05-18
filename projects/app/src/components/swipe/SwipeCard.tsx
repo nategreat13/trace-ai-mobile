@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import { View, Text, Dimensions, StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -59,6 +59,9 @@ export default function SwipeCard({
   isSwipeDisabled,
   isUndone = false,
 }: SwipeCardProps) {
+  const FALLBACK_IMAGE = "https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png";
+  const [imageUri, setImageUri] = useState(deal.image_url || FALLBACK_IMAGE);
+
   // ── Shared values ───────────────────────────────────────────────────
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
@@ -264,13 +267,11 @@ export default function SwipeCard({
       <Animated.View style={[styles.card, cardAnimatedStyle]}>
         {/* Background image */}
         <Image
-          source={[
-            { uri: deal.image_url },
-            { uri: "https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png" },
-          ]}
+          source={{ uri: imageUri }}
           style={styles.image}
           contentFit="cover"
           transition={200}
+          onError={() => setImageUri(FALLBACK_IMAGE)}
         />
 
         {/* Gradient overlay — heavy at bottom like Tinder */}
