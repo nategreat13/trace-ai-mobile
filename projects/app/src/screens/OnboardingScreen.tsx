@@ -266,7 +266,7 @@ export default function OnboardingScreen() {
         title={steps[step].title}
         subtitle={steps[step].subtitle}
         canProceed={steps[step].canProceed}
-        showLogo={step === 0 && !existingProfileId}
+        showLogo={!existingProfileId}
         onNext={() => {
           if (step < steps.length - 1) setStep(step + 1);
           else handleFinish();
