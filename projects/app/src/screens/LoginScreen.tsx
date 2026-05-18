@@ -18,7 +18,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { login, signup, requestPasswordReset } from "../services/auth";
 import { logEvent } from "../lib/analytics";
-import { LinearGradient } from "expo-linear-gradient";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -119,34 +118,29 @@ export default function LoginScreen() {
           <View style={{
             flexDirection: "row",
             backgroundColor: theme.muted,
-            borderRadius: 14,
-            padding: 4,
+            borderRadius: 12,
+            padding: 3,
             marginBottom: 20,
           }}>
             {(["Sign Up", "Sign In"] as const).map((label) => {
               const active = label === "Sign Up" ? isSignup : !isSignup;
-              return active ? (
-                <LinearGradient
-                  key={label}
-                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ flex: 1, borderRadius: 10 }}
-                >
-                  <TouchableOpacity
-                    onPress={() => setIsSignup(label === "Sign Up")}
-                    style={{ paddingVertical: 11, alignItems: "center" }}
-                  >
-                    <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>{label}</Text>
-                  </TouchableOpacity>
-                </LinearGradient>
-              ) : (
+              return (
                 <TouchableOpacity
                   key={label}
                   onPress={() => setIsSignup(label === "Sign Up")}
-                  style={{ flex: 1, paddingVertical: 11, alignItems: "center", borderRadius: 10 }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 9,
+                    alignItems: "center",
+                    borderRadius: 10,
+                    backgroundColor: active ? theme.background : "transparent",
+                  }}
                 >
-                  <Text style={{ fontSize: 15, fontWeight: "600", color: theme.mutedForeground }}>{label}</Text>
+                  <Text style={{
+                    fontSize: 14,
+                    fontWeight: active ? "700" : "500",
+                    color: active ? colors.brand.traceRed : theme.mutedForeground,
+                  }}>{label}</Text>
                 </TouchableOpacity>
               );
             })}
