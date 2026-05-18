@@ -17,8 +17,20 @@ import {
   Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { col, UserProfile, DealAlert } from "@trace/shared";
+import { col, UserProfile, DealAlert, SavedDeal } from "@trace/shared";
 import { getEnv } from "../lib/env";
+
+/**
+ * A flightDeals Firestore doc as it actually exists at runtime: the
+ * `SavedDeal` shape, with `id` guaranteed (we always set it from the
+ * doc id), plus an optional `dateString` because some older saved
+ * docs stored the source Deal's `dateString` instead of (or alongside)
+ * `travelWindow`. Read-tolerant typing.
+ */
+export type SavedDealRecord = SavedDeal & {
+  id: string;
+  dateString?: string;
+};
 
 /**
  * Env-aware wrapper around `firebase/firestore`'s `collection(db, name)`.
@@ -164,14 +176,19 @@ export async function saveDeal(data: Record<string, any>): Promise<string> {
   return ref.id;
 }
 
-export async function getSavedDeals(userId: string) {
+export async function getSavedDeals(userId: string): Promise<SavedDealRecord[]> {
   const q = query(
     envCollection("flightDeals"),
     where("userId", "==", userId),
     orderBy("createdAt", "desc")
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // The spread of `d.data()` (DocumentData = { [k: string]: any })
+  // loses its index signature in TS unless we widen explicitly.
+  // Casting to SavedDealRecord here keeps field access typed at
+  // every call site instead of producing the bare `{ id: string }`
+  // TS would otherwise infer.
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavedDealRecord));
 }
 
 export async function deleteSavedDeal(docId: string): Promise<void> {
@@ -180,7 +197,7 @@ export async function deleteSavedDeal(docId: string): Promise<void> {
 
 export function subscribeToSavedDeals(
   userId: string,
-  callback: (deals: any[]) => void
+  callback: (deals: SavedDealRecord[]) => void
 ): Unsubscribe {
   const q = query(
     envCollection("flightDeals"),
@@ -188,7 +205,7 @@ export function subscribeToSavedDeals(
     orderBy("createdAt", "desc")
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavedDealRecord)));
   });
 }
 
