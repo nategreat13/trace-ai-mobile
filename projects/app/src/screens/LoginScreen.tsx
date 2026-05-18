@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { login, signup, requestPasswordReset } from "../services/auth";
 import { logEvent } from "../lib/analytics";
+import { LinearGradient } from "expo-linear-gradient";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -100,7 +101,7 @@ export default function LoginScreen() {
         style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}
       >
         {/* Logo */}
-        <View style={{ alignItems: "center", marginBottom: 32 }}>
+        <View style={{ alignItems: "center", marginBottom: 28 }}>
           <Image
             source={require("../../assets/Bluelogo.png")}
             style={{ width: 56, height: 56, resizeMode: "contain", marginBottom: 10 }}
@@ -112,6 +113,45 @@ export default function LoginScreen() {
             Your next adventure starts with a swipe
           </Text>
         </View>
+
+        {/* Sign In / Sign Up tab toggle */}
+        {!isForgot && (
+          <View style={{
+            flexDirection: "row",
+            backgroundColor: theme.muted,
+            borderRadius: 14,
+            padding: 4,
+            marginBottom: 20,
+          }}>
+            {(["Sign Up", "Sign In"] as const).map((label) => {
+              const active = label === "Sign Up" ? isSignup : !isSignup;
+              return active ? (
+                <LinearGradient
+                  key={label}
+                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ flex: 1, borderRadius: 10 }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setIsSignup(label === "Sign Up")}
+                    style={{ paddingVertical: 11, alignItems: "center" }}
+                  >
+                    <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>{label}</Text>
+                  </TouchableOpacity>
+                </LinearGradient>
+              ) : (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => setIsSignup(label === "Sign Up")}
+                  style={{ flex: 1, paddingVertical: 11, alignItems: "center", borderRadius: 10 }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: theme.mutedForeground }}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Form */}
         <View style={{ gap: 12 }}>
@@ -199,19 +239,6 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Signup ↔ signin toggle (hidden while forgot mode is active) */}
-        {!isForgot && (
-          <TouchableOpacity
-            onPress={() => setIsSignup(!isSignup)}
-            style={{ marginTop: 20, alignItems: "center" }}
-          >
-            <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>
-              {isSignup
-                ? "Already have an account? Sign In"
-                : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
-        )}
 
       </KeyboardAvoidingView>
     </SafeAreaView>
