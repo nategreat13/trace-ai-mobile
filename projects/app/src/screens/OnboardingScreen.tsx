@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, Alert, useColorScheme, Platform } from "react-native";
 import * as Updates from "expo-updates";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
@@ -260,48 +259,28 @@ export default function OnboardingScreen() {
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={{ flex: 1, justifyContent: "center" }}>
-        {step === 0 && !existingProfileId && (
-          <View style={{ alignItems: "center", marginBottom: 24 }}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>✈️</Text>
-            <Text
-              style={{
-                fontSize: 24,
-                fontWeight: "800",
-                color: theme.foreground,
-                marginBottom: 4,
-              }}
-            >
-              Trace Travel
-            </Text>
-            <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-              Let's personalize your deal experience
-            </Text>
-          </View>
-        )}
-
-        <OnboardingStep
-          step={step}
-          totalSteps={steps.length}
-          title={steps[step].title}
-          subtitle={steps[step].subtitle}
-          canProceed={steps[step].canProceed}
-          onNext={() => {
-            if (step < steps.length - 1) setStep(step + 1);
-            else handleFinish();
-          }}
-          onBack={() => setStep(step - 1)}
-        >
-          {steps[step].content}
-        </OnboardingStep>
-      </View>
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <OnboardingStep
+        step={step}
+        totalSteps={steps.length}
+        title={steps[step].title}
+        subtitle={steps[step].subtitle}
+        canProceed={steps[step].canProceed}
+        showLogo={step === 0 && !existingProfileId}
+        onNext={() => {
+          if (step < steps.length - 1) setStep(step + 1);
+          else handleFinish();
+        }}
+        onBack={() => setStep(step - 1)}
+      >
+        {steps[step].content}
+      </OnboardingStep>
 
       <PersonalityReveal
         visible={showPersonality}
         personality={generatedPersonality}
         onContinue={handleContinue}
       />
-    </SafeAreaView>
+    </View>
   );
 }

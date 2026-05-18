@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   useColorScheme,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { colors } from "../../theme/colors";
@@ -18,6 +20,7 @@ interface OnboardingStepProps {
   onNext: () => void;
   onBack: () => void;
   children: React.ReactNode;
+  showLogo?: boolean;
 }
 
 export default function OnboardingStep({
@@ -29,12 +32,43 @@ export default function OnboardingStep({
   onNext,
   onBack,
   children,
+  showLogo,
 }: OnboardingStepProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(18)).current;
+
+  useEffect(() => {
+    fadeAnim.setValue(0);
+    slideAnim.setValue(18);
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [step]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+      {/* Logo — first step of fresh signup only */}
+      {showLogo && (
+        <View style={styles.logoRow}>
+          <Image
+            source={require("../../../assets/Bluelogo.png")}
+            style={styles.logo}
+          />
+        </View>
+      )}
+
       {/* Progress dots */}
       <View style={styles.progressRow}>
         {Array.from({ length: totalSteps }).map((_, i) => (
@@ -42,25 +76,29 @@ export default function OnboardingStep({
             key={i}
             style={[
               styles.dot,
-              {
-                backgroundColor:
-                  i <= step ? colors.brand.traceRed : theme.border,
-              },
+              i <= step
+                ? [styles.dotActive, { backgroundColor: colors.brand.traceRed }]
+                : { backgroundColor: theme.border },
             ]}
           />
         ))}
       </View>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.foreground }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
-          {subtitle}
-        </Text>
-      </View>
-
-      {/* Content */}
-      <View style={styles.content}>{children}</View>
+      {/* Animated header + content */}
+      <Animated.View
+        style={[
+          styles.animatedBody,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+        ]}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.foreground }]}>{title}</Text>
+          <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
+            {subtitle}
+          </Text>
+        </View>
+        <View style={styles.content}>{children}</View>
+      </Animated.View>
 
       {/* Footer buttons */}
       <View style={styles.footer}>
@@ -74,7 +112,6 @@ export default function OnboardingStep({
             </Text>
           </TouchableOpacity>
         )}
-
         <TouchableOpacity
           onPress={onNext}
           disabled={!canProceed}
@@ -95,22 +132,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  logoRow: {
+    alignItems: "center",
+    paddingTop: 20,
+    paddingBottom: 4,
+  },
+  logo: {
+    width: 48,
+    height: 48,
+    resizeMode: "contain",
+  },
   progressRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    gap: 8,
-    paddingTop: 16,
+    gap: 6,
+    paddingTop: 20,
     paddingHorizontal: 24,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    height: 8,
+    width: 8,
+    borderRadius: 4,
+  },
+  dotActive: {
+    width: 22,
+    height: 8,
+    borderRadius: 4,
+  },
+  animatedBody: {
+    flex: 1,
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 28,
     paddingBottom: 8,
   },
   title: {
