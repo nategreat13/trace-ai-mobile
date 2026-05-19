@@ -388,6 +388,28 @@ export default function DiagnosticsScreen() {
               Reload app
             </Text>
           </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("PremiumWelcome")}
+            style={{
+              paddingVertical: 14,
+              borderRadius: 10,
+              backgroundColor: "#FF655B",
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>Preview Premium Welcome</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => navigation.navigate("BusinessWelcome")}
+            style={{
+              paddingVertical: 14,
+              borderRadius: 10,
+              backgroundColor: "#F59E0B",
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700" }}>Preview Business Welcome</Text>
+          </Pressable>
           {authUid && (
             <Pressable
               onPress={handleSignOut}
