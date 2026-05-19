@@ -128,7 +128,7 @@ function ConfettiPiece({ piece }: { piece: ConfettiPieceData }) {
 
 // ─── Feature row ──────────────────────────────────────────────────────────────
 
-type Feature = { emoji: string; label: string };
+type Feature = { emoji: string; label: string; hint: string };
 
 function FeatureRow({
   feature,
@@ -183,9 +183,14 @@ function FeatureRow({
       >
         <Text style={{ fontSize: 22 }}>{feature.emoji}</Text>
       </View>
-      <Text style={{ fontSize: 15, fontWeight: "600", color: theme.foreground, flex: 1 }}>
-        {feature.label}
-      </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 15, fontWeight: "700", color: theme.foreground, marginBottom: 2 }}>
+          {feature.label}
+        </Text>
+        <Text style={{ fontSize: 12, color: theme.mutedForeground, lineHeight: 16 }}>
+          {feature.hint}
+        </Text>
+      </View>
     </Animated.View>
   );
 }
@@ -218,16 +223,16 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
 
   const features: Feature[] = isPremium
     ? [
-        { emoji: "♾️", label: "Unlimited swipes every day" },
-        { emoji: "💾", label: "Save as many deals as you want" },
-        { emoji: "🔍", label: "Full Explore access" },
-        { emoji: "🔔", label: "Priority deal alerts" },
+        { emoji: "♾️", label: "Unlimited swipes", hint: "No daily cap — swipe as much as you want" },
+        { emoji: "💾", label: "Save any deal", hint: "Tap the Trace button while swiping to save" },
+        { emoji: "🔍", label: "Explore tab", hint: "Browse deals by destination — bottom nav" },
+        { emoji: "🔔", label: "Deal alerts", hint: "Open any deal → tap Set Alert" },
       ]
     : [
-        { emoji: "✈️", label: "Exclusive business class deals" },
-        { emoji: "⏰", label: "48-hour early access to new deals" },
-        { emoji: "♾️", label: "Unlimited everything" },
-        { emoji: "🏆", label: "VIP priority support" },
+        { emoji: "✈️", label: "Business class deals", hint: "They'll appear right in your swipe deck" },
+        { emoji: "⏰", label: "48-hour early access", hint: "You see new deals before anyone else" },
+        { emoji: "🔍", label: "Explore tab", hint: "Browse deals by destination — bottom nav" },
+        { emoji: "🔔", label: "Deal alerts", hint: "Open any deal → tap Set Alert" },
       ];
 
   const heroScale = useSharedValue(0);
