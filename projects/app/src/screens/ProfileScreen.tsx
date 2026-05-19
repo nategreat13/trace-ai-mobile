@@ -7,7 +7,6 @@ import {
   Alert,
   ScrollView,
   Share,
-  Image as RNImage,
   Pressable as RNPressable,
   useColorScheme,
   Modal,
@@ -172,12 +171,9 @@ export default function ProfileScreen() {
 
   const handleShare = async () => {
     try {
-      const img = RNImage.resolveAssetSource(require("../../assets/1.png"));
       await Share.share({
-        title: "Trace Travel",
         message:
-          "Found this app called Trace — it finds insane flight deals. Worth downloading ✈️\nhttps://apps.apple.com/us/app/trace-travel/id6760838076",
-        url: img.uri,
+          "Found this app called Trace — it finds insane flight deals and you just swipe. Worth downloading 👉 https://apps.apple.com/us/app/trace-travel/id6760838076",
       });
     } catch {}
   };
@@ -945,6 +941,14 @@ export default function ProfileScreen() {
       <PromoCodeModal
         visible={showPromoModal}
         onClose={() => setShowPromoModal(false)}
+        onSuccess={(tier) => {
+          setShowPromoModal(false);
+          if (tier === "business") {
+            navigation.navigate("BusinessWelcome");
+          } else {
+            navigation.navigate("PremiumWelcome");
+          }
+        }}
       />
 
       {/* Name edit modal */}

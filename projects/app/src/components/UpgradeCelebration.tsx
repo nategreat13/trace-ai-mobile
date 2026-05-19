@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Dimensions,
   ScrollView,
+  Image,
   useColorScheme,
 } from "react-native";
 import Animated, {
@@ -164,8 +165,8 @@ function FeatureRow({
           alignItems: "center",
           backgroundColor: isDark ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.85)",
           borderRadius: 14,
-          padding: 14,
-          gap: 14,
+          padding: 12,
+          gap: 12,
           borderWidth: 1,
           borderColor: accentColor + "28",
         },
@@ -173,15 +174,15 @@ function FeatureRow({
     >
       <View
         style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
+          width: 40,
+          height: 40,
+          borderRadius: 20,
           backgroundColor: accentColor + "1A",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Text style={{ fontSize: 22 }}>{feature.emoji}</Text>
+        <Text style={{ fontSize: 20 }}>{feature.emoji}</Text>
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ fontSize: 15, fontWeight: "700", color: theme.foreground, marginBottom: 2 }}>
@@ -214,7 +215,10 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
     ? isDark ? ["#1c0809", "#2a0d10"] : ["#fff6f6", "#fff0f4"]
     : isDark ? ["#1c1500", "#2a2000"] : ["#fffdf5", "#fff8e1"];
 
-  const heroEmoji = isPremium ? "✈️" : "👑";
+  // Premium uses the Trace blue icon; Business uses the "2" tier icon.
+  const heroLogo = isPremium
+    ? require("../../assets/Bluelogo.png")
+    : require("../../assets/2.png");
 
   const title = isPremium ? "Welcome to\nPremium" : "Welcome to\nBusiness Class";
   const subtitle = isPremium
@@ -320,9 +324,9 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
                   glowStyle,
                   {
                     position: "absolute",
-                    width: 130,
-                    height: 130,
-                    borderRadius: 65,
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
                     backgroundColor: accentColor,
                     opacity: 0.12,
                   },
@@ -332,9 +336,9 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
                 style={[
                   heroStyle,
                   {
-                    width: 104,
-                    height: 104,
-                    borderRadius: 52,
+                    width: 100,
+                    height: 100,
+                    borderRadius: 50,
                     backgroundColor: accentColor + "1E",
                     alignItems: "center",
                     justifyContent: "center",
@@ -343,7 +347,10 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
                   },
                 ]}
               >
-                <Text style={{ fontSize: 52 }}>{heroEmoji}</Text>
+                <Image
+                  source={heroLogo}
+                  style={{ width: 56, height: 56, resizeMode: "contain" }}
+                />
               </Animated.View>
             </View>
 
@@ -352,12 +359,12 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
               style={[
                 titleStyle,
                 {
-                  fontSize: 38,
+                  fontSize: 34,
                   fontWeight: "900",
                   color: theme.foreground,
                   textAlign: "center",
-                  lineHeight: 44,
-                  marginBottom: 14,
+                  lineHeight: 40,
+                  marginBottom: 10,
                 },
               ]}
             >
@@ -372,7 +379,7 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
                   height: 4,
                   borderRadius: 2,
                   backgroundColor: accentColor,
-                  marginBottom: 18,
+                  marginBottom: 12,
                 },
               ]}
             />
@@ -382,11 +389,11 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
               style={[
                 subtitleStyle,
                 {
-                  fontSize: 15,
+                  fontSize: 14,
                   color: theme.mutedForeground,
                   textAlign: "center",
-                  lineHeight: 23,
-                  marginBottom: 36,
+                  lineHeight: 21,
+                  marginBottom: 24,
                   paddingHorizontal: 8,
                 },
               ]}
@@ -395,7 +402,7 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
             </Animated.Text>
 
             {/* Features */}
-            <View style={{ width: "100%", gap: 12, marginBottom: 40 }}>
+            <View style={{ width: "100%", gap: 8, marginBottom: 24 }}>
               {features.map((f, i) => (
                 <FeatureRow
                   key={i}
@@ -441,13 +448,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 28,
-    paddingVertical: 32,
+    paddingTop: 48,
+    paddingBottom: 32,
   },
   heroContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 32,
-    height: 130,
-    width: 130,
+    marginBottom: 22,
+    height: 120,
+    width: 120,
   },
 });

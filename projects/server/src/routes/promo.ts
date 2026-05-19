@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { colRef, getDb } from "../firebase";
+import { getEnv } from "../env";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 import { grantPromotionalEntitlement } from "../lib/revenuecat-rest";
 
@@ -111,18 +112,28 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
     return;
   }
 
-  try {
-    await grantPromotionalEntitlement({
-      appUserId: userId,
-      entitlementId,
-      endTimeMs,
-    });
-  } catch (err: any) {
-    console.error("[redeem-promo] RC grant failed:", err?.message);
-    res.status(502).json({
-      error: "Failed to grant the entitlement. Please try again in a moment.",
-    });
-    return;
+  // In staging we skip the live RC grant — RC is not exercised in staging
+  // (IAP is stubbed on the client), and the only goal of a staging promo
+  // redemption is to test the Firestore write + welcome-screen UI flow.
+  // The direct userProfile write below is sufficient for that.
+  if (getEnv() !== "staging") {
+    try {
+      await grantPromotionalEntitlement({
+        appUserId: userId,
+        entitlementId,
+        endTimeMs,
+      });
+    } catch (err: any) {
+      console.error("[redeem-promo] RC grant failed:", err?.message);
+      res.status(502).json({
+        error: "Failed to grant the entitlement. Please try again in a moment.",
+      });
+      return;
+    }
+  } else {
+    console.log(
+      `[redeem-promo] staging: skipping RC grant for ${userId}, entitlement=${entitlementId}`
+    );
   }
 
   // Mirror the granted tier to the user's userProfile directly. RC's

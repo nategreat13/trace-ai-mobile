@@ -33,6 +33,7 @@ import {
   createSwipeAction,
   getSwipeActions,
   saveDeal,
+  updateUserProfile,
 } from "../services/firestore";
 import {
   MAX_DAILY_SWIPES,
@@ -293,17 +294,23 @@ export default function SwipeDeckScreen() {
   async function doShare(deal: Deal, name: string) {
     try {
       const shareId = await createShare(deal, user!.uid, name);
+      // Do NOT pass `url` — it's already embedded in `message`. On iOS the
+      // share sheet appends `url` to the message automatically, which would
+      // print the App Store link twice.
       await Share.share({
         title: `${deal.destination} deal on Trace`,
         message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Download Trace to see it 👉 https://apps.apple.com/us/app/trace-travel/id6760838076`,
-        url: `https://apps.apple.com/us/app/trace-travel/id6760838076`,
       });
     } catch {}
   }
 
   function handleShareDeal() {
     if (!expandedDeal || !user) return;
-    const name = profile?.displayName || user.displayName;
+    // Prefer the Firebase Auth displayName (set by Google/Apple sign-in).
+    // Fall back to the Firestore profile name, but skip "Travel Explorer" —
+    // that's the placeholder set during onboarding, not the user's real name.
+    const rawName = user.displayName || profile?.displayName;
+    const name = rawName && rawName !== "Travel Explorer" ? rawName : null;
     if (!name) {
       setPendingShareDeal(expandedDeal);
       setShowShareNamePrompt(true);
@@ -1022,6 +1029,8 @@ export default function SwipeDeckScreen() {
           setShowShareNamePrompt(false);
           if (pendingShareDeal) doShare(pendingShareDeal, name);
           setPendingShareDeal(null);
+          // Persist so they're never asked again
+          if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
         }}
       />
 
