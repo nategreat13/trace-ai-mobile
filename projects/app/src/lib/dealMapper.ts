@@ -1,5 +1,22 @@
 import { Deal } from "@trace/shared";
 
+/**
+ * Hand-curated image overrides keyed by destination name (lowercase).
+ * When the external API returns a deal whose destination matches one of
+ * these keys, we substitute the preferred image URL instead of whatever
+ * the API sent. Add new entries here to swap out any deal image without
+ * needing a server deploy or Firestore edit.
+ */
+const DESTINATION_IMAGE_OVERRIDES: Record<string, string> = {
+  florence: "https://images.pexels.com/photos/18101408/pexels-photo-18101408.jpeg?cs=srgb&dl=pexels-dico-baskoro-693731013-18101408.jpg&fm=jpg",
+};
+
+function applyImageOverride(destination: string | undefined, imageUrl: string | undefined): string | undefined {
+  if (!destination) return imageUrl;
+  const key = destination.toLowerCase().trim();
+  return DESTINATION_IMAGE_OVERRIDES[key] ?? imageUrl;
+}
+
 function mapApiTypeToOurType(apiTypeString: string | undefined): string | null {
   if (!apiTypeString) return null;
   const lower = apiTypeString.toLowerCase();
@@ -37,7 +54,10 @@ export function mapApiDealToLocal(deal: any): Deal {
     travel_window: deal.dateString,
     dateString: deal.dateString,
     deal_type: mapApiTypeToOurType(deal.type),
-    image_url: deal.imageUrl || deal.image_url || deal.image || deal.photo || deal.picture,
+    image_url: applyImageOverride(
+      deal.destination || deal.city || deal.destinationCity,
+      deal.imageUrl || deal.image_url || deal.image || deal.photo || deal.picture
+    ),
     ai_insight: deal.aiInsight || deal.ai_insight || deal.insight || deal.description,
     vibe_description: deal.vibeDescription || deal.vibe_description || deal.vibe || deal.summary,
     continent: deal.continent || deal.region || deal.area,
