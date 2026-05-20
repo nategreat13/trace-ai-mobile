@@ -13,7 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as Updates from "expo-updates";
-import * as Application from "expo-application";
 import Constants from "expo-constants";
 import { signOut } from "firebase/auth";
 import type { TraceEnv } from "@trace/shared";
@@ -171,10 +170,28 @@ function DiagnosticsScreenInner() {
   const gitSha = safe(() => extra.gitSha ?? "", "");
   const buildTimestamp = safe(() => extra.buildTimestamp ?? 0, 0);
 
+  // App version + bundle ID come from `Constants.expoConfig` — a plain
+  // in-memory JS object populated at build time. We deliberately do NOT
+  // use `expo-application` here: it's a native TurboModule, and on
+  // release builds invoking it threw an NSException whose RN
+  // exception-to-JSError conversion corrupted the Hermes heap and
+  // hard-crashed the app (EXC_BAD_ACCESS) — the long-standing
+  // "diagnostics screen crashes on device" bug. expo-constants reads
+  // require no native method invocation, so they can't reproduce that.
+  const appVersion = safe(() => String(Constants.expoConfig?.version ?? ""), "");
+  const bundleId = safe(
+    () =>
+      String(
+        (Platform.OS === "ios"
+          ? Constants.expoConfig?.ios?.bundleIdentifier
+          : Constants.expoConfig?.android?.package) ?? ""
+      ),
+    ""
+  );
+
   const rows: Row[] = [
     { label: "Environment", value: safe(() => env.toUpperCase(), "") },
-    { label: "App version", value: safe(() => Application.nativeApplicationVersion ?? "", "") },
-    { label: "Build number", value: safe(() => Application.nativeBuildVersion ?? "", "") },
+    { label: "App version", value: appVersion },
     { label: "Runtime version", value: safe(() => String(Updates.runtimeVersion ?? ""), "") },
     { label: "OTA channel", value: safe(() => Updates.channel ?? "", "") },
     { label: "OTA update ID", value: safe(() => Updates.updateId ?? "(embedded bundle)", "") },
@@ -184,7 +201,7 @@ function DiagnosticsScreenInner() {
       label: "Platform",
       value: safe(() => `${Platform.OS} ${String(Platform.Version ?? "")}`, ""),
     },
-    { label: "Bundle ID", value: safe(() => Application.applicationId ?? "", "") },
+    { label: "Bundle ID", value: bundleId },
     { label: "Auth UID", value: safe(() => authUid ?? "(not signed in)", ""), copy: true },
     {
       label: "Firebase project",
