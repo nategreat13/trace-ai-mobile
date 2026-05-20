@@ -23,6 +23,7 @@ import { auth } from "../services/firebase";
 import { getEnv, setEnv } from "../lib/env";
 import { API_BASE_URL } from "../lib/constants";
 import firebaseApp from "../../firebaseConfig";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 /**
  * Hidden diagnostics screen. Accessed via a 3-second long-press on the
@@ -78,7 +79,7 @@ function fmtTimestamp(unixSeconds: number): string {
   }
 }
 
-export default function DiagnosticsScreen() {
+function DiagnosticsScreenInner() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const navigation = useNavigation<Nav>();
@@ -426,5 +427,32 @@ export default function DiagnosticsScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Default export wraps the screen in an ErrorBoundary. The screen has
+ * had an unexplained crash on release devices that didn't reproduce on
+ * the emulator and survived a defensive `safe()` pass. The boundary
+ * converts any JS render error into an on-screen message — both keeping
+ * the app alive AND surfacing the exact error text so it can finally be
+ * diagnosed. If the app still hard-crashes past this, the cause is
+ * native (the boundary can't catch native faults).
+ */
+export default function DiagnosticsScreen() {
+  const navigation = useNavigation<Nav>();
+  return (
+    <ErrorBoundary
+      label="Diagnostics"
+      onClose={() => {
+        try {
+          navigation.goBack();
+        } catch {
+          // best-effort
+        }
+      }}
+    >
+      <DiagnosticsScreenInner />
+    </ErrorBoundary>
   );
 }
