@@ -11,10 +11,16 @@ const DESTINATION_IMAGE_OVERRIDES: Record<string, string> = {
   florence: "https://images.pexels.com/photos/18101408/pexels-photo-18101408.jpeg?cs=srgb&dl=pexels-dico-baskoro-693731013-18101408.jpg&fm=jpg",
 };
 
-function applyImageOverride(destination: string | undefined, imageUrl: string | undefined): string | undefined {
-  if (!destination) return imageUrl;
-  const key = destination.toLowerCase().trim();
-  return DESTINATION_IMAGE_OVERRIDES[key] ?? imageUrl;
+function applyImageOverride(
+  destination: string | undefined,
+  imageUrl: string | undefined
+): string {
+  // Always returns a string — `Deal.image_url` is non-nullable. Falls
+  // back to "" when neither an override nor an API image is present
+  // (matches the pre-override behavior where the raw `any` chain could
+  // also yield undefined; "" is the safe non-null value).
+  const key = (destination ?? "").toLowerCase().trim();
+  return DESTINATION_IMAGE_OVERRIDES[key] ?? imageUrl ?? "";
 }
 
 function mapApiTypeToOurType(apiTypeString: string | undefined): string | null {
