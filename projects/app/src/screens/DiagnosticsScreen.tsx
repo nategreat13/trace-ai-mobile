@@ -69,6 +69,41 @@ function safe<T>(fn: () => T, fallback = "" as unknown as T): T {
   }
 }
 
+/**
+ * Like safe(), but GUARANTEES a string. Diagnostics row values are
+ * rendered directly as React children (`<Text>{row.value}</Text>`), and
+ * a non-string there throws "Objects are not valid as a React child"
+ * and takes the whole screen down.
+ *
+ * `Updates.channel` / `Updates.updateId` and friends are typed
+ * `string | null`, but a native module can hand back something the
+ * types don't promise (an object, a Date — anything with no enumerable
+ * keys renders as the cryptic "object with keys {}"). Rather than trust
+ * the types, every row value goes through here: strings pass clean,
+ * primitives stringify, and anything else renders as a visibly-tagged
+ * `[object] {...}` so the offending row is obvious on screen instead of
+ * crashing the screen.
+ */
+function safeStr(fn: () => unknown, fallback = ""): string {
+  try {
+    const v = fn();
+    if (v == null) return fallback;
+    if (typeof v === "string") return v;
+    if (typeof v === "number" || typeof v === "boolean" || typeof v === "bigint") {
+      return String(v);
+    }
+    let json: string;
+    try {
+      json = JSON.stringify(v);
+    } catch {
+      json = "(unstringifiable)";
+    }
+    return `[${typeof v}] ${json}`;
+  } catch {
+    return fallback;
+  }
+}
+
 function fmtTimestamp(unixSeconds: number): string {
   if (!unixSeconds) return "";
   try {
@@ -178,42 +213,54 @@ function DiagnosticsScreenInner() {
   // hard-crashed the app (EXC_BAD_ACCESS) — the long-standing
   // "diagnostics screen crashes on device" bug. expo-constants reads
   // require no native method invocation, so they can't reproduce that.
-  const appVersion = safe(() => String(Constants.expoConfig?.version ?? ""), "");
-  const bundleId = safe(
-    () =>
-      String(
-        (Platform.OS === "ios"
-          ? Constants.expoConfig?.ios?.bundleIdentifier
-          : Constants.expoConfig?.android?.package) ?? ""
-      ),
-    ""
-  );
-
+  // Every row value goes through safeStr() — guaranteed string, so the
+  // render (`<Text>{row.value}</Text>`) can never hit the "Objects are
+  // not valid as a React child" crash regardless of what a native
+  // module hands back.
   const rows: Row[] = [
-    { label: "Environment", value: safe(() => env.toUpperCase(), "") },
-    { label: "App version", value: appVersion },
-    { label: "Runtime version", value: safe(() => String(Updates.runtimeVersion ?? ""), "") },
-    { label: "OTA channel", value: safe(() => Updates.channel ?? "", "") },
-    { label: "OTA update ID", value: safe(() => Updates.updateId ?? "(embedded bundle)", "") },
-    { label: "Git SHA", value: gitSha, copy: true },
-    { label: "Build timestamp (UTC)", value: fmtTimestamp(buildTimestamp) },
+    { label: "Environment", value: safeStr(() => env.toUpperCase()) },
+    {
+      label: "App version",
+      value: safeStr(() => Constants.expoConfig?.version, "(unknown)"),
+    },
+    { label: "Runtime version", value: safeStr(() => Updates.runtimeVersion) },
+    { label: "OTA channel", value: safeStr(() => Updates.channel, "(none)") },
+    {
+      label: "OTA update ID",
+      value: safeStr(() => Updates.updateId, "(embedded bundle)"),
+    },
+    { label: "Git SHA", value: safeStr(() => gitSha), copy: true },
+    { label: "Build timestamp (UTC)", value: safeStr(() => fmtTimestamp(buildTimestamp)) },
     {
       label: "Platform",
-      value: safe(() => `${Platform.OS} ${String(Platform.Version ?? "")}`, ""),
+      value: safeStr(() => `${Platform.OS} ${String(Platform.Version ?? "")}`),
     },
-    { label: "Bundle ID", value: bundleId },
-    { label: "Auth UID", value: safe(() => authUid ?? "(not signed in)", ""), copy: true },
+    {
+      label: "Bundle ID",
+      value: safeStr(
+        () =>
+          Platform.OS === "ios"
+            ? Constants.expoConfig?.ios?.bundleIdentifier
+            : Constants.expoConfig?.android?.package,
+        "(unknown)"
+      ),
+    },
+    {
+      label: "Auth UID",
+      value: safeStr(() => authUid, "(not signed in)"),
+      copy: true,
+    },
     {
       label: "Firebase project",
-      value: safe(() => firebaseApp?.options?.projectId ?? "", ""),
+      value: safeStr(() => firebaseApp?.options?.projectId),
     },
-    { label: "API base URL", value: safe(() => API_BASE_URL, ""), copy: true },
-    { label: "Dev API URL override", value: safe(() => extra.devApiUrl ?? "", "") },
+    { label: "API base URL", value: safeStr(() => API_BASE_URL), copy: true },
+    { label: "Dev API URL override", value: safeStr(() => extra.devApiUrl, "(none)") },
     {
       label: "Hermes enabled",
       // `global.HermesInternal` exists on Hermes; reading `global` in
       // strict mode has been known to throw on some RN versions.
-      value: safe(() => String(!!(globalThis as any).HermesInternal), ""),
+      value: safeStr(() => !!(globalThis as any).HermesInternal),
     },
   ];
 
