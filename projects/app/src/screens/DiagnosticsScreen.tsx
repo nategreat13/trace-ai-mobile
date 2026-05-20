@@ -255,7 +255,19 @@ function DiagnosticsScreenInner() {
       value: safeStr(() => firebaseApp?.options?.projectId),
     },
     { label: "API base URL", value: safeStr(() => API_BASE_URL), copy: true },
-    { label: "Dev API URL override", value: safeStr(() => extra.devApiUrl, "(none)") },
+    {
+      label: "Dev API URL override",
+      // extra.devApiUrl is meant to be a URL string (local dev) or
+      // null (production). In the prod manifest it actually comes
+      // through as an empty object {} — harmless since this value is
+      // only ever consulted under __DEV__ elsewhere, but it has to be
+      // string-gated here or it renders as the tagged "[object] {}".
+      // Only show a genuine non-empty string; anything else → "(none)".
+      value: safeStr(() => {
+        const v = extra.devApiUrl;
+        return typeof v === "string" && v.length > 0 ? v : "(none)";
+      }),
+    },
     {
       label: "Hermes enabled",
       // `global.HermesInternal` exists on Hermes; reading `global` in
