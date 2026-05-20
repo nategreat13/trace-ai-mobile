@@ -35,6 +35,12 @@ const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 //   firebase functions:secrets:set SLACK_SUPPORT_WEBHOOK_URL
 const slackSupportWebhookUrl = defineSecret("SLACK_SUPPORT_WEBHOOK_URL");
 
+// Meta Conversions API access token. Read by lib/ad-conversions.ts to
+// fire server-side purchase / signup events to Meta for ad attribution.
+// Set with:
+//   firebase functions:secrets:set META_CAPI_ACCESS_TOKEN
+const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
+
 /**
  * Prod API. Wraps the Express app in `runWithEnv("prod", …)` so every
  * Firestore read/write inside the request handler resolves to the
@@ -43,7 +49,7 @@ const slackSupportWebhookUrl = defineSecret("SLACK_SUPPORT_WEBHOOK_URL");
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps
@@ -70,7 +76,7 @@ export const api = onRequest(
 export const apiStaging = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps

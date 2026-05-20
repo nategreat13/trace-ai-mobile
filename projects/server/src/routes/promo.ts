@@ -4,6 +4,7 @@ import { colRef, getDb } from "../firebase";
 import { getEnv } from "../env";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 import { grantPromotionalEntitlement } from "../lib/revenuecat-rest";
+import { fanOutConversion } from "../lib/ad-conversions";
 
 export const promoRoutes = Router();
 
@@ -226,6 +227,17 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
       // redemption. Logged so we can reconcile.
     }
   }
+
+  // Fire ad platform conversion — $0 value since it's a promo, but Meta
+  // still counts it as a conversion event for campaign optimization.
+  void fanOutConversion({
+    kind: "purchase",
+    userId,
+    email,
+    amountUsd: 0,
+    currency: "USD",
+    productId: `promo_${codeData.tier}`,
+  });
 
   res.json({
     tier: codeData.tier,

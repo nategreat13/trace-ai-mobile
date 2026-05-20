@@ -8,12 +8,16 @@
  *
  * Required env (each platform is optional — if the env is missing, its
  * fan-out is skipped):
- *   - META_PIXEL_ID, META_CAPI_TOKEN
+ *   - META_CAPI_ACCESS_TOKEN  (Firebase secret)
+ *     Dataset ID is hardcoded below — it's not sensitive.
  *   - TIKTOK_APP_ID, TIKTOK_EVENTS_TOKEN
  *   - GA4_MEASUREMENT_ID, GA4_API_SECRET
  */
 
 import crypto from "crypto";
+
+// Meta Dataset ID — not a secret, safe to hardcode.
+const META_DATASET_ID = "1001080219009504";
 
 type ConversionKind = "sign_up" | "start_trial" | "purchase" | "subscribe";
 
@@ -39,9 +43,8 @@ function hashEmail(email: string): string {
 }
 
 async function sendMeta(event: ConversionEvent): Promise<void> {
-  const pixelId = process.env.META_PIXEL_ID;
-  const token = process.env.META_CAPI_TOKEN;
-  if (!pixelId || !token) return;
+  const token = process.env.META_CAPI_ACCESS_TOKEN;
+  if (!token) return;
 
   // Meta event name map
   const eventName =
@@ -79,7 +82,7 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
 
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v18.0/${pixelId}/events?access_token=${encodeURIComponent(token)}`,
+      `https://graph.facebook.com/v21.0/${META_DATASET_ID}/events?access_token=${encodeURIComponent(token)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

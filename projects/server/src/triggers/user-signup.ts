@@ -2,12 +2,14 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { colRef } from "../firebase";
 import { runWithEnv } from "../env";
+import { fanOutConversion } from "../lib/ad-conversions";
 
 /**
  * Slack incoming webhook URL — bound at deploy via Secret Manager.
  * Set with: `firebase functions:secrets:set SLACK_SIGNUP_WEBHOOK_URL`
  */
 const slackSignupWebhookUrl = defineSecret("SLACK_SIGNUP_WEBHOOK_URL");
+const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
 
 /**
  * Fires whenever a new userProfiles document is created. The userProfile
@@ -32,7 +34,15 @@ async function handleUserSignup(event: {
     }
 
     const email: string = data.email ?? "(no email)";
+    const userId: string = data.userId ?? "";
     const homeAirport: string = data.homeAirport ?? "(unknown)";
+
+    // Fire ad platform signup conversion — fire-and-forget, never throws.
+    void fanOutConversion({
+      kind: "sign_up",
+      userId,
+      email: email !== "(no email)" ? email : null,
+    });
     const createdAtRaw: any = data.createdAt;
     const createdAt: Date =
       createdAtRaw?.toDate?.() ??
@@ -115,7 +125,7 @@ async function handleUserSignup(event: {
 export const onUserProfileCreated = onDocumentCreated(
   {
     document: "userProfiles/{id}",
-    secrets: [slackSignupWebhookUrl],
+    secrets: [slackSignupWebhookUrl, metaCapiAccessToken],
   },
   (event) => runWithEnv("prod", () => handleUserSignup(event))
 );
