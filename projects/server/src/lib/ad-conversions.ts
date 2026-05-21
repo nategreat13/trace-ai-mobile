@@ -68,12 +68,23 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
   if (event.currency) customData.currency = event.currency;
   if (event.productId) customData.content_ids = [event.productId];
 
+  // action_source: "website" — NOT "app". An "app" event requires an
+  // `app_data.extinfo` block (16-field device-info array: extinfo
+  // version, OS version, device model, screen size...). Meta hard-
+  // rejects "app" events without it — subcode 2804043, "Invalid
+  // extended device info parameter". These events fire server-side
+  // (Firestore trigger, RC webhook) where we don't have the device in
+  // hand, so we can't build a real extinfo. "website" drops that
+  // requirement; matching is unaffected because Meta matches on the
+  // hashed user_data (email + external_id), not on action_source.
+  // event_source_url is recommended for website events.
   const body = {
     data: [
       {
         event_name: eventName,
         event_time: Math.floor(Date.now() / 1000),
-        action_source: "app",
+        action_source: "website",
+        event_source_url: "https://tracetravel.co",
         user_data: userData,
         custom_data: customData,
       },
