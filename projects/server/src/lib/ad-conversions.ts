@@ -44,7 +44,18 @@ function hashEmail(email: string): string {
 
 async function sendMeta(event: ConversionEvent): Promise<void> {
   const token = process.env.META_CAPI_ACCESS_TOKEN;
-  if (!token) return;
+  if (!token) {
+    // Structured WARNING — the silent early-return here was a debugging
+    // black hole. Now it's a visible, filterable log line.
+    console.warn(
+      JSON.stringify({
+        severity: "WARNING",
+        message: "[AdConversions] Meta skipped — META_CAPI_ACCESS_TOKEN not set",
+        event_kind: event.kind,
+      })
+    );
+    return;
+  }
 
   // Meta event name map
   const eventName =
@@ -100,12 +111,55 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
         body: JSON.stringify(body),
       }
     );
+    const text = await res.text();
     if (!res.ok) {
-      const text = await res.text();
-      console.warn("[AdConversions] Meta error:", res.status, text);
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "[AdConversions] Meta rejected event",
+          event_kind: event.kind,
+          event_name: eventName,
+          http_status: res.status,
+          response: text.slice(0, 800),
+        })
+      );
+      return;
     }
+    // Success path now logs explicitly. Meta's CAPI response includes
+    // `events_received` (should be 1) and an `fbtrace_id` — logging
+    // them gives positive confirmation the event landed, instead of
+    // the old silent success that left us unable to tell "worked" from
+    // "never ran".
+    let eventsReceived: unknown = null;
+    let fbtraceId: unknown = null;
+    try {
+      const parsed = JSON.parse(text);
+      eventsReceived = parsed.events_received;
+      fbtraceId = parsed.fbtrace_id;
+    } catch {
+      /* non-JSON body — leave nulls, raw text logged below */
+    }
+    console.log(
+      JSON.stringify({
+        severity: "INFO",
+        message: "[AdConversions] Meta accepted event",
+        event_kind: event.kind,
+        event_name: eventName,
+        events_received: eventsReceived,
+        fbtrace_id: fbtraceId,
+        raw: eventsReceived == null ? text.slice(0, 300) : undefined,
+      })
+    );
   } catch (err) {
-    console.warn("[AdConversions] Meta fetch failed:", err);
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: "[AdConversions] Meta fetch threw",
+        event_kind: event.kind,
+        event_name: eventName,
+        error: String((err as any)?.message ?? err),
+      })
+    );
   }
 }
 
