@@ -37,8 +37,13 @@ async function handleUserSignup(event: {
     const userId: string = data.userId ?? "";
     const homeAirport: string = data.homeAirport ?? "(unknown)";
 
-    // Fire ad platform signup conversion — fire-and-forget, never throws.
-    void fanOutConversion({
+    // Fire ad platform signup conversion. MUST be awaited — not void'd.
+    // Cloud Functions freezes the instance once the handler's promise
+    // resolves; an un-awaited fetch to Meta gets suspended mid-flight
+    // and never completes (no error, no event — exactly the silent
+    // failure we hit). fanOutConversion swallows all errors internally,
+    // so awaiting it is safe — it can't break the trigger.
+    await fanOutConversion({
       kind: "sign_up",
       userId,
       email: email !== "(no email)" ? email : null,

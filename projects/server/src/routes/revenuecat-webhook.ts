@@ -214,10 +214,13 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
 
         // Fire ad platform conversions for INITIAL_PURCHASE (new sub).
         // RENEWAL is excluded — those are not acquisition events.
+        // Awaited (not void'd): once res.json sends, Cloud Run throttles
+        // CPU and an un-awaited fetch to Meta never completes.
+        // fanOutConversion swallows all errors internally.
         if (type === "INITIAL_PURCHASE") {
           const isTrial = period_type === "TRIAL";
           const email = (profileDoc.data() as { email?: string }).email ?? null;
-          void fanOutConversion({
+          await fanOutConversion({
             kind: isTrial ? "start_trial" : "purchase",
             userId: app_user_id,
             email,

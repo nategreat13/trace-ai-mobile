@@ -230,7 +230,10 @@ promoRoutes.post("/redeem-promo", authenticate, async (req: AuthenticatedRequest
 
   // Fire ad platform conversion — $0 value since it's a promo, but Meta
   // still counts it as a conversion event for campaign optimization.
-  void fanOutConversion({
+  // Awaited (not void'd) and placed before res.json: once the response
+  // is sent, Cloud Run throttles CPU and an un-awaited fetch to Meta
+  // stalls / never completes. fanOutConversion never throws.
+  await fanOutConversion({
     kind: "purchase",
     userId,
     email,
