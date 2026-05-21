@@ -11,14 +11,32 @@ import { getEnv } from "./env";
 // to the same value — passing it here is a no-op there.
 const FIREBASE_PROJECT_ID = "trace-ai-b9cba";
 
-function getApp() {
-  if (!admin.apps.length) {
-    admin.initializeApp({
+// Cached once per instance. We deliberately do NOT re-derive the app
+// from `admin.apps` / `admin.app()` on every call: under the esbuild-
+// bundled CJS interop, `admin.apps.length` was observed truthy while
+// `admin.app()` still threw "The default Firebase app does not exist"
+// — which broke `colRef()` inside the signup trigger (the Slack
+// "user #0" symptom). Initializing once, catching the duplicate-app
+// error, and caching the result sidesteps that flaky registry lookup
+// entirely — every call after the first is just a cache read.
+let cachedApp: ReturnType<typeof admin.initializeApp> | null = null;
+
+function getApp(): ReturnType<typeof admin.initializeApp> {
+  if (cachedApp) return cachedApp;
+  try {
+    cachedApp = admin.initializeApp({
       projectId: FIREBASE_PROJECT_ID,
       credential: admin.credential.applicationDefault(),
     });
+  } catch (err: any) {
+    // app/duplicate-app → the default app already exists; reuse it.
+    if (err?.code === "app/duplicate-app") {
+      cachedApp = admin.app();
+    } else {
+      throw err;
+    }
   }
-  return admin.app();
+  return cachedApp;
 }
 
 export function getAuth() {
