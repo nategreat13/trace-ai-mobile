@@ -1,5 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, Alert, useColorScheme, Platform } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  useColorScheme,
+  Platform,
+} from "react-native";
 import * as Updates from "expo-updates";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -20,6 +27,14 @@ import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+/** "john  smith" → "John Smith" — capitalize each word, collapse spaces. */
+function capitalizeName(name: string): string {
+  return name
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function OnboardingScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute();
@@ -34,8 +49,11 @@ export default function OnboardingScreen() {
   const [existingProfileId, setExistingProfileId] = useState<string | null>(
     null,
   );
+  const lastNameRef = useRef<TextInput>(null);
 
   const [data, setData] = useState({
+    firstName: "",
+    lastName: "",
     homeAirport: "",
     destinationPreference: "both" as "domestic" | "international" | "both",
     dealTypes: ["surprise"] as string[],
@@ -46,8 +64,13 @@ export default function OnboardingScreen() {
     logEvent("onboarding_started", { is_editing: isEditing });
     if (profile) {
       setExistingProfileId(profile.id);
+      // Pre-populate the name step from the existing displayName so an
+      // editing user sees their current name (and it's preserved on save).
+      const nameParts = (profile.displayName || "").trim().split(/\s+/);
       setData((d) => ({
         ...d,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
         homeAirport: profile.homeAirport || "LAX",
         destinationPreference: profile.destinationPreference || "both",
         dealTypes: profile.dealTypes || [],
@@ -102,10 +125,20 @@ export default function OnboardingScreen() {
   const handleContinue = async () => {
     if (!user) return;
 
+    // The name step is required (canProceed gates it), so by the time
+    // we reach here both fields are filled.
+    const fullName = [
+      data.firstName.trim() ? capitalizeName(data.firstName) : "",
+      data.lastName.trim() ? capitalizeName(data.lastName) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     try {
       if (profile?.id) {
         // Existing profile — update preferences
         const updates: Record<string, any> = {
+          displayName: fullName || profile.displayName || "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -134,7 +167,7 @@ export default function OnboardingScreen() {
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
-          displayName: "Travel Explorer",
+          displayName: fullName || "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -195,6 +228,75 @@ export default function OnboardingScreen() {
   };
 
   const steps = [
+    {
+      title: "What's your name?",
+      subtitle: "We'd love to know you",
+      canProceed:
+        data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
+      content: (
+        <View style={{ gap: 12 }}>
+          <TextInput
+            placeholder="First name"
+            placeholderTextColor={theme.mutedForeground}
+            value={data.firstName}
+            onChangeText={(v) => {
+              const trimmed = v.trim();
+              const spaceIdx = trimmed.indexOf(" ");
+              if (spaceIdx > 0) {
+                const first = trimmed.slice(0, spaceIdx);
+                const last = trimmed.slice(spaceIdx + 1).trim();
+                setData((d) => ({ ...d, firstName: first, lastName: last }));
+                lastNameRef.current?.focus();
+              } else {
+                setData((d) => ({ ...d, firstName: v }));
+              }
+            }}
+            onSubmitEditing={() => lastNameRef.current?.focus()}
+            returnKeyType="next"
+            textContentType="name"
+            autoComplete="name"
+            autoCapitalize="words"
+            style={{
+              backgroundColor: theme.muted,
+              borderRadius: 12,
+              padding: 14,
+              fontSize: 16,
+              color: theme.foreground,
+              borderWidth: 2,
+              borderColor: theme.border,
+            }}
+          />
+          <TextInput
+            ref={lastNameRef}
+            placeholder="Last name"
+            placeholderTextColor={theme.mutedForeground}
+            value={data.lastName}
+            onChangeText={(v) => setData((d) => ({ ...d, lastName: v }))}
+            onSubmitEditing={() => {
+              if (
+                data.firstName.trim().length > 0 &&
+                data.lastName.trim().length > 0
+              ) {
+                setStep(1);
+              }
+            }}
+            returnKeyType="done"
+            textContentType="familyName"
+            autoComplete="name-family"
+            autoCapitalize="words"
+            style={{
+              backgroundColor: theme.muted,
+              borderRadius: 12,
+              padding: 14,
+              fontSize: 16,
+              color: theme.foreground,
+              borderWidth: 2,
+              borderColor: theme.border,
+            }}
+          />
+        </View>
+      ),
+    },
     {
       title: "What's your home airport?",
       subtitle: "Choose your home airport",

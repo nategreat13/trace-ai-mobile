@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as admin from "firebase-admin";
 import { colRef } from "../firebase";
+import { getEnv } from "../env";
 import { fanOutConversion } from "../lib/ad-conversions";
 import { listActiveEntitlements } from "../lib/revenuecat-rest";
 import { sendToUser } from "../lib/push";
@@ -62,6 +63,185 @@ function tierFromProductId(productId: unknown): Tier | null {
   return null;
 }
 
+/**
+ * Money-bearing event types — only these get an "Amount" field in the
+ * Slack post. CANCELLATION / EXPIRATION / BILLING_ISSUE may carry a
+ * stale price in the payload, but showing a dollar figure there reads
+ * as if money moved, so we suppress it.
+ */
+const MONEY_EVENTS = new Set([
+  "INITIAL_PURCHASE",
+  "RENEWAL",
+  "UNCANCELLATION",
+  "NON_RENEWING_PURCHASE",
+  "PRODUCT_CHANGE",
+]);
+
+/**
+ * Post a rich revenue notification to Slack. This is OUR custom post —
+ * it runs ALONGSIDE RevenueCat's native Slack integration (both can be
+ * enabled at once). The native one only knows the truncated app_user_id;
+ * this one joins against the userProfile so it can show real name +
+ * email plus tier / promo / pricing / store detail.
+ *
+ * MUST be awaited by the caller. An un-awaited fetch gets frozen when
+ * Cloud Run throttles CPU after the HTTP response is sent — the exact
+ * silent-failure mode that broke the Meta CAPI fan-out. Swallows all
+ * errors internally so it can never break webhook processing.
+ */
+async function sendRevenueSlack(args: {
+  type: string;
+  displayName: string;
+  email: string | null;
+  appUserId: string;
+  tier: Tier | null;
+  productId: string | null;
+  newProductId: string | null;
+  priceUsd: number | null;
+  priceLocal: number | null;
+  currency: string | null;
+  periodType: string | null;
+  store: string | null;
+  countryCode: string | null;
+  environment: string | null;
+  expirationAtMs: number | null;
+  isFirstPurchase: boolean;
+  lifetimeRevenueCents: number;
+}): Promise<void> {
+  const webhookUrl = process.env.SLACK_REVENUE_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.warn(
+      "[RC Webhook] SLACK_REVENUE_WEBHOOK_URL not set; skipping revenue Slack post"
+    );
+    return;
+  }
+
+  const isStaging = getEnv() === "staging";
+  const isTrial = args.periodType === "TRIAL";
+  const isPromo = args.type === "NON_RENEWING_PURCHASE";
+
+  const HEADLINES: Record<string, string> = {
+    INITIAL_PURCHASE: isTrial
+      ? ":gift: Free trial started"
+      : ":moneybag: New subscription",
+    RENEWAL: ":arrows_counterclockwise: Subscription renewed",
+    UNCANCELLATION: ":leftwards_arrow_with_hook: Subscription uncancelled",
+    NON_RENEWING_PURCHASE: ":tickets: Promo entitlement granted",
+    PRODUCT_CHANGE: ":twisted_rightwards_arrows: Plan changed",
+    CANCELLATION: ":warning: Subscription cancelled (auto-renew off)",
+    EXPIRATION: ":x: Subscription expired",
+    BILLING_ISSUE: ":rotating_light: Billing issue",
+  };
+  const headline = HEADLINES[args.type] ?? `:information_source: ${args.type}`;
+
+  let headlineText = `${isStaging ? "[STAGING] " : ""}*${headline}*`;
+  if (args.isFirstPurchase) headlineText += "  :star2: _first-time buyer_";
+
+  const fields: { type: "mrkdwn"; text: string }[] = [];
+  fields.push({ type: "mrkdwn", text: `*Customer*\n${args.displayName}` });
+  if (args.email)
+    fields.push({ type: "mrkdwn", text: `*Email*\n\`${args.email}\`` });
+  if (args.tier) fields.push({ type: "mrkdwn", text: `*Tier*\n${args.tier}` });
+
+  const productText =
+    args.type === "PRODUCT_CHANGE" && args.newProductId
+      ? `\`${args.productId ?? "?"}\` → \`${args.newProductId}\``
+      : `\`${args.productId ?? "(unknown)"}\``;
+  fields.push({ type: "mrkdwn", text: `*Product*\n${productText}` });
+
+  if (MONEY_EVENTS.has(args.type) && args.priceUsd != null) {
+    let amount = `$${args.priceUsd.toFixed(2)}`;
+    if (args.priceLocal != null && args.currency && args.currency !== "USD") {
+      amount += ` (${args.priceLocal.toFixed(2)} ${args.currency})`;
+    }
+    fields.push({ type: "mrkdwn", text: `*Amount*\n${amount}` });
+  }
+
+  const kind = isPromo
+    ? "Promo grant"
+    : isTrial
+    ? "Free trial"
+    : MONEY_EVENTS.has(args.type)
+    ? "Paid"
+    : "—";
+  fields.push({ type: "mrkdwn", text: `*Kind*\n${kind}` });
+
+  if (args.store) fields.push({ type: "mrkdwn", text: `*Store*\n${args.store}` });
+  if (args.countryCode)
+    fields.push({ type: "mrkdwn", text: `*Country*\n${args.countryCode}` });
+
+  if (args.expirationAtMs) {
+    const unix = Math.floor(args.expirationAtMs / 1000);
+    const iso = new Date(args.expirationAtMs).toISOString();
+    const label =
+      args.type === "EXPIRATION"
+        ? "Expired"
+        : args.type === "CANCELLATION"
+        ? "Access until"
+        : "Renews";
+    fields.push({
+      type: "mrkdwn",
+      text: `*${label}*\n<!date^${unix}^{date_short_pretty}|${iso}>`,
+    });
+  }
+
+  if (args.lifetimeRevenueCents > 0) {
+    fields.push({
+      type: "mrkdwn",
+      text: `*Lifetime revenue*\n$${(args.lifetimeRevenueCents / 100).toFixed(2)}`,
+    });
+  }
+
+  // Slack caps a section at 10 fields.
+  const cappedFields = fields.slice(0, 10);
+
+  const contextParts = [`app_user_id: \`${args.appUserId}\``];
+  if (args.environment) contextParts.push(`env: ${args.environment}`);
+  if (args.environment === "SANDBOX")
+    contextParts.push(":test_tube: SANDBOX — test purchase");
+
+  const payload = {
+    text: `${isStaging ? "[STAGING] " : ""}${args.type} — ${args.displayName}`,
+    blocks: [
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: headlineText },
+      },
+      { type: "section", fields: cappedFields },
+      {
+        type: "context",
+        elements: [
+          { type: "mrkdwn", text: contextParts.join("  ·  ") },
+        ],
+      },
+    ],
+  };
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "(unreadable body)");
+      console.error(
+        "[RC Webhook] Revenue Slack webhook returned non-OK:",
+        res.status,
+        body
+      );
+    } else {
+      console.log(
+        "[RC Webhook] Revenue Slack posted for",
+        args.type,
+        args.email ?? args.appUserId
+      );
+    }
+  } catch (err) {
+    console.error("[RC Webhook] Revenue Slack POST failed:", err);
+  }
+}
+
 revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
   try {
     // Verify Authorization header
@@ -82,9 +262,13 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       new_product_id,
       entitlement_ids,
       expiration_at_ms,
+      price,
       price_in_purchased_currency,
       currency,
       period_type,
+      store,
+      country_code,
+      environment,
     } = ev;
 
     console.log(
@@ -426,6 +610,59 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       default: {
         console.log("[RC Webhook] Unhandled event type:", type);
       }
+    }
+
+    // Custom revenue Slack post — fires for EVERY event type, including
+    // the `default` (unhandled) branch above, so nothing slips by
+    // silently. Runs alongside RevenueCat's native Slack integration.
+    // Awaited (not void'd): once res.json sends, Cloud Run throttles CPU
+    // and an un-awaited fetch never completes. sendRevenueSlack swallows
+    // all errors internally, so awaiting it can't break the webhook.
+    {
+      const slackTier =
+        tierFromEntitlements(entitlement_ids) ??
+        tierFromProductId(product_id) ??
+        tierFromProductId(new_product_id);
+      const pd = profileDoc.data() as {
+        displayName?: string;
+        email?: string;
+        firstPurchaseAt?: any;
+        lifetimeRevenueCents?: number;
+      };
+      const slackPriceUsd = typeof price === "number" ? price : null;
+      const slackPriceLocal =
+        typeof price_in_purchased_currency === "number"
+          ? price_in_purchased_currency
+          : null;
+      // profileDoc is the pre-update snapshot, so lifetimeRevenueCents
+      // here excludes the current transaction — add it back for
+      // purchase / renewal events so the figure reflects "after this".
+      const txnCents =
+        slackPriceUsd != null ? Math.round(slackPriceUsd * 100) : 0;
+      const purchaseLike = type === "INITIAL_PURCHASE" || type === "RENEWAL";
+      await sendRevenueSlack({
+        type: typeof type === "string" ? type : "(unknown)",
+        displayName: pd.displayName || "(no name)",
+        email: pd.email ?? null,
+        appUserId: app_user_id,
+        tier: slackTier,
+        productId: typeof product_id === "string" ? product_id : null,
+        newProductId:
+          typeof new_product_id === "string" ? new_product_id : null,
+        priceUsd: slackPriceUsd,
+        priceLocal: slackPriceLocal,
+        currency: typeof currency === "string" ? currency : null,
+        periodType: typeof period_type === "string" ? period_type : null,
+        store: typeof store === "string" ? store : null,
+        countryCode: typeof country_code === "string" ? country_code : null,
+        environment: typeof environment === "string" ? environment : null,
+        expirationAtMs:
+          typeof expiration_at_ms === "number" ? expiration_at_ms : null,
+        isFirstPurchase:
+          type === "INITIAL_PURCHASE" && !pd.firstPurchaseAt,
+        lifetimeRevenueCents:
+          (pd.lifetimeRevenueCents ?? 0) + (purchaseLike ? txnCents : 0),
+      });
     }
 
     res.status(200).json({ ok: true });

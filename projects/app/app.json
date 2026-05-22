@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trace",
     "slug": "trace-ai-mobile",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "scheme": "tracetravel",
     "orientation": "portrait",
     "icon": "./assets/icon.jpeg",

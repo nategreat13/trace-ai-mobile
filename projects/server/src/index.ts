@@ -41,6 +41,15 @@ const slackSupportWebhookUrl = defineSecret("SLACK_SUPPORT_WEBHOOK_URL");
 //   firebase functions:secrets:set META_CAPI_ACCESS_TOKEN
 const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
 
+// Slack incoming webhook for the revenue channel. Read by
+// routes/revenuecat-webhook.ts to post a rich (name + email + tier +
+// pricing) notification on each RevenueCat event. This runs ALONGSIDE
+// RevenueCat's own native Slack integration — both can be on at once.
+// Without this binding the route just skips the post (logged WARNING).
+// Set with:
+//   firebase functions:secrets:set SLACK_REVENUE_WEBHOOK_URL
+const slackRevenueWebhookUrl = defineSecret("SLACK_REVENUE_WEBHOOK_URL");
+
 /**
  * Prod API. Wraps the Express app in `runWithEnv("prod", …)` so every
  * Firestore read/write inside the request handler resolves to the
@@ -49,7 +58,7 @@ const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps
@@ -76,7 +85,7 @@ export const api = onRequest(
 export const apiStaging = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps
