@@ -296,7 +296,7 @@ export default function SwipeDeckScreen() {
       // print the App Store link twice.
       await Share.share({
         title: `${deal.destination} deal on Trace`,
-        message: `I found an amazing deal to ${deal.destination} for $${deal.price}! Download Trace to see it 👉 https://apps.apple.com/us/app/trace-travel/id6760838076`,
+        message: `I found a deal to ${deal.destination} for $${deal.price}. Open it in Trace 👉 tracetravel://share/${shareId}`,
       });
     } catch {}
   }
