@@ -43,7 +43,10 @@ export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  const [step, setStep] = useState(0);
+  // When editing preferences, skip the name step (step 0) entirely —
+  // the user already set their name during initial onboarding and
+  // doesn't need to re-enter it just to update travel preferences.
+  const [step, setStep] = useState(isEditing ? 1 : 0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
   const [existingProfileId, setExistingProfileId] = useState<string | null>(
@@ -136,9 +139,13 @@ export default function OnboardingScreen() {
 
     try {
       if (profile?.id) {
-        // Existing profile — update preferences
+        // Existing profile — update preferences.
+        // When editing, the name step is skipped so preserve the existing
+        // displayName unchanged; only update it if we actually have a new value.
         const updates: Record<string, any> = {
-          displayName: fullName || profile.displayName || "Travel Explorer",
+          displayName: isEditing
+            ? (profile.displayName || "Travel Explorer")
+            : (fullName || profile.displayName || "Travel Explorer"),
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -360,19 +367,29 @@ export default function OnboardingScreen() {
     },
   ];
 
+  // When editing, the name step (index 0) is hidden so we offset the
+  // displayed step number and total so the progress bar stays accurate.
+  const displayStep = isEditing ? step - 1 : step;
+  const displayTotal = isEditing ? steps.length - 1 : steps.length;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
       <OnboardingStep
-        step={step}
-        totalSteps={steps.length}
+        step={displayStep}
+        totalSteps={displayTotal}
         title={steps[step].title}
         subtitle={steps[step].subtitle}
         canProceed={steps[step].canProceed}
-onNext={() => {
+        onNext={() => {
           if (step < steps.length - 1) setStep(step + 1);
           else handleFinish();
         }}
-        onBack={() => setStep(step - 1)}
+        onBack={() => {
+          // When editing, step 1 is the first visible step — pressing back
+          // should dismiss the modal, not reveal the hidden name step.
+          if (isEditing && step === 1) navigation.goBack();
+          else setStep(step - 1);
+        }}
       >
         {steps[step].content}
       </OnboardingStep>
