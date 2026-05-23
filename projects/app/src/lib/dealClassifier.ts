@@ -5,7 +5,7 @@ const LUXURY_KEYWORDS = [
   "turks and caicos", "turks & caicos", "aspen", "vail", "courchevel", "st moritz",
   "ibiza", "positano", "cinque terre", "lake como", "zurich", "zürich", "geneva",
   "copenhagen", "singapore", "hong kong",
-  "las vegas", "udaipur",
+  "las vegas", "udaipur", "palm springs",
 ];
 
 const ADVENTURE_KEYWORDS = [
@@ -38,6 +38,7 @@ const ADVENTURE_KEYWORDS = [
   "new zealand", "queenstown", "milford sound", "rotorua", "auckland",
   "australia", "cairns", "great barrier reef", "uluru", "tasmania", "perth", "brisbane", "adelaide",
   "fiji", "vanuatu",
+  "asheville", "santa fe", "calgary", "salt lake city",
 ];
 
 const CULTURAL_KEYWORDS = [
@@ -57,7 +58,9 @@ const CULTURAL_KEYWORDS = [
   "stockholm", "oslo",
   "bordeaux", "luxembourg", "malta", "glasgow", "manchester",
   "new orleans", "nashville", "charleston", "san antonio",
-  "washington", "quebec",
+  "washington", "quebec", "québec",
+  "austin", "santa fe", "asheville", "memphis", "kansas city",
+  "st. louis", "minneapolis", "charlotte", "detroit", "pittsburgh",
 ];
 
 const RELAXATION_KEYWORDS = [
@@ -65,6 +68,7 @@ const RELAXATION_KEYWORDS = [
   "tulum", "cozumel", "riviera maya", "bahamas", "nassau", "aruba",
   "curacao", "curaçao", "barbados", "jamaica", "montego bay", "punta cana", "dominican republic",
   "antigua", "grenada", "san juan", "goa", "fort lauderdale",
+  "dominica", "bermuda", "miami", "palm springs", "tampa",
   "hawaii", "honolulu", "waikiki", "maui", "kauai", "big island",
   "bali", "phuket", "samui", "krabi",
   "maldives", "seychelles", "mauritius", "zanzibar",
@@ -83,14 +87,16 @@ const FAMILY_KEYWORDS = [
   "washington", "boston", "philadelphia", "atlanta",
   "dallas", "houston", "denver", "seattle", "portland",
   "phoenix", "las vegas", "nashville", "new orleans", "charleston", "san antonio", "baltimore",
-  "fort lauderdale", "san juan",
+  "fort lauderdale", "san juan", "austin", "jacksonville", "kansas city", "miami",
+  "palm springs", "minneapolis", "st. louis", "calgary", "indianapolis",
+  "salt lake city", "tampa", "charlotte", "detroit", "pittsburgh",
   "cancun", "cancún", "cabo", "los cabos", "puerto vallarta", "punta cana",
   "bahamas", "nassau", "aruba", "jamaica", "hawaii", "honolulu", "maui",
   "london", "paris", "amsterdam", "barcelona", "rome",
   "tokyo", "singapore", "hong kong", "sydney", "melbourne",
   "toronto", "vancouver", "montreal", "banff",
   "auckland", "brisbane", "adelaide", "perth",
-  "glasgow", "manchester", "quebec",
+  "glasgow", "manchester", "quebec", "québec",
 ];
 
 export function classifyDeal(deal: {
