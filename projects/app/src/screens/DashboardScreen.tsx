@@ -68,7 +68,7 @@ export default function DashboardScreen() {
       // print the App Store link twice.
       await Share.share({
         title: `${deal.destination} deal on Trace`,
-        message: `I found a deal to ${deal.destination} for $${deal.price}. Open it in Trace 👉 tracetravel://share/${shareId}`,
+        message: `I found a deal to ${deal.destination} for $${deal.price}. Open it in Trace 👉 https://subscribe.tracetravel.co/share/${shareId}`,
       });
     } catch {}
   }

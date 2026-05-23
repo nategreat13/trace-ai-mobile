@@ -25,7 +25,7 @@ const ADMIN_COOKIE = "trace_analytics_auth";
  */
 
 const PUBLIC_EXACT = new Set(["/login", "/logout"]);
-const PUBLIC_PREFIXES = ["/privacy", "/terms", "/support", "/delete-account"];
+const PUBLIC_PREFIXES = ["/privacy", "/terms", "/support", "/delete-account", "/share"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;
