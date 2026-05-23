@@ -49,7 +49,6 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
@@ -252,8 +251,6 @@ export default function SwipeDeckScreen() {
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
-  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
-  const [pendingShareDeal, setPendingShareDeal] = useState<Deal | null>(null);
 
   // Undo state
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -304,20 +301,13 @@ export default function SwipeDeckScreen() {
     } catch {}
   }
 
-  function handleShareDeal() {
-    if (!expandedDeal || !user) return;
-    // Prefer the Firebase Auth displayName (set by Google/Apple sign-in).
-    // Fall back to the Firestore profile name, but skip "Travel Explorer" —
-    // that's the placeholder set during onboarding, not the user's real name.
-    const rawName = user.displayName || profile?.displayName;
-    const name = rawName && rawName !== "Travel Explorer" ? rawName : null;
-    if (!name) {
-      setPendingShareDeal(expandedDeal);
-      setShowShareNamePrompt(true);
-    } else {
-      doShare(expandedDeal, name);
-    }
-  }
+  // Resolve the sender name for deal sharing. Prefer Firebase Auth
+  // displayName (set by Google/Apple sign-in), fall back to Firestore profile
+  // name, but filter out "Travel Explorer" (the onboarding placeholder).
+  const resolvedUserName = (() => {
+    const raw = user?.displayName || profile?.displayName;
+    return raw && raw !== "Travel Explorer" ? raw : null;
+  })();
 
   // Initialize swipes left and fetch swipe history
   useEffect(() => {
@@ -1017,22 +1007,14 @@ export default function SwipeDeckScreen() {
               Linking.openURL(expandedDeal.url);
             }
           }}
-          onShare={handleShareDeal}
+          userName={resolvedUserName}
+          onShare={(name) => {
+            doShare(expandedDeal, name);
+            // Persist the name so they're never asked again
+            if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
+          }}
         />
       )}
-
-      {/* Share name prompt */}
-      <ShareNamePromptModal
-        visible={showShareNamePrompt}
-        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
-        onSave={(name) => {
-          setShowShareNamePrompt(false);
-          if (pendingShareDeal) doShare(pendingShareDeal, name);
-          setPendingShareDeal(null);
-          // Persist so they're never asked again
-          if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
-        }}
-      />
 
     </SafeAreaView>
   );

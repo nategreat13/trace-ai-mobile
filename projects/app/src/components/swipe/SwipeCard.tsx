@@ -62,6 +62,14 @@ export default function SwipeCard({
   const FALLBACK_IMAGE = "https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png";
   const [imageUri, setImageUri] = useState(deal.image_url || FALLBACK_IMAGE);
 
+  // Sync imageUri whenever the deal changes. Without this, if React reuses
+  // this component instance for a different deal (e.g. when deal.id is
+  // undefined/duplicate and React falls back to array-index keys), the image
+  // stays frozen on the previous deal's photo.
+  useEffect(() => {
+    setImageUri(deal.image_url || FALLBACK_IMAGE);
+  }, [deal.image_url]);
+
   // ── Shared values ───────────────────────────────────────────────────
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);

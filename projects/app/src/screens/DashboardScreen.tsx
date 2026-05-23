@@ -23,7 +23,6 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing, Plane } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -61,9 +60,6 @@ export default function DashboardScreen() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
-  const [pendingShareDeal, setPendingShareDeal] = useState<any | null>(null);
-
   async function doShare(deal: any, name: string) {
     try {
       const shareId = await createShare(deal, user!.uid, name);
@@ -77,20 +73,13 @@ export default function DashboardScreen() {
     } catch {}
   }
 
-  function handleShareDeal() {
-    if (!expandedDeal || !user) return;
-    // Prefer the Firebase Auth displayName (set by Google/Apple sign-in).
-    // Fall back to the Firestore profile name, but skip "Travel Explorer" —
-    // that's the placeholder set during onboarding, not the user's real name.
-    const rawName = user.displayName || profile?.displayName;
-    const name = rawName && rawName !== "Travel Explorer" ? rawName : null;
-    if (!name) {
-      setPendingShareDeal(expandedDeal);
-      setShowShareNamePrompt(true);
-    } else {
-      doShare(expandedDeal, name);
-    }
-  }
+  // Resolve the sender name for deal sharing. Prefer Firebase Auth
+  // displayName (set by Google/Apple sign-in), fall back to Firestore profile
+  // name, but filter out "Travel Explorer" (the onboarding placeholder).
+  const resolvedUserName = (() => {
+    const raw = user?.displayName || profile?.displayName;
+    return raw && raw !== "Travel Explorer" ? raw : null;
+  })();
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -807,21 +796,14 @@ export default function DashboardScreen() {
           onClose={() => setExpandedDeal(null)}
           onSave={() => setExpandedDeal(null)}
           onBook={() => { if (expandedDeal?.url) Linking.openURL(expandedDeal.url); }}
-          onShare={handleShareDeal}
+          userName={resolvedUserName}
+          onShare={(name) => {
+            doShare(expandedDeal, name);
+            // Persist the name so they're never asked again
+            if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
+          }}
         />
       )}
-
-      <ShareNamePromptModal
-        visible={showShareNamePrompt}
-        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
-        onSave={(name) => {
-          setShowShareNamePrompt(false);
-          if (pendingShareDeal) doShare(pendingShareDeal, name);
-          setPendingShareDeal(null);
-          // Persist so they're never asked again
-          if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
-        }}
-      />
 
       {/* Badge detail popup */}
       <Modal
