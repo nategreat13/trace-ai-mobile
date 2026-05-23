@@ -1,16 +1,17 @@
 const LUXURY_KEYWORDS = [
-  "maldives", "bora bora", "monaco", "dubai", "st. barts", "st barts", "saint barts",
+  "maldives", "bora bora", "monaco", "dubai", "abu dhabi", "st. barts", "st barts", "saint barts",
   "mykonos", "amalfi", "portofino", "capri", "santorini", "tuscany",
   "seychelles", "french polynesia", "tahiti", "st. lucia", "saint lucia",
   "turks and caicos", "turks & caicos", "aspen", "vail", "courchevel", "st moritz",
-  "ibiza", "positano", "cinque terre", "lake como", "zurich", "geneva",
+  "ibiza", "positano", "cinque terre", "lake como", "zurich", "zürich", "geneva",
   "copenhagen", "singapore", "hong kong",
+  "las vegas", "udaipur",
 ];
 
 const ADVENTURE_KEYWORDS = [
   "patagonia", "peru", "machu picchu", "cusco", "amazon", "galapagos", "ecuador",
-  "colombia", "medellin", "bogota", "cartagena", "chile", "santiago", "argentina", "buenos aires",
-  "rio de janeiro", "brazil", "bolivia", "la paz", "montevideo", "uruguay",
+  "colombia", "medellin", "medellín", "bogota", "bogotá", "cartagena", "chile", "santiago", "argentina", "buenos aires",
+  "rio de janeiro", "brazil", "sao paulo", "são paulo", "bolivia", "la paz", "montevideo", "uruguay",
   "costa rica", "san jose", "guatemala", "belize", "honduras", "nicaragua", "panama",
   "alaska", "banff", "jasper", "whistler", "yukon", "yellowstone",
   "grand canyon", "zion", "moab", "sedona", "yosemite", "glacier",
@@ -27,14 +28,15 @@ const ADVENTURE_KEYWORDS = [
   "philippines", "palawan", "siargao", "cebu", "boracay",
   "mongolia", "sri lanka", "pakistan", "kyrgyzstan", "kazakhstan",
   "jordan", "petra", "wadi rum", "oman", "muscat",
-  "iceland", "reykjavik", "faroe islands", "svalbard", "lofoten", "tromso",
+  "iceland", "reykjavik", "reykjavík", "faroe islands", "svalbard", "lofoten", "tromso",
   "norway", "bergen", "scotland", "highlands", "ireland",
   "dolomites", "innsbruck", "interlaken", "zermatt", "chamonix",
   "slovenia", "lake bled", "albania", "montenegro", "kotor",
   "georgia", "tbilisi", "armenia", "azerbaijan",
   "azores", "madeira", "canary islands",
-  "new zealand", "queenstown", "milford sound", "rotorua",
-  "australia", "cairns", "great barrier reef", "uluru", "tasmania",
+  "easter island",
+  "new zealand", "queenstown", "milford sound", "rotorua", "auckland",
+  "australia", "cairns", "great barrier reef", "uluru", "tasmania", "perth", "brisbane", "adelaide",
   "fiji", "vanuatu",
 ];
 
@@ -46,18 +48,23 @@ const CULTURAL_KEYWORDS = [
   "krakow", "warsaw", "budapest", "vienna", "salzburg",
   "london", "edinburgh", "dublin",
   "kyoto", "osaka", "nara", "hiroshima", "beijing",
-  "delhi", "agra", "jaipur", "mumbai", "varanasi",
-  "marrakech", "fez", "casablanca", "tunis", "luxor", "aswan",
+  "seoul", "shanghai", "bangkok", "kuala lumpur",
+  "delhi", "agra", "jaipur", "mumbai", "varanasi", "bengaluru", "chennai", "kolkata", "udaipur",
+  "marrakech", "marrakesh", "fez", "casablanca", "tunis", "luxor", "aswan",
   "mexico city", "oaxaca", "havana", "cartagena", "quito",
   "lima", "la paz", "montevideo",
   "saint petersburg", "moscow", "riga", "tallinn", "vilnius", "helsinki",
   "stockholm", "oslo",
+  "bordeaux", "luxembourg", "malta", "glasgow", "manchester",
+  "new orleans", "nashville", "charleston", "san antonio",
+  "washington", "quebec",
 ];
 
 const RELAXATION_KEYWORDS = [
-  "cancun", "cabo", "los cabos", "puerto vallarta", "playa del carmen",
+  "cancun", "cancún", "cabo", "los cabos", "puerto vallarta", "playa del carmen",
   "tulum", "cozumel", "riviera maya", "bahamas", "nassau", "aruba",
-  "curacao", "barbados", "jamaica", "montego bay", "punta cana", "dominican republic",
+  "curacao", "curaçao", "barbados", "jamaica", "montego bay", "punta cana", "dominican republic",
+  "antigua", "grenada", "san juan", "goa", "fort lauderdale",
   "hawaii", "honolulu", "waikiki", "maui", "kauai", "big island",
   "bali", "phuket", "samui", "krabi",
   "maldives", "seychelles", "mauritius", "zanzibar",
@@ -73,13 +80,17 @@ const RELAXATION_KEYWORDS = [
 const FAMILY_KEYWORDS = [
   "orlando", "disney", "disneyland", "universal studios",
   "anaheim", "san diego", "san francisco", "los angeles", "new york", "chicago",
-  "washington dc", "boston", "philadelphia", "atlanta",
+  "washington", "boston", "philadelphia", "atlanta",
   "dallas", "houston", "denver", "seattle", "portland",
-  "cancun", "cabo", "los cabos", "puerto vallarta", "punta cana",
+  "phoenix", "las vegas", "nashville", "new orleans", "charleston", "san antonio", "baltimore",
+  "fort lauderdale", "san juan",
+  "cancun", "cancún", "cabo", "los cabos", "puerto vallarta", "punta cana",
   "bahamas", "nassau", "aruba", "jamaica", "hawaii", "honolulu", "maui",
   "london", "paris", "amsterdam", "barcelona", "rome",
   "tokyo", "singapore", "hong kong", "sydney", "melbourne",
   "toronto", "vancouver", "montreal", "banff",
+  "auckland", "brisbane", "adelaide", "perth",
+  "glasgow", "manchester", "quebec",
 ];
 
 export function classifyDeal(deal: {
