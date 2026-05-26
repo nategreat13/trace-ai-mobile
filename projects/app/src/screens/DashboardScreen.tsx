@@ -23,7 +23,6 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing, Plane } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -31,12 +30,14 @@ import {
   getSavedDeals,
   getSwipeActions,
   deleteSavedDeal,
-  deleteSwipeAction,
   getDealAlerts,
   deleteDealAlert,
+  updateUserProfile,
 } from "../services/firestore";
 import { ALL_BADGES, getDestinationFlag, getLevelInfo, SWIPES_PER_LEVEL } from "../lib/constants";
 import { createShare } from "../services/shareApi";
+import { fetchDeals } from "../services/dealsApi";
+import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
 
 export default function DashboardScreen() {
   const scheme = useColorScheme();
@@ -46,6 +47,7 @@ export default function DashboardScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [deals, setDeals] = useState<any[]>([]);
+  const [dealStatuses, setDealStatuses] = useState<Record<string, { status: "ok" | "price_changed" | "past"; livePrice?: number }>>({});
   const [swipes, setSwipes] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [showAlertsUpgrade, setShowAlertsUpgrade] = useState(false);
@@ -57,30 +59,26 @@ export default function DashboardScreen() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
-  const [pendingShareDeal, setPendingShareDeal] = useState<any | null>(null);
-
   async function doShare(deal: any, name: string) {
     try {
       const shareId = await createShare(deal, user!.uid, name);
+      // Do NOT pass `url` — it's already embedded in `message`. On iOS the
+      // share sheet appends `url` to the message automatically, which would
+      // print the App Store link twice.
       await Share.share({
         title: `${deal.destination} deal on Trace`,
-        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Check it out on Trace 👉 tracetravel://share/${shareId}`,
-        url: `tracetravel://share/${shareId}`,
+        message: `I found a deal to ${deal.destination} for $${deal.price}. Open it in Trace 👉 https://subscribe.tracetravel.co/share/${shareId}`,
       });
     } catch {}
   }
 
-  function handleShareDeal() {
-    if (!expandedDeal || !user) return;
-    const name = profile?.displayName || user.displayName;
-    if (!name) {
-      setPendingShareDeal(expandedDeal);
-      setShowShareNamePrompt(true);
-    } else {
-      doShare(expandedDeal, name);
-    }
-  }
+  // Resolve the sender name for deal sharing. Prefer Firebase Auth
+  // displayName (set by Google/Apple sign-in), fall back to Firestore profile
+  // name, but filter out "Travel Explorer" (the onboarding placeholder).
+  const resolvedUserName = (() => {
+    const raw = user?.displayName || profile?.displayName;
+    return raw && raw !== "Travel Explorer" ? raw : null;
+  })();
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -93,13 +91,71 @@ export default function DashboardScreen() {
       setDeals(savedDeals);
       setSwipes(swipeData);
       setAlerts(alertData);
+
+      // Kick off destination-info prefetch for saved deals so the
+      // Destination tab opens instantly instead of showing a spinner.
+      for (const d of savedDeals) prefetchDestinationInfo(d as any);
+
+      // Cross-reference saved deals against live API
+      const airportCode = profile?.homeAirport || "LAX";
+      try {
+        const liveDeals = await fetchDeals(airportCode);
+        const liveByDest = new Map<string, any>();
+        for (const d of liveDeals) {
+          liveByDest.set(d.destination?.toLowerCase(), d);
+        }
+
+        const MONTHS = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+        const now = new Date();
+
+        const statuses: Record<string, { status: "ok" | "price_changed" | "past"; livePrice?: number }> = {};
+        for (const saved of savedDeals) {
+          // Check if travel date is in the past
+          const dateStr = (saved.travelWindow || saved.dateString || "").toLowerCase();
+          const monthIdx = MONTHS.findIndex((m) => dateStr.includes(m));
+          if (monthIdx !== -1) {
+            let year = now.getFullYear();
+            const yearMatch = dateStr.match(/20\d\d/);
+            if (yearMatch) year = parseInt(yearMatch[0]);
+            const dealDate = new Date(year, monthIdx, 28); // end of month
+            if (dealDate < now && !yearMatch) {
+              // Try next year before marking past
+              const nextYear = new Date(year + 1, monthIdx, 1);
+              if (nextYear < now) {
+                statuses[saved.id] = { status: "past" };
+                continue;
+              }
+            } else if (dealDate < now) {
+              statuses[saved.id] = { status: "past" };
+              continue;
+            }
+          }
+
+          // Check if deal still exists and if price changed
+          const liveDeal = liveByDest.get(saved.destination?.toLowerCase());
+          if (!liveDeal) {
+            statuses[saved.id] = { status: "price_changed" };
+          } else {
+            const savedPrice = saved.price || 0;
+            const livePrice = liveDeal.dealPriceUSD || liveDeal.price || 0;
+            if (livePrice > 0 && Math.abs(livePrice - savedPrice) > 5) {
+              statuses[saved.id] = { status: "price_changed", livePrice };
+            } else {
+              statuses[saved.id] = { status: "ok" };
+            }
+          }
+        }
+        setDealStatuses(statuses);
+      } catch {
+        // Silent fail — statuses just won't show
+      }
     } catch (err) {
       console.error("Failed to load dashboard:", err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.uid]);
+  }, [user?.uid, profile?.homeAirport]);
 
   // Reload every time the Dashboard tab gains focus. Using useFocusEffect
   // (instead of a one-shot useEffect) is required because tab screens stay
@@ -128,8 +184,6 @@ export default function DashboardScreen() {
       await deleteSavedDeal(dealId);
       setDeals((prev) => prev.filter((d) => d.id !== dealId));
       setDeletingIds((prev) => { const s = new Set(prev); s.delete(dealId); return s; });
-      const swipe = swipes.find((s: any) => s.dealId === dealId && s.action === "super");
-      if (swipe) await deleteSwipeAction(swipe.id);
     }, 250);
   };
 
@@ -142,8 +196,6 @@ export default function DashboardScreen() {
         onPress: async () => {
           for (const deal of deals) {
             await deleteSavedDeal(deal.id);
-            const swipe = swipes.find((s: any) => s.dealId === deal.id && s.action === "super");
-            if (swipe) await deleteSwipeAction(swipe.id);
           }
           setDeals([]);
         },
@@ -209,6 +261,9 @@ export default function DashboardScreen() {
 
   const renderSavedDeal = ({ item }: { item: any }) => {
     const isDeleting = deletingIds.has(item.id);
+    const dealStatus = dealStatuses[item.id];
+    const isPast = dealStatus?.status === "past";
+    const isPriceChanged = dealStatus?.status === "price_changed";
     return (
       <Animated.View
         entering={FadeIn.duration(200)}
@@ -218,10 +273,10 @@ export default function DashboardScreen() {
           backgroundColor: theme.card,
           borderRadius: 16,
           borderWidth: 1,
-          borderColor: theme.border,
+          borderColor: isPast ? theme.border : isPriceChanged ? "#F59E0B40" : theme.border,
           overflow: "hidden",
           marginBottom: 12,
-          opacity: isDeleting ? 0.4 : 1,
+          opacity: isDeleting ? 0.4 : isPast ? 0.5 : 1,
         }}
       >
         <TouchableOpacity activeOpacity={0.85} onPress={() => setExpandedDeal(savedDealToDeal(item))}>
@@ -264,13 +319,34 @@ export default function DashboardScreen() {
                 </View>
               )}
               {/* Duration pill */}
-              {item.duration && (
+              {item.duration && !isPast && !isPriceChanged && (
                 <View style={{
                   position: "absolute", top: 10, right: 10,
                   backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 8,
                   paddingHorizontal: 8, paddingVertical: 4,
                 }}>
                   <Text style={{ color: "#fff", fontSize: 11, fontWeight: "600" }}>{item.duration}</Text>
+                </View>
+              )}
+              {/* Status badges */}
+              {isPast && (
+                <View style={{
+                  position: "absolute", top: 10, right: 10,
+                  backgroundColor: "rgba(0,0,0,0.65)", borderRadius: 8,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "700" }}>📅 Dates passed</Text>
+                </View>
+              )}
+              {isPriceChanged && (
+                <View style={{
+                  position: "absolute", top: 10, right: 10,
+                  backgroundColor: "#F59E0B", borderRadius: 8,
+                  paddingHorizontal: 8, paddingVertical: 4,
+                }}>
+                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "700" }}>
+                    {dealStatus?.livePrice ? `Now $${dealStatus.livePrice}` : "Price changed"}
+                  </Text>
                 </View>
               )}
             </View>
@@ -715,19 +791,14 @@ export default function DashboardScreen() {
           onClose={() => setExpandedDeal(null)}
           onSave={() => setExpandedDeal(null)}
           onBook={() => { if (expandedDeal?.url) Linking.openURL(expandedDeal.url); }}
-          onShare={handleShareDeal}
+          userName={resolvedUserName}
+          onShare={(name) => {
+            doShare(expandedDeal, name);
+            // Persist the name so they're never asked again
+            if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
+          }}
         />
       )}
-
-      <ShareNamePromptModal
-        visible={showShareNamePrompt}
-        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
-        onSave={(name) => {
-          setShowShareNamePrompt(false);
-          if (pendingShareDeal) doShare(pendingShareDeal, name);
-          setPendingShareDeal(null);
-        }}
-      />
 
       {/* Badge detail popup */}
       <Modal

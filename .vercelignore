@@ -1,0 +1,29 @@
+# Things Vercel never needs from this monorepo. The web app builds from
+# projects/web; everything else (mobile app, server, build artifacts)
+# is dead weight in the upload and pushes us over Vercel's 15k file
+# limit.
+node_modules
+**/node_modules
+
+# Mobile app — totally unrelated to web build
+projects/app
+
+# Server (Cloud Function) — deployed separately via firebase
+projects/server
+
+# Build artifacts that Vercel will regenerate
+projects/web/.next
+projects/web/.vercel/output
+projects/shared/dist
+**/dist
+
+# iOS / Android native build outputs
+ios
+android
+**/ios
+**/android
+
+# Misc
+.DS_Store
+*.log
+.git

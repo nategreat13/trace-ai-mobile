@@ -1,5 +1,5 @@
-import { getDb } from "./firebase-admin";
-import type { Firestore } from "firebase-admin/firestore";
+import { colRef } from "./firebase-admin";
+import type { TraceEnv } from "@trace/shared";
 import type { ExcludedSets } from "./exclusions";
 
 /**
@@ -47,13 +47,13 @@ function shouldIncludeUid(
  * Reads from the `userProfiles` collection (created on onboarding complete).
  */
 export async function getSignupsByDay(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets
 ): Promise<Array<{ date: string; count: number }>> {
   // No validUserIds filter here: by definition every userProfile we read
   // exists, so there's nothing to "orphan". The only filter is the
   // explicit exclusion list.
-  const db = getDb();
   const since = new Date();
   // "Last N days" means N days ending today (inclusive). The window
   // starts (N - 1) days ago at midnight so today's signups land in
@@ -61,8 +61,7 @@ export async function getSignupsByDay(
   since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
 
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef(env, "userProfiles")
     .where("createdAt", ">=", since)
     .select("createdAt", "userId", "email")
     .get();
@@ -102,16 +101,15 @@ export async function getSignupsByDay(
  * Returns event counts grouped by event name over the last N days.
  */
 export async function getEventCountsByName(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ): Promise<Array<{ name: string; count: number }>> {
-  const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  const snap = await db
-    .collection("events")
+  const snap = await colRef(env, "events")
     .where("timestamp", ">=", since)
     .select("name", "userId")
     .get();
@@ -136,43 +134,48 @@ export async function getEventCountsByName(
  *   paywall_viewed, purchase_completed.
  */
 export async function getFunnelCounts(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ) {
-  const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // Build the set of "tainted" session ids — sessions that include at
-  // least one event from an excluded user. Used to attribute pre-signup
-  // (guest) events to the user they eventually became.
+  // Build two sets of "tainted" identifiers for guest events that
+  // actually belong to an excluded user:
   //
-  // Without this, landing_viewed events from internal testers count
-  // toward the funnel even after we've added them to the exclusion
-  // list, because pre-signup events have userId="guest" and the
-  // standard shouldIncludeUid check unconditionally passes "guest"
-  // through. The session_id prop lets us link a guest event to the
-  // user it eventually belonged to: if any signed-in event in the
-  // same session is from an excluded user, the guest events in that
-  // session were them too.
+  //   taintedSessions  — sessions where a signed-in event from an
+  //                      excluded user was logged. Within-session
+  //                      linking only; can't bridge multiple cold
+  //                      launches from the same device.
+  //   taintedDevices   — devices that have ever logged an event under
+  //                      an excluded user's uid. Cross-session, so it
+  //                      catches multi-cold-launch testing (force-quit
+  //                      + reopen, OTA fetches, etc.) that the
+  //                      session-only logic missed.
+  //
+  // device_id was added in the OTA after staging-env shipped; legacy
+  // events without it fall back to session-only attribution (their
+  // missing device_id just doesn't taint anything).
   const taintedSessions = new Set<string>();
+  const taintedDevices = new Set<string>();
   if (excluded && excluded.userIds.size > 0) {
     // Firestore `in` is capped at 30 values per query; chunk if needed.
-    // Today we have 7 exclusions so this is a single round-trip.
     const userIdsArr = Array.from(excluded.userIds);
     for (let i = 0; i < userIdsArr.length; i += 30) {
       const chunk = userIdsArr.slice(i, i + 30);
-      const snap = await db
-        .collection("events")
+      const snap = await colRef(env, "events")
         .where("timestamp", ">=", since)
         .where("userId", "in", chunk)
         .orderBy("timestamp", "desc")
-        .select("props.session_id")
+        .select("props.session_id", "props.device_id")
         .get();
       snap.forEach((doc) => {
         const sid = doc.get("props.session_id") as string | undefined;
         if (sid) taintedSessions.add(sid);
+        const did = doc.get("props.device_id") as string | undefined;
+        if (did) taintedDevices.add(did);
       });
     }
   }
@@ -194,12 +197,11 @@ export async function getFunnelCounts(
   // exists. The page-level catch swallows the error as 0, masking
   // the misconfiguration as "no data".
   async function countEvent(name: string): Promise<number> {
-    const snap = await db
-      .collection("events")
+    const snap = await colRef(env, "events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
       .orderBy("timestamp", "desc")
-      .select("userId", "props.session_id")
+      .select("userId", "props.session_id", "props.device_id")
       .get();
     let n = 0;
     const dedupeBySession = name === "landing_viewed";
@@ -207,12 +209,17 @@ export async function getFunnelCounts(
     snap.forEach((doc) => {
       const userId = doc.get("userId") as string | undefined;
       const sessionId = doc.get("props.session_id") as string | undefined;
+      const deviceId = doc.get("props.device_id") as string | undefined;
 
-      // 1. Standard exclusion.
+      // 1. Standard userId-based exclusion.
       if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
-      // 2. Guest event that belongs to an excluded user's session.
+      // 2. Guest event whose session belonged to an excluded user.
       if (userId === "guest" && sessionId && taintedSessions.has(sessionId)) return;
-      // 3. Per-session dedup (landing_viewed only). Events without a
+      // 3. Guest event whose device belonged to an excluded user. This
+      //    is the cross-session attribution that fixes the orphan-
+      //    session bug — see `lib/device.ts` for the persistent UUID.
+      if (userId === "guest" && deviceId && taintedDevices.has(deviceId)) return;
+      // 4. Per-session dedup (landing_viewed only). Events without a
       //    session_id (legacy data) get counted as-is rather than
       //    being silently dropped.
       if (seenSessions && sessionId) {
@@ -248,11 +255,11 @@ export async function getFunnelCounts(
  * week. The array of percentages is Day 0, Day 1, Day 7, Day 30.
  */
 export async function getRetentionCohorts(
+  env: TraceEnv,
   weeks = 8,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ) {
-  const db = getDb();
   const now = new Date();
   const cohorts: Array<{
     weekStart: string;
@@ -269,8 +276,7 @@ export async function getRetentionCohorts(
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
 
-    const snap = await db
-      .collection("userProfiles")
+    const snap = await colRef(env, "userProfiles")
       .where("createdAt", ">=", weekStart)
       .where("createdAt", "<", weekEnd)
       .select("userId", "createdAt", "email")
@@ -292,7 +298,7 @@ export async function getRetentionCohorts(
 
     if (users.length === 0) continue;
 
-    const retained = await retentionFor(db, users, excluded, validUserIds);
+    const retained = await retentionFor(env, users, excluded, validUserIds);
     cohorts.push({
       weekStart: weekStart.toISOString().slice(0, 10),
       size: users.length,
@@ -306,7 +312,7 @@ export async function getRetentionCohorts(
 }
 
 async function retentionFor(
-  db: Firestore,
+  env: TraceEnv,
   users: Array<{ uid: string; created: Date }>,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
@@ -326,8 +332,7 @@ async function retentionFor(
       const windowEnd = new Date(windowStart);
       windowEnd.setDate(windowEnd.getDate() + 1);
 
-      const snap = await db
-        .collection("events")
+      const snap = await colRef(env, "events")
         .where("userId", "in", chunk)
         .where("timestamp", ">=", windowStart)
         .where("timestamp", "<", windowEnd)
@@ -359,11 +364,10 @@ async function retentionFor(
  * Returns manually-entered ad spend per platform from the `adSpend` collection.
  * Schema: { platform: string, month: "YYYY-MM", spendCents: number }
  */
-export async function getAdSpend(): Promise<
-  Array<{ platform: string; month: string; spendCents: number }>
-> {
-  const db = getDb();
-  const snap = await db.collection("adSpend").orderBy("month", "desc").limit(100).get();
+export async function getAdSpend(
+  env: TraceEnv
+): Promise<Array<{ platform: string; month: string; spendCents: number }>> {
+  const snap = await colRef(env, "adSpend").orderBy("month", "desc").limit(100).get();
   return snap.docs.map((d) => {
     const data = d.data();
     return {
@@ -378,15 +382,17 @@ export async function getAdSpend(): Promise<
  * Total user count (useful as a top-of-page stat). When excluded is
  * provided, subtracts excluded userProfiles from the headline number.
  */
-export async function getUserCount(excluded?: ExcludedSets): Promise<number> {
-  const db = getDb();
+export async function getUserCount(
+  env: TraceEnv,
+  excluded?: ExcludedSets
+): Promise<number> {
   if (!excluded || (excluded.userIds.size === 0 && excluded.emails.size === 0)) {
-    const snap = await db.collection("userProfiles").count().get();
+    const snap = await colRef(env, "userProfiles").count().get();
     return snap.data().count;
   }
   // With exclusions we can't use count() — fetch the userIds + emails and
   // filter. At small scale this is fine; at 100k+ users move to a counter doc.
-  const snap = await db.collection("userProfiles").select("userId", "email").get();
+  const snap = await colRef(env, "userProfiles").select("userId", "email").get();
   let n = 0;
   snap.forEach((doc) => {
     const data = doc.data();
@@ -415,6 +421,7 @@ export async function getUserCount(excluded?: ExcludedSets): Promise<number> {
  * can spot a regression like "all Premium-monthly purchases failing".
  */
 export async function getPurchaseFlowFunnel(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
@@ -427,14 +434,12 @@ export async function getPurchaseFlowFunnel(
   purchaseFailed: number;
   failuresByCode: Array<{ code: string; count: number }>;
 }> {
-  const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
   // orderBy timestamp DESC — see comment in getFunnelCounts.
   async function countEvent(name: string): Promise<number> {
-    const snap = await db
-      .collection("events")
+    const snap = await colRef(env, "events")
       .where("timestamp", ">=", since)
       .where("name", "==", name)
       .orderBy("timestamp", "desc")
@@ -450,8 +455,7 @@ export async function getPurchaseFlowFunnel(
   // Pull failure docs (not just count) so we can aggregate by error_code.
   // Last 30 days of failures should be a small payload — if this collection
   // grows large, paginate or move to an aggregated counters doc.
-  const failedSnap = await db
-    .collection("events")
+  const failedSnap = await colRef(env, "events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
     .orderBy("timestamp", "desc")
@@ -499,15 +503,14 @@ export async function getPurchaseFlowFunnel(
  * `getSignupsByDay` so the dashboard can show new vs returning users.
  */
 export async function getLoginCount(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ): Promise<number> {
-  const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
-  const snap = await db
-    .collection("events")
+  const snap = await colRef(env, "events")
     .where("timestamp", ">=", since)
     .where("name", "==", "login")
     .orderBy("timestamp", "desc")
@@ -528,14 +531,13 @@ type TierBreakdown = { total: number; premium: number; business: number; unknown
  * we're sub-100k events/day.
  */
 async function tierBreakdown(
-  db: Firestore,
+  env: TraceEnv,
   name: string,
   since: Date,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ): Promise<TierBreakdown> {
-  const snap = await db
-    .collection("events")
+  const snap = await colRef(env, "events")
     .where("timestamp", ">=", since)
     .where("name", "==", name)
     .orderBy("timestamp", "desc")
@@ -568,6 +570,7 @@ async function tierBreakdown(
  * (winback campaigns vs payment retries).
  */
 export async function getSubscriptionLifecycle(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
@@ -579,18 +582,17 @@ export async function getSubscriptionLifecycle(
   changed: TierBreakdown;
   uncanceled: TierBreakdown;
 }> {
-  const db = getDb();
   const since = new Date();
   since.setDate(since.getDate() - days);
 
   const [renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled] =
     await Promise.all([
-      tierBreakdown(db, "subscription_renewed", since, excluded, validUserIds),
-      tierBreakdown(db, "subscription_canceled", since, excluded, validUserIds),
-      tierBreakdown(db, "subscription_expired", since, excluded, validUserIds),
-      tierBreakdown(db, "billing_issue", since, excluded, validUserIds),
-      tierBreakdown(db, "subscription_changed", since, excluded, validUserIds),
-      tierBreakdown(db, "subscription_uncanceled", since, excluded, validUserIds),
+      tierBreakdown(env, "subscription_renewed", since, excluded, validUserIds),
+      tierBreakdown(env, "subscription_canceled", since, excluded, validUserIds),
+      tierBreakdown(env, "subscription_expired", since, excluded, validUserIds),
+      tierBreakdown(env, "billing_issue", since, excluded, validUserIds),
+      tierBreakdown(env, "subscription_changed", since, excluded, validUserIds),
+      tierBreakdown(env, "subscription_uncanceled", since, excluded, validUserIds),
     ]);
 
   return { renewed, voluntaryChurn, involuntaryChurn, billingIssues, changed, uncanceled };
@@ -602,19 +604,18 @@ export async function getSubscriptionLifecycle(
  * Premium-monthly receipt bug) is obvious at a glance.
  */
 export async function getPurchaseFailuresByDay(
+  env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
   validUserIds?: Set<string>
 ): Promise<Array<{ date: string; count: number }>> {
-  const db = getDb();
   const since = new Date();
   // Shift by (days - 1) so today's bucket is included — see comment
   // on getSignupsByDay for the off-by-one this fixes.
   since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
 
-  const snap = await db
-    .collection("events")
+  const snap = await colRef(env, "events")
     .where("timestamp", ">=", since)
     .where("name", "==", "purchase_failed")
     .orderBy("timestamp", "desc")

@@ -1,6 +1,7 @@
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { app } from "./app";
+import { runWithEnv } from "./env";
 
 // Declared so the value is injected into process.env at runtime. The
 // RevenueCat webhook handler reads process.env.REVENUECAT_WEBHOOK_SECRET
@@ -27,18 +28,90 @@ const adminApiToken = defineSecret("ADMIN_API_TOKEN");
 //   firebase functions:secrets:set ANTHROPIC_API_KEY
 const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
 
+// Slack incoming webhook for the #support channel. Read by
+// routes/support.ts when a user submits the in-app Contact Support
+// form. Without this binding the route 500s and the user's message
+// is dropped silently.
+//   firebase functions:secrets:set SLACK_SUPPORT_WEBHOOK_URL
+const slackSupportWebhookUrl = defineSecret("SLACK_SUPPORT_WEBHOOK_URL");
+
+// Meta Conversions API access token. Read by lib/ad-conversions.ts to
+// fire server-side purchase / signup events to Meta for ad attribution.
+// Set with:
+//   firebase functions:secrets:set META_CAPI_ACCESS_TOKEN
+const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
+
+// Slack incoming webhook for the revenue channel. Read by
+// routes/revenuecat-webhook.ts to post a rich (name + email + tier +
+// pricing) notification on each RevenueCat event. This runs ALONGSIDE
+// RevenueCat's own native Slack integration — both can be on at once.
+// Without this binding the route just skips the post (logged WARNING).
+// Set with:
+//   firebase functions:secrets:set SLACK_REVENUE_WEBHOOK_URL
+const slackRevenueWebhookUrl = defineSecret("SLACK_REVENUE_WEBHOOK_URL");
+
+/**
+ * Prod API. Wraps the Express app in `runWithEnv("prod", …)` so every
+ * Firestore read/write inside the request handler resolves to the
+ * unprefixed (prod) collection names via `colRef`.
+ */
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
+    // Default is 60s — too short for /destination-info, which calls
+    // Anthropic to generate ~4000 tokens of structured JSON and
+    // routinely takes 60-90s. The route's own AbortController caps
+    // at 280s so we always log + return cleanly under this limit
+    // rather than letting Cloud Run kill mid-request.
+    timeoutSeconds: 300,
   },
-  app
+  (req, res) => runWithEnv("prod", () => app(req, res))
+);
+
+/**
+ * Staging API. Same code, same secrets, but runs every request in
+ * `runWithEnv("staging", …)` — so Firestore writes land in
+ * `staging_*` collections. Cloud Run exposes this at a distinct URL
+ * (something like `https://apistaging-<hash>-uc.a.run.app`); the mobile
+ * client picks it up via the env-aware API_BASE_URL in `lib/constants.ts`.
+ *
+ * Staging shares all prod secrets so RC promo grants and admin push
+ * still work end-to-end. Per decision 2, RC is effectively unused in
+ * staging for v1 (the mobile client stubs IAP when env=staging), but
+ * if a webhook ever did fire against staging it'd land here and be
+ * processed correctly.
+ */
+export const apiStaging = onRequest(
+  {
+    invoker: "public",
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
+    // Default is 60s — too short for /destination-info, which calls
+    // Anthropic to generate ~4000 tokens of structured JSON and
+    // routinely takes 60-90s. The route's own AbortController caps
+    // at 280s so we always log + return cleanly under this limit
+    // rather than letting Cloud Run kill mid-request.
+    timeoutSeconds: 300,
+  },
+  (req, res) => runWithEnv("staging", () => app(req, res))
 );
 
 // Firestore trigger: posts a Slack notification on each new signup.
-export { onUserProfileCreated } from "./triggers/user-signup";
+// Staging counterpart fires on `staging_userProfiles/{id}` and
+// intentionally skips Slack (decision 5).
+export {
+  onUserProfileCreated,
+  onStagingUserProfileCreated,
+} from "./triggers/user-signup";
 
 // Cron: fires welcome / trial-ending / inactivity push notifications
 // once per day. Each trigger is gated on its template being enabled,
 // so Trevor can switch any of them on/off without a deploy.
-export { dailyNotificationTriggers } from "./triggers/notification-cron";
+//
+// The staging variant (`dailyStagingNotificationTriggers`) is gated on
+// `ENABLE_STAGING_CRON=1` and exports as `null` otherwise — kept this
+// way so toggling staging cron is a single env-var flip, no code change.
+export {
+  dailyNotificationTriggers,
+  dailyStagingNotificationTriggers,
+} from "./triggers/notification-cron";

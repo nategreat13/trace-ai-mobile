@@ -8,12 +8,16 @@
  *
  * Required env (each platform is optional — if the env is missing, its
  * fan-out is skipped):
- *   - META_PIXEL_ID, META_CAPI_TOKEN
+ *   - META_CAPI_ACCESS_TOKEN  (Firebase secret)
+ *     Dataset ID is hardcoded below — it's not sensitive.
  *   - TIKTOK_APP_ID, TIKTOK_EVENTS_TOKEN
  *   - GA4_MEASUREMENT_ID, GA4_API_SECRET
  */
 
 import crypto from "crypto";
+
+// Meta Dataset ID — not a secret, safe to hardcode.
+const META_DATASET_ID = "1001080219009504";
 
 type ConversionKind = "sign_up" | "start_trial" | "purchase" | "subscribe";
 
@@ -39,9 +43,19 @@ function hashEmail(email: string): string {
 }
 
 async function sendMeta(event: ConversionEvent): Promise<void> {
-  const pixelId = process.env.META_PIXEL_ID;
-  const token = process.env.META_CAPI_TOKEN;
-  if (!pixelId || !token) return;
+  const token = process.env.META_CAPI_ACCESS_TOKEN;
+  if (!token) {
+    // Structured WARNING — the silent early-return here was a debugging
+    // black hole. Now it's a visible, filterable log line.
+    console.warn(
+      JSON.stringify({
+        severity: "WARNING",
+        message: "[AdConversions] Meta skipped — META_CAPI_ACCESS_TOKEN not set",
+        event_kind: event.kind,
+      })
+    );
+    return;
+  }
 
   // Meta event name map
   const eventName =
@@ -65,12 +79,23 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
   if (event.currency) customData.currency = event.currency;
   if (event.productId) customData.content_ids = [event.productId];
 
+  // action_source: "website" — NOT "app". An "app" event requires an
+  // `app_data.extinfo` block (16-field device-info array: extinfo
+  // version, OS version, device model, screen size...). Meta hard-
+  // rejects "app" events without it — subcode 2804043, "Invalid
+  // extended device info parameter". These events fire server-side
+  // (Firestore trigger, RC webhook) where we don't have the device in
+  // hand, so we can't build a real extinfo. "website" drops that
+  // requirement; matching is unaffected because Meta matches on the
+  // hashed user_data (email + external_id), not on action_source.
+  // event_source_url is recommended for website events.
   const body = {
     data: [
       {
         event_name: eventName,
         event_time: Math.floor(Date.now() / 1000),
-        action_source: "app",
+        action_source: "website",
+        event_source_url: "https://tracetravel.co",
         user_data: userData,
         custom_data: customData,
       },
@@ -79,19 +104,62 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
 
   try {
     const res = await fetch(
-      `https://graph.facebook.com/v18.0/${pixelId}/events?access_token=${encodeURIComponent(token)}`,
+      `https://graph.facebook.com/v21.0/${META_DATASET_ID}/events?access_token=${encodeURIComponent(token)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }
     );
+    const text = await res.text();
     if (!res.ok) {
-      const text = await res.text();
-      console.warn("[AdConversions] Meta error:", res.status, text);
+      console.error(
+        JSON.stringify({
+          severity: "ERROR",
+          message: "[AdConversions] Meta rejected event",
+          event_kind: event.kind,
+          event_name: eventName,
+          http_status: res.status,
+          response: text.slice(0, 800),
+        })
+      );
+      return;
     }
+    // Success path now logs explicitly. Meta's CAPI response includes
+    // `events_received` (should be 1) and an `fbtrace_id` — logging
+    // them gives positive confirmation the event landed, instead of
+    // the old silent success that left us unable to tell "worked" from
+    // "never ran".
+    let eventsReceived: unknown = null;
+    let fbtraceId: unknown = null;
+    try {
+      const parsed = JSON.parse(text);
+      eventsReceived = parsed.events_received;
+      fbtraceId = parsed.fbtrace_id;
+    } catch {
+      /* non-JSON body — leave nulls, raw text logged below */
+    }
+    console.log(
+      JSON.stringify({
+        severity: "INFO",
+        message: "[AdConversions] Meta accepted event",
+        event_kind: event.kind,
+        event_name: eventName,
+        events_received: eventsReceived,
+        fbtrace_id: fbtraceId,
+        raw: eventsReceived == null ? text.slice(0, 300) : undefined,
+      })
+    );
   } catch (err) {
-    console.warn("[AdConversions] Meta fetch failed:", err);
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: "[AdConversions] Meta fetch threw",
+        event_kind: event.kind,
+        event_name: eventName,
+        error: String((err as any)?.message ?? err),
+      })
+    );
   }
 }
 

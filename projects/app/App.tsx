@@ -14,6 +14,8 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/types";
 import { logEvent } from "./src/lib/analytics";
 import AnalyticsLifecycle from "./src/components/AnalyticsLifecycle";
+import { initEnvFromStorage } from "./src/lib/env";
+import { initDeviceId } from "./src/lib/device";
 import {
   configureNotificationHandler,
   subscribeToNotifications,
@@ -213,6 +215,20 @@ export default function App() {
   const navRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
   const previousRouteRef = useRef<string | null>(null);
 
+  // Gate the entire tree on env hydration. `getEnv()` defaults to "prod"
+  // before this resolves, so even if the user had previously toggled to
+  // staging we'd briefly read prod data. Render nothing until we know.
+  //
+  // Also hydrate the device_id so every event from this launch carries
+  // the stable per-install UUID (`lib/device.ts`). Done in parallel —
+  // both reads are cheap AsyncStorage lookups.
+  const [envHydrated, setEnvHydrated] = useState(false);
+  useEffect(() => {
+    Promise.all([initEnvFromStorage(), initDeviceId()]).finally(() =>
+      setEnvHydrated(true)
+    );
+  }, []);
+
   useEffect(() => {
     if (__DEV__) return;
     Updates.checkForUpdateAsync()
@@ -248,6 +264,17 @@ export default function App() {
       previous_screen: previousRouteRef.current,
     });
     previousRouteRef.current = currentRoute;
+  }
+
+  // Hold the app on a blank screen until we know which env to talk to.
+  // In practice this resolves in <10ms (a single AsyncStorage read), so
+  // users won't see a flicker.
+  if (!envHydrated) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider />
+      </GestureHandlerRootView>
+    );
   }
 
   return (

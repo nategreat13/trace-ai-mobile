@@ -16,6 +16,7 @@ import PremiumWelcomeScreen from "../screens/PremiumWelcomeScreen";
 import BusinessWelcomeScreen from "../screens/BusinessWelcomeScreen";
 import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
 import SharedDealScreen from "../screens/SharedDealScreen";
+import DiagnosticsScreen from "../screens/DiagnosticsScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -49,18 +50,40 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="Landing" component={LandingScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
+          {/* Diagnostics is reachable from Landing's hidden long-press
+              even when unauthed. Registered as a modal so it overlays
+              cleanly and "Close" pops back to Landing. */}
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
+            options={{ presentation: "modal" }}
+          />
         </>
       ) : !profile?.onboardingComplete ? (
-        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+        <>
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
+            options={{ presentation: "modal" }}
+          />
+        </>
       ) : shouldShowSoftPrompt ? (
         // Show the soft prompt for push notifications. Gating is
         // per-device (OS permission state + an AsyncStorage dismissal
         // flag), so a returning user signing in on a new device sees
         // this even if they already went through it on another device.
-        <Stack.Screen
-          name="NotificationsPermission"
-          component={NotificationsPermissionScreen}
-        />
+        <>
+          <Stack.Screen
+            name="NotificationsPermission"
+            component={NotificationsPermissionScreen}
+          />
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
+            options={{ presentation: "modal" }}
+          />
+        </>
       ) : (
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />
@@ -93,6 +116,11 @@ export default function RootNavigator() {
             name="SharedDeal"
             component={SharedDealScreen}
             options={{ presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
+            options={{ presentation: "modal" }}
           />
         </>
       )}

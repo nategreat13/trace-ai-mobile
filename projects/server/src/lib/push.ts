@@ -1,6 +1,6 @@
 import { Expo, ExpoPushMessage, ExpoPushTicket } from "expo-server-sdk";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 import { isTemplateAllowedForUser } from "./notification-preferences";
 
 /**
@@ -62,9 +62,7 @@ export async function sendToUser(
   payload: PushPayload,
   opts: { templateKey?: string; force?: boolean } = {}
 ): Promise<SendResult> {
-  const db = getDb();
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef("userProfiles")
     .where("userId", "==", userId)
     .limit(1)
     .get();
@@ -213,10 +211,11 @@ export async function sendBroadcast(
   payload: PushPayload,
   opts: { templateKey?: string } = {}
 ): Promise<BroadcastResult> {
-  const db = getDb();
-
-  let query: admin.firestore.Query = db.collection("userProfiles")
-    .where("notificationsEnabled", "==", true);
+  let query: admin.firestore.Query = colRef("userProfiles").where(
+    "notificationsEnabled",
+    "==",
+    true
+  );
   if (audience.tiers && audience.tiers.length > 0) {
     query = query.where("subscriptionStatus", "in", audience.tiers);
   }
@@ -285,7 +284,7 @@ async function logSend(entry: {
   matchedUsers?: number;
 }): Promise<void> {
   try {
-    await getDb().collection("notificationLog").add({
+    await colRef("notificationLog").add({
       ...entry,
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
     });

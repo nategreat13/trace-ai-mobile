@@ -100,7 +100,7 @@ export default function LoginScreen() {
         style={{ flex: 1, justifyContent: "center", paddingHorizontal: 24 }}
       >
         {/* Logo */}
-        <View style={{ alignItems: "center", marginBottom: 32 }}>
+        <View style={{ alignItems: "center", marginBottom: 28 }}>
           <Image
             source={require("../../assets/Bluelogo.png")}
             style={{ width: 56, height: 56, resizeMode: "contain", marginBottom: 10 }}
@@ -112,6 +112,40 @@ export default function LoginScreen() {
             Your next adventure starts with a swipe
           </Text>
         </View>
+
+        {/* Sign In / Sign Up tab toggle */}
+        {!isForgot && (
+          <View style={{
+            flexDirection: "row",
+            backgroundColor: theme.muted,
+            borderRadius: 12,
+            padding: 3,
+            marginBottom: 20,
+          }}>
+            {(["Sign Up", "Sign In"] as const).map((label) => {
+              const active = label === "Sign Up" ? isSignup : !isSignup;
+              return (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => setIsSignup(label === "Sign Up")}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 7,
+                    alignItems: "center",
+                    borderRadius: 10,
+                    backgroundColor: active ? theme.background : "transparent",
+                  }}
+                >
+                  <Text style={{
+                    fontSize: 13,
+                    fontWeight: active ? "700" : "500",
+                    color: active ? (label === "Sign Up" ? colors.brand.traceRed : "#4A90D9") : theme.mutedForeground,
+                  }}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Form */}
         <View style={{ gap: 12 }}>
@@ -199,19 +233,6 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Signup ↔ signin toggle (hidden while forgot mode is active) */}
-        {!isForgot && (
-          <TouchableOpacity
-            onPress={() => setIsSignup(!isSignup)}
-            style={{ marginTop: 20, alignItems: "center" }}
-          >
-            <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>
-              {isSignup
-                ? "Already have an account? Sign In"
-                : "Don't have an account? Sign Up"}
-            </Text>
-          </TouchableOpacity>
-        )}
 
       </KeyboardAvoidingView>
     </SafeAreaView>

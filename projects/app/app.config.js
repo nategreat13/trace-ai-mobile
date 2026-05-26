@@ -19,6 +19,24 @@ const localSubscribeUrl = isCodespaces
 const devApiUrl = useLocalApi ? localApiUrl : null;
 const devSubscribeUrl = useLocalApi ? localSubscribeUrl : null;
 
+// Build metadata — git SHA + UTC unix timestamp at build time. Surfaced
+// on the in-app diagnostics screen so we can identify exactly which
+// commit a user is running. Populated by:
+//   - EAS Build:  eas-build-pre-install.sh writes build-info.json
+//                 from `git rev-parse --short HEAD`.
+//   - Local dev:  the `prestart` script in package.json runs the same
+//                 hook before `expo start`.
+//   - OTA:        each OTA bundle is built fresh, so the SHA matches
+//                 the bundle the user actually downloaded.
+// Fallback values (unknown / 0) are used if build-info.json is missing
+// — e.g. on a fresh clone before the first `yarn start`.
+let buildInfo = { gitSha: "unknown", buildTimestamp: 0 };
+try {
+  buildInfo = require("./build-info.json");
+} catch {
+  // Missing file — fall back to defaults above. Don't block config.
+}
+
 module.exports = ({ config }) => ({
   ...config,
   plugins: [
@@ -29,5 +47,7 @@ module.exports = ({ config }) => ({
     ...config.extra,
     devApiUrl,
     devSubscribeUrl,
+    gitSha: buildInfo.gitSha,
+    buildTimestamp: buildInfo.buildTimestamp,
   },
 });

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -6,9 +6,10 @@ import {
   FlatList,
   StyleSheet,
   useColorScheme,
+  Animated,
 } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
-import { Bell, X } from "lucide-react-native";
+import ReanimatedView, { FadeInDown } from "react-native-reanimated";
+import { Bell, X, Plane, MapPin } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
 interface AlertEntry {
@@ -23,9 +24,45 @@ interface AlertDealsProps {
   onDelete: (id: string) => void;
 }
 
+function PulsingDot({ color }: { color: string }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, { toValue: 1.5, duration: 800, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, { toValue: 1, duration: 0, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
+        ]),
+        Animated.delay(400),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
+
+  return (
+    <View style={styles.dotWrap}>
+      <Animated.View
+        style={[
+          styles.dotRing,
+          { borderColor: color, transform: [{ scale }], opacity },
+        ]}
+      />
+      <View style={[styles.dotCore, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 export default function AlertDeals({ alerts, onDelete }: AlertDealsProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+  const isDark = scheme === "dark";
 
   const activeAlerts = alerts.filter((a) => a.status === "active");
 
@@ -44,67 +81,61 @@ export default function AlertDeals({ alerts, onDelete }: AlertDealsProps) {
   }
 
   const renderItem = ({ item, index }: { item: AlertEntry; index: number }) => {
-    const isDark = scheme === "dark";
-    const statusColor =
-      item.status === "matched" ? "#22c55e" : "#3b82f6";
+    const isMatched = item.status === "matched";
+    const accentColor = isMatched ? "#22c55e" : "#3b82f6";
 
     return (
-      <Animated.View
+      <ReanimatedView.View
         entering={FadeInDown.delay(index * 60).duration(300)}
         style={[
           styles.alertCard,
           {
-            backgroundColor: isDark
-              ? "rgba(59,130,246,0.08)"
-              : "rgba(59,130,246,0.05)",
-            borderColor: isDark
-              ? "rgba(59,130,246,0.2)"
-              : "rgba(59,130,246,0.15)",
+            backgroundColor: isDark ? "rgba(255,255,255,0.04)" : "#fff",
+            borderColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)",
           },
         ]}
       >
-        <View style={styles.alertLeft}>
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: `${statusColor}20` },
-            ]}
-          >
-            <Bell size={16} color={statusColor} />
-          </View>
-          <View style={styles.alertInfo}>
+        {/* Left color stripe */}
+        <View style={[styles.stripe, { backgroundColor: accentColor }]} />
+
+        {/* Plane icon block */}
+        <View style={[styles.iconBlock, { backgroundColor: `${accentColor}18` }]}>
+          <Plane size={18} color={accentColor} />
+        </View>
+
+        {/* Main content */}
+        <View style={styles.alertInfo}>
+          <View style={styles.destRow}>
             <Text
               style={[styles.alertDestination, { color: theme.foreground }]}
               numberOfLines={1}
             >
               {item.destination}
             </Text>
+          </View>
+          <View style={styles.metaRow}>
+            <MapPin size={10} color={theme.mutedForeground} />
             <Text style={[styles.alertMeta, { color: theme.mutedForeground }]}>
-              {item.month ? `Travel: ${item.month}` : "Waiting for deals..."}
+              {item.month ? `Travel: ${item.month}` : "Any time"}
+            </Text>
+          </View>
+          <View style={styles.watchingRow}>
+            <PulsingDot color={accentColor} />
+            <Text style={[styles.watchingText, { color: accentColor }]}>
+              {isMatched ? "Deal matched!" : "Watching for deals"}
             </Text>
           </View>
         </View>
 
-        <View style={styles.alertRight}>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: `${statusColor}18` },
-            ]}
-          >
-            <Text style={[styles.statusBadgeText, { color: statusColor }]}>
-              {item.status}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => onDelete(item.id)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.deleteBtn}
-          >
-            <X size={16} color={theme.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
+        {/* Delete */}
+        <TouchableOpacity
+          onPress={() => onDelete(item.id)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.deleteBtn}
+        >
+          <X size={16} color={theme.mutedForeground} />
+        </TouchableOpacity>
+      </ReanimatedView.View>
     );
   };
 
@@ -153,52 +184,77 @@ const styles = StyleSheet.create({
   alertCard: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
+    overflow: "hidden",
+    minHeight: 70,
   },
-  alertLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
+  stripe: {
+    width: 4,
+    alignSelf: "stretch",
   },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  iconBlock: {
+    width: 48,
+    alignSelf: "stretch",
     alignItems: "center",
     justifyContent: "center",
   },
   alertInfo: {
     flex: 1,
+    paddingVertical: 12,
+    paddingLeft: 10,
+    gap: 3,
+  },
+  destRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   alertDestination: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
   },
   alertMeta: {
     fontSize: 11,
-    marginTop: 2,
   },
-  alertRight: {
+  watchingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 6,
+    marginTop: 2,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 99,
+  watchingText: {
+    fontSize: 11,
+    fontWeight: "600",
   },
-  statusBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    textTransform: "capitalize",
+  dotWrap: {
+    width: 10,
+    height: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dotRing: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
+  dotCore: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   deleteBtn: {
-    padding: 4,
+    padding: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
   emptyContainer: {
     borderRadius: 16,

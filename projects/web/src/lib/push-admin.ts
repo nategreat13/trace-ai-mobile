@@ -1,4 +1,5 @@
-import { getDb } from "./firebase-admin";
+import { colRef } from "./firebase-admin";
+import type { TraceEnv } from "@trace/shared";
 
 /**
  * Admin-side helpers for push notification management.
@@ -269,9 +270,8 @@ function defaultTemplate(key: string): NotificationTemplate {
   };
 }
 
-export async function listTemplates(): Promise<NotificationTemplate[]> {
-  const db = getDb();
-  const snap = await db.collection("notificationTemplates").get();
+export async function listTemplates(env: TraceEnv): Promise<NotificationTemplate[]> {
+  const snap = await colRef(env, "notificationTemplates").get();
   const byKey: Record<string, NotificationTemplate> = {};
   snap.forEach((doc) => {
     const d = doc.data();
@@ -291,9 +291,11 @@ export async function listTemplates(): Promise<NotificationTemplate[]> {
   return KNOWN_TEMPLATE_KEYS.map((k) => byKey[k] ?? defaultTemplate(k));
 }
 
-export async function getTemplate(key: string): Promise<NotificationTemplate | null> {
-  const db = getDb();
-  const snap = await db.collection("notificationTemplates").doc(key).get();
+export async function getTemplate(
+  env: TraceEnv,
+  key: string
+): Promise<NotificationTemplate | null> {
+  const snap = await colRef(env, "notificationTemplates").doc(key).get();
   if (snap.exists) {
     const d = snap.data()!;
     // Merge Firestore values over the default. Firestore wins where it
@@ -321,10 +323,10 @@ export async function getTemplate(key: string): Promise<NotificationTemplate | n
 }
 
 export async function upsertTemplate(
+  env: TraceEnv,
   key: string,
   fields: Partial<NotificationTemplate>
 ): Promise<void> {
-  const db = getDb();
   const allowed: Record<string, unknown> = {
     updatedAt: new Date(),
   };
@@ -334,7 +336,7 @@ export async function upsertTemplate(
   if (fields.enabled !== undefined) allowed.enabled = fields.enabled;
   if (fields.description !== undefined) allowed.description = fields.description;
   if (fields.variables !== undefined) allowed.variables = fields.variables;
-  await db.collection("notificationTemplates").doc(key).set(allowed, { merge: true });
+  await colRef(env, "notificationTemplates").doc(key).set(allowed, { merge: true });
 }
 
 export interface NotificationLogEntry {
@@ -352,10 +354,11 @@ export interface NotificationLogEntry {
   sentAt: Date | null;
 }
 
-export async function listRecentSends(limit = 100): Promise<NotificationLogEntry[]> {
-  const db = getDb();
-  const snap = await db
-    .collection("notificationLog")
+export async function listRecentSends(
+  env: TraceEnv,
+  limit = 100
+): Promise<NotificationLogEntry[]> {
+  const snap = await colRef(env, "notificationLog")
     .orderBy("sentAt", "desc")
     .limit(limit)
     .get();
@@ -492,12 +495,11 @@ export async function seedTemplates(): Promise<{ created: string[] }> {
  * feedback ("removed; N tokens left").
  */
 export async function removeUserPushToken(
+  env: TraceEnv,
   userId: string,
   token: string
 ): Promise<{ found: boolean; remaining: number }> {
-  const db = getDb();
-  const snap = await db
-    .collection("userProfiles")
+  const snap = await colRef(env, "userProfiles")
     .where("userId", "==", userId)
     .limit(1)
     .get();

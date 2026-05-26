@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, Alert, useColorScheme, Platform } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  Alert,
+  useColorScheme,
+  Platform,
+} from "react-native";
 import * as Updates from "expo-updates";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
@@ -21,6 +27,14 @@ import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+/** "john  smith" → "John Smith" — capitalize each word, collapse spaces. */
+function capitalizeName(name: string): string {
+  return name
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function OnboardingScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute();
@@ -29,26 +43,37 @@ export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  const [step, setStep] = useState(0);
+  // When editing preferences, skip the name step (step 0) entirely —
+  // the user already set their name during initial onboarding and
+  // doesn't need to re-enter it just to update travel preferences.
+  const [step, setStep] = useState(isEditing ? 1 : 0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
   const [existingProfileId, setExistingProfileId] = useState<string | null>(
     null,
   );
+  const lastNameRef = useRef<TextInput>(null);
 
   const [data, setData] = useState({
+    firstName: "",
+    lastName: "",
     homeAirport: "",
     destinationPreference: "both" as "domestic" | "international" | "both",
-    dealTypes: [] as string[],
-    travelTimeframe: [] as string[],
+    dealTypes: ["surprise"] as string[],
+    travelTimeframe: ["no_preference"] as string[],
   });
 
   useEffect(() => {
     logEvent("onboarding_started", { is_editing: isEditing });
     if (profile) {
       setExistingProfileId(profile.id);
+      // Pre-populate the name step from the existing displayName so an
+      // editing user sees their current name (and it's preserved on save).
+      const nameParts = (profile.displayName || "").trim().split(/\s+/);
       setData((d) => ({
         ...d,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
         homeAirport: profile.homeAirport || "LAX",
         destinationPreference: profile.destinationPreference || "both",
         dealTypes: profile.dealTypes || [],
@@ -103,10 +128,24 @@ export default function OnboardingScreen() {
   const handleContinue = async () => {
     if (!user) return;
 
+    // The name step is required (canProceed gates it), so by the time
+    // we reach here both fields are filled.
+    const fullName = [
+      data.firstName.trim() ? capitalizeName(data.firstName) : "",
+      data.lastName.trim() ? capitalizeName(data.lastName) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     try {
       if (profile?.id) {
-        // Existing profile — update preferences
+        // Existing profile — update preferences.
+        // When editing, the name step is skipped so preserve the existing
+        // displayName unchanged; only update it if we actually have a new value.
         const updates: Record<string, any> = {
+          displayName: isEditing
+            ? (profile.displayName || "Travel Explorer")
+            : (fullName || profile.displayName || "Travel Explorer"),
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -135,7 +174,7 @@ export default function OnboardingScreen() {
         await createUserProfile({
           userId: user.uid,
           email: user.email || "",
-          displayName: "Travel Explorer",
+          displayName: fullName || "Travel Explorer",
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,
@@ -196,6 +235,75 @@ export default function OnboardingScreen() {
   };
 
   const steps = [
+    {
+      title: "What's your name?",
+      subtitle: "We'd love to know you",
+      canProceed:
+        data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
+      content: (
+        <View style={{ gap: 12 }}>
+          <TextInput
+            placeholder="First name"
+            placeholderTextColor={theme.mutedForeground}
+            value={data.firstName}
+            onChangeText={(v) => {
+              const trimmed = v.trim();
+              const spaceIdx = trimmed.indexOf(" ");
+              if (spaceIdx > 0) {
+                const first = trimmed.slice(0, spaceIdx);
+                const last = trimmed.slice(spaceIdx + 1).trim();
+                setData((d) => ({ ...d, firstName: first, lastName: last }));
+                lastNameRef.current?.focus();
+              } else {
+                setData((d) => ({ ...d, firstName: v }));
+              }
+            }}
+            onSubmitEditing={() => lastNameRef.current?.focus()}
+            returnKeyType="next"
+            textContentType="name"
+            autoComplete="name"
+            autoCapitalize="words"
+            style={{
+              backgroundColor: theme.muted,
+              borderRadius: 12,
+              padding: 14,
+              fontSize: 16,
+              color: theme.foreground,
+              borderWidth: 2,
+              borderColor: theme.border,
+            }}
+          />
+          <TextInput
+            ref={lastNameRef}
+            placeholder="Last name"
+            placeholderTextColor={theme.mutedForeground}
+            value={data.lastName}
+            onChangeText={(v) => setData((d) => ({ ...d, lastName: v }))}
+            onSubmitEditing={() => {
+              if (
+                data.firstName.trim().length > 0 &&
+                data.lastName.trim().length > 0
+              ) {
+                setStep(1);
+              }
+            }}
+            returnKeyType="done"
+            textContentType="familyName"
+            autoComplete="name-family"
+            autoCapitalize="words"
+            style={{
+              backgroundColor: theme.muted,
+              borderRadius: 12,
+              padding: 14,
+              fontSize: 16,
+              color: theme.foreground,
+              borderWidth: 2,
+              borderColor: theme.border,
+            }}
+          />
+        </View>
+      ),
+    },
     {
       title: "What's your home airport?",
       subtitle: "Choose your home airport",
@@ -259,49 +367,38 @@ export default function OnboardingScreen() {
     },
   ];
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      <View style={{ flex: 1, justifyContent: "center" }}>
-        {step === 0 && !existingProfileId && (
-          <View style={{ alignItems: "center", marginBottom: 24 }}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>✈️</Text>
-            <Text
-              style={{
-                fontSize: 24,
-                fontWeight: "800",
-                color: theme.foreground,
-                marginBottom: 4,
-              }}
-            >
-              Trace Travel
-            </Text>
-            <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-              Let's personalize your deal experience
-            </Text>
-          </View>
-        )}
+  // When editing, the name step (index 0) is hidden so we offset the
+  // displayed step number and total so the progress bar stays accurate.
+  const displayStep = isEditing ? step - 1 : step;
+  const displayTotal = isEditing ? steps.length - 1 : steps.length;
 
-        <OnboardingStep
-          step={step}
-          totalSteps={steps.length}
-          title={steps[step].title}
-          subtitle={steps[step].subtitle}
-          canProceed={steps[step].canProceed}
-          onNext={() => {
-            if (step < steps.length - 1) setStep(step + 1);
-            else handleFinish();
-          }}
-          onBack={() => setStep(step - 1)}
-        >
-          {steps[step].content}
-        </OnboardingStep>
-      </View>
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <OnboardingStep
+        step={displayStep}
+        totalSteps={displayTotal}
+        title={steps[step].title}
+        subtitle={steps[step].subtitle}
+        canProceed={steps[step].canProceed}
+        onNext={() => {
+          if (step < steps.length - 1) setStep(step + 1);
+          else handleFinish();
+        }}
+        onBack={() => {
+          // When editing, step 1 is the first visible step — pressing back
+          // should dismiss the modal, not reveal the hidden name step.
+          if (isEditing && step === 1) navigation.goBack();
+          else setStep(step - 1);
+        }}
+      >
+        {steps[step].content}
+      </OnboardingStep>
 
       <PersonalityReveal
         visible={showPersonality}
         personality={generatedPersonality}
         onContinue={handleContinue}
       />
-    </SafeAreaView>
+    </View>
   );
 }

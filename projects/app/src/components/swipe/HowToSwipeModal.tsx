@@ -2,6 +2,7 @@ import React from "react";
 import {
   View,
   Text,
+  Image,
   Modal,
   TouchableOpacity,
   StyleSheet,
@@ -14,7 +15,7 @@ import Animated, {
   FadeInUp,
   ZoomIn,
 } from "react-native-reanimated";
-import { X, Heart, Star, Eye } from "lucide-react-native";
+import { X, Heart, Eye } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
 interface HowToSwipeModalProps {
@@ -47,18 +48,12 @@ export default function HowToSwipeModal({
         />
       ),
       title: "Swipe right or tap heart",
-      desc: "Like this deal",
+      desc: "Save this deal to your dashboard",
     },
     {
       bgColor: isDark ? "rgba(1, 173, 255, 0.15)" : "#DBEAFE",
-      icon: <Star size={24} color="#01ADFF" fill="#01ADFF" />,
-      title: "Tap the center button",
-      desc: "Save deal to your list",
-    },
-    {
-      bgColor: isDark ? theme.muted : "#F5F5F5",
-      icon: <Eye size={24} color={theme.mutedForeground} />,
-      title: "Tap a card",
+      icon: <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />,
+      title: "Tap card or center button",
       desc: "See full deal details",
     },
   ];

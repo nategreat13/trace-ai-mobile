@@ -12,6 +12,7 @@ import {
   Animated,
   Share,
 } from "react-native";
+import ShareNamePromptModal from "../ShareNamePromptModal";
 import Reanimated, { FadeIn } from "react-native-reanimated";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -45,7 +46,14 @@ interface ExpandedDealProps {
   userProfile?: any;
   sharedBy?: string;
   bothSaved?: boolean;
-  onShare?: () => void;
+  /**
+   * Called with the resolved sender name once the user confirms it.
+   * Pass `userName` (the pre-resolved name from Auth/Firestore) so
+   * ExpandedDeal can skip the prompt when a name is already known.
+   */
+  onShare?: (name: string) => void;
+  /** Pre-resolved display name — "Travel Explorer" filtered out by the parent. */
+  userName?: string | null;
 }
 
 type FitLevel = { color: "green" | "yellow" | "red" };
@@ -183,6 +191,7 @@ export default function ExpandedDeal({
   sharedBy,
   bothSaved,
   onShare,
+  userName,
 }: ExpandedDealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -190,6 +199,20 @@ export default function ExpandedDeal({
 
   const [saved, setSaved] = useState(false);
   const saveScale = useRef(new Animated.Value(1)).current;
+
+  // Share name prompt — rendered inside this Modal so iOS stacks it correctly.
+  // A sibling Modal in the parent component doesn't appear over a full-screen
+  // Modal on iOS; nesting it here fixes that.
+  const [showSharePrompt, setShowSharePrompt] = useState(false);
+
+  const handleSharePress = () => {
+    if (!onShare) return;
+    if (userName) {
+      onShare(userName);
+    } else {
+      setShowSharePrompt(true);
+    }
+  };
 
   const handleSave = () => {
     if (saved) return;
@@ -552,7 +575,7 @@ export default function ExpandedDeal({
           <View style={styles.buttonRow}>
             {!!onShare && (
               <TouchableOpacity
-                onPress={onShare}
+                onPress={handleSharePress}
                 activeOpacity={0.8}
                 style={[styles.shareButton, { backgroundColor: theme.card, borderColor: theme.border }]}
               >
@@ -602,6 +625,18 @@ export default function ExpandedDeal({
         >
           <X size={20} color="#1a1a1a" strokeWidth={2.5} />
         </TouchableOpacity>
+
+        {/* Share name prompt — must live inside this Modal so iOS renders
+            it on top of the full-screen deal view. A sibling Modal in the
+            parent won't stack over an already-open full-screen modal. */}
+        <ShareNamePromptModal
+          visible={showSharePrompt}
+          onDismiss={() => setShowSharePrompt(false)}
+          onSave={(name) => {
+            setShowSharePrompt(false);
+            onShare?.(name);
+          }}
+        />
       </Reanimated.View>
     </Modal>
   );

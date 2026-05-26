@@ -22,6 +22,10 @@ export type RootStackParamList = {
   DealType: undefined;
   DealCategory: undefined;
   SharedDeal: { shareId: string };
+  // Hidden diagnostics screen. Reachable only via a 3-second long-press
+  // on the Trace logo (Landing or Profile). Always available — including
+  // on production binaries — per design decision (no passcode in v1).
+  Diagnostics: undefined;
 };
 
 declare global {

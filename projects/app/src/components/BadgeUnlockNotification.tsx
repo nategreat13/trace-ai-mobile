@@ -25,7 +25,7 @@ export default function BadgeUnlockNotification({
 
   useEffect(() => {
     if (badge) {
-      timerRef.current = setTimeout(onDismiss, 3000);
+      timerRef.current = setTimeout(onDismiss, 2500);
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -47,8 +47,8 @@ export default function BadgeUnlockNotification({
         style={styles.backdrop}
       >
         <Animated.View
-          entering={ZoomIn.duration(220).springify().damping(18).stiffness(260)}
-          exiting={ZoomOut.duration(180)}
+          entering={ZoomIn.duration(160)}
+          exiting={ZoomOut.duration(140)}
           style={[styles.card, { backgroundColor: theme.card, borderColor: colors.brand.amber400 }]}
         >
           <Text style={styles.emoji}>{badge.emoji}</Text>
@@ -82,55 +82,55 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    maxWidth: 320,
-    borderRadius: 24,
+    maxWidth: 270,
+    borderRadius: 20,
     borderWidth: 2,
-    paddingVertical: 28,
-    paddingHorizontal: 24,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 14,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    elevation: 10,
   },
   emoji: {
-    fontSize: 52,
-    marginBottom: 12,
+    fontSize: 40,
+    marginBottom: 8,
   },
   labelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    marginBottom: 8,
+    gap: 4,
+    marginBottom: 6,
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "800",
     color: colors.brand.amber600,
     textTransform: "uppercase",
     letterSpacing: 1,
   },
   name: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: "900",
     textAlign: "center",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   description: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 18,
+    marginBottom: 16,
   },
   dismissBtn: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
   },
   dismissText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
   },
 });

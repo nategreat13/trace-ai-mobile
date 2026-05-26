@@ -4,13 +4,12 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { colors } from "../../theme/colors";
 
 interface SwipeTutorialProps {
-  action: "left" | "right" | "super" | null;
+  action: "left" | "right" | null;
 }
 
 const messages: Record<string, { emoji: string; text: string }> = {
   left: { emoji: "\u{1F44B}", text: "Passed" },
-  right: { emoji: "\u2764\uFE0F", text: "Liked" },
-  super: { emoji: "\u{1F680}", text: "Saved" },
+  right: { emoji: "\u{1F516}", text: "Saved!" },
 };
 
 export default function SwipeTutorial({ action }: SwipeTutorialProps) {

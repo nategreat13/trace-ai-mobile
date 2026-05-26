@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { dealMatchesType } from "../lib/dealClassifier";
+import { weightedShuffle } from "../lib/dealScorer";
 import { Deal, UserProfile } from "@trace/shared";
-import { getItem, setItem } from "../lib/storage";
+
 
 function isInternationalDeal(deal: Deal): boolean | null {
   if (deal.domestic_or_international) {
@@ -31,45 +32,6 @@ function sortByBestDeal(arr: Deal[]): Deal[] {
   });
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
-}
-
-async function buildDailyDeck(
-  deals: Deal[],
-  storagePrefix: string,
-  homeAirport: string
-): Promise<Deal[]> {
-  if (deals.length === 0) return [];
-
-  const sorted = sortByBestDeal(deals);
-  const cheapest = sorted[0];
-  const rest = sorted.slice(1);
-
-  const today = new Date().toISOString().split("T")[0];
-  const shuffleKey = `${storagePrefix}_shuffle_${today}_${homeAirport}`;
-
-  let shuffledRest: Deal[] = [];
-  const stored = await getItem<string[]>(shuffleKey);
-  if (stored) {
-    const idToDeal = new Map(rest.map((d) => [d.id, d]));
-    shuffledRest = stored.map((id) => idToDeal.get(id)!).filter(Boolean);
-    const storedIds = new Set(stored);
-    const missing = rest.filter((d) => !storedIds.has(d.id));
-    shuffledRest.push(...missing);
-  }
-
-  if (shuffledRest.length === 0) {
-    shuffledRest = shuffle(rest);
-    await setItem(
-      shuffleKey,
-      shuffledRest.map((d) => d.id)
-    );
-  }
-
-  return [cheapest, ...shuffledRest];
-}
-
 export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [premiumDeals, setPremiumDeals] = useState<Deal[]>([]);
@@ -88,6 +50,7 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
     try {
       const airportCode = profile.homeAirport || "LAX";
       console.log("[useDealFetch] fetching deals for", airportCode);
+
       let apiDeals = await fetchDeals(airportCode);
       console.log("[useDealFetch] got", apiDeals.length, "deals");
 
@@ -171,7 +134,12 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
           ? [...dedupedPreferred, ...dedupedRemaining]
           : dedupeByDestination(sortByBestDeal(apiDeals));
 
-      const deckDeals = await buildDailyDeck(finalDeals, "deck", airportCode);
+      // Final global dedup: if a destination appeared in BOTH the matched
+      // and unmatched buckets (e.g. some Sydney deals matched preferences,
+      // others didn't), one copy slipped through each bucket's individual
+      // dedup pass. This catches those cross-bucket duplicates.
+      const globalDeduped = dedupeByDestination(finalDeals);
+      const deckDeals = weightedShuffle(globalDeduped);
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
@@ -180,8 +148,7 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       if (profile.subscriptionStatus === "business") {
         try {
           const prem = await fetchPremiumDeals(airportCode);
-          const bizDeck = await buildDailyDeck(prem, "business_deck", airportCode);
-          setPremiumDeals(bizDeck);
+          setPremiumDeals(weightedShuffle(prem));
         } catch {
           // silent fail
         }

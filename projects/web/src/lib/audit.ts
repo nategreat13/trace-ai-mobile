@@ -1,4 +1,5 @@
-import { getDb } from "./firebase-admin";
+import { colRef } from "./firebase-admin";
+import type { TraceEnv } from "@trace/shared";
 
 /**
  * Append-only audit log of admin actions. Stored in Firestore at
@@ -25,12 +26,13 @@ export interface AuditEntry {
 }
 
 export async function logAuditEvent(
+  env: TraceEnv,
   action: string,
   resource: string | null,
   detail?: Record<string, unknown>
 ): Promise<void> {
   try {
-    await getDb().collection("adminAuditLog").add({
+    await colRef(env, "adminAuditLog").add({
       action,
       resource: resource ?? null,
       detail: detail ?? null,
@@ -41,10 +43,11 @@ export async function logAuditEvent(
   }
 }
 
-export async function listAuditEntries(limit = 200): Promise<AuditEntry[]> {
-  const db = getDb();
-  const snap = await db
-    .collection("adminAuditLog")
+export async function listAuditEntries(
+  env: TraceEnv,
+  limit = 200
+): Promise<AuditEntry[]> {
+  const snap = await colRef(env, "adminAuditLog")
     .orderBy("performedAt", "desc")
     .limit(limit)
     .get();

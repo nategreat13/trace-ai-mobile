@@ -33,10 +33,11 @@ import {
   createSwipeAction,
   getSwipeActions,
   saveDeal,
+  deleteSavedDeal,
+  updateUserProfile,
 } from "../services/firestore";
 import {
   MAX_DAILY_SWIPES,
-  MAX_SAVES,
   UNLIMITED_SWIPES,
   ALL_BADGES,
 } from "../lib/constants";
@@ -48,7 +49,6 @@ import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
 import LevelUpNotification from "../components/LevelUpNotification";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
-import ShareNamePromptModal from "../components/ShareNamePromptModal";
 import type { RootStackParamList } from "../navigation/types";
 import type { Deal } from "@trace/shared";
 import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
@@ -244,29 +244,35 @@ export default function SwipeDeckScreen() {
   );
 
   const [deckMode, setDeckMode] = useState<"economy" | "business">("economy");
+  const [destFilter, setDestFilter] = useState<"both" | "domestic" | "international">("both");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted" | "daily_limit">("swiping");
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
-  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
-  const [showShareNamePrompt, setShowShareNamePrompt] = useState(false);
-  const [pendingShareDeal, setPendingShareDeal] = useState<Deal | null>(null);
 
-  // Undo state
+  // Undo state — also tracks the Firestore doc ID of a saved deal so undo can delete it
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
+  const lastSavedDealDocId = useRef<string | null>(null);
 
   // Tutorial/modal state
   const [showHowToSwipe, setShowHowToSwipe] = useState(false);
   const [showAILearning, setShowAILearning] = useState(false);
-  const [tutorialAction, setTutorialAction] = useState<"left" | "right" | "super" | null>(null);
+  const [tutorialAction, setTutorialAction] = useState<"left" | "right" | null>(null);
   const [shownTutorialTypes, setShownTutorialTypes] = useState<Set<string>>(new Set());
 
   // Badge/Level notification state
   const [unlockedBadge, setUnlockedBadge] = useState<{ name: string; emoji: string; description: string } | null>(null);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [newLevel, setNewLevel] = useState(1);
+  // Snapshot of swipeCount at the moment of leveling up. The
+  // LevelUpNotification component reads it to render the "X more
+  // swipes to unlock" hint and the progress bar toward the next
+  // level; right after a level-up swipeCount % 25 === 0 so progress
+  // is 0% (fresh start toward the next level).
+  const [newSwipeCount, setNewSwipeCount] = useState(0);
 
   // Track total swipes this session for AI learning modal
   const sessionSwipeCount = useRef(0);
@@ -276,34 +282,61 @@ export default function SwipeDeckScreen() {
     [deckMode, premiumDeals, deals]
   );
 
-  // Pre-fetch destination info for current + next deal as soon as they're visible,
-  // so the Destination tab loads instantly (or near-instantly) when the user opens it.
+  // Classify a deal as domestic or international using the same logic as useDealFetch.
+  const getDealDestType = useCallback((deal: Deal): "domestic" | "international" => {
+    if (deal.domestic_or_international) {
+      return deal.domestic_or_international.toLowerCase().includes("international")
+        ? "international" : "domestic";
+    }
+    if (deal.continent) {
+      const c = deal.continent.toLowerCase();
+      return c.includes("north america") ? "domestic" : "international";
+    }
+    return "domestic"; // default unknown deals to domestic
+  }, []);
+
+  // Deals visible after applying the dest filter. No reload needed — we just
+  // slice the already-loaded deck. Only applied when profile chose "both".
+  const visibleDeals = useMemo(() => {
+    if (destFilter === "both") return activeDeals;
+    return activeDeals.filter((d) => getDealDestType(d) === destFilter);
+  }, [activeDeals, destFilter, getDealDestType]);
+
+  // Reset deck position whenever the filter changes so the user starts fresh.
   useEffect(() => {
-    prefetchDestinationInfo(activeDeals[currentIndex] ?? null);
-    prefetchDestinationInfo(activeDeals[currentIndex + 1] ?? null);
-  }, [currentIndex, activeDeals]);
+    setCurrentIndex(0);
+    setLastSwipedDeal(null);
+    lastSavedDealDocId.current = null;
+  }, [destFilter]);
+
+  // Pre-fetch destination info for current + next 2 deals as soon as they're
+  // visible, so the Destination tab loads instantly when the user opens it.
+  useEffect(() => {
+    prefetchDestinationInfo(visibleDeals[currentIndex] ?? null);
+    prefetchDestinationInfo(visibleDeals[currentIndex + 1] ?? null);
+    prefetchDestinationInfo(visibleDeals[currentIndex + 2] ?? null);
+  }, [currentIndex, visibleDeals]);
 
   async function doShare(deal: Deal, name: string) {
     try {
       const shareId = await createShare(deal, user!.uid, name);
+      // Do NOT pass `url` — it's already embedded in `message`. On iOS the
+      // share sheet appends `url` to the message automatically, which would
+      // print the App Store link twice.
       await Share.share({
         title: `${deal.destination} deal on Trace`,
-        message: `${name} found an amazing deal to ${deal.destination} for $${deal.price}! Check it out on Trace 👉 tracetravel://share/${shareId}`,
-        url: `tracetravel://share/${shareId}`,
+        message: `I found a deal to ${deal.destination} for $${deal.price}. Open it in Trace 👉 https://subscribe.tracetravel.co/share/${shareId}`,
       });
     } catch {}
   }
 
-  function handleShareDeal() {
-    if (!expandedDeal || !user) return;
-    const name = profile?.displayName || user.displayName;
-    if (!name) {
-      setPendingShareDeal(expandedDeal);
-      setShowShareNamePrompt(true);
-    } else {
-      doShare(expandedDeal, name);
-    }
-  }
+  // Resolve the sender name for deal sharing. Prefer Firebase Auth
+  // displayName (set by Google/Apple sign-in), fall back to Firestore profile
+  // name, but filter out "Travel Explorer" (the onboarding placeholder).
+  const resolvedUserName = (() => {
+    const raw = user?.displayName || profile?.displayName;
+    return raw && raw !== "Travel Explorer" ? raw : null;
+  })();
 
   // Initialize swipes left and fetch swipe history
   useEffect(() => {
@@ -348,14 +381,17 @@ export default function SwipeDeckScreen() {
     }
   }, [profile?.subscriptionStatus, premiumDeals.length]);
 
-  // When the deck runs out during normal swiping: reload to expand the pool
+  // When the deck runs out during normal swiping: reload to expand the pool.
+  // Exception: if the filter is the reason the visible deck is empty (not a
+  // real out-of-deals), don't reload — the full deck still has cards.
   useEffect(() => {
-    const isOutOfDeals = activeDeals.length - currentIndex <= 0;
-    if (!isOutOfDeals || loading || deckPhase !== "swiping") return;
+    const isOutOfDeals = visibleDeals.length - currentIndex <= 0;
+    const isFilterEmpty = destFilter !== "both" && visibleDeals.length === 0 && activeDeals.length > 0;
+    if (!isOutOfDeals || isFilterEmpty || loading || deckPhase !== "swiping") return;
     setDeckPhase("expanding");
     setCurrentIndex(0);
     reload();
-  }, [activeDeals.length, currentIndex, loading, deckPhase]);
+  }, [visibleDeals.length, activeDeals.length, currentIndex, loading, deckPhase, destFilter]);
 
   // Transition to daily limit screen when a free user hits 0 swipes
   useEffect(() => {
@@ -391,6 +427,11 @@ export default function SwipeDeckScreen() {
   const handleUndo = useCallback(() => {
     if (!lastSwipedDeal || currentIndex <= 0) return;
     const restoredId = lastSwipedDeal.deal.id;
+    // If the last swipe was a right-swipe (save), also remove the saved deal from Firestore
+    if (lastSwipedDeal.action === "right" && lastSavedDealDocId.current) {
+      deleteSavedDeal(lastSavedDealDocId.current).catch(() => {});
+      lastSavedDealDocId.current = null;
+    }
     setCurrentIndex((prev) => prev - 1);
     setLastSwipedDeal(null);
     setAllSwipes((prev) => prev.slice(1));
@@ -401,7 +442,7 @@ export default function SwipeDeckScreen() {
 
   const handleSwipe = useCallback(
     async (action: "left" | "right" | "super") => {
-      if (!profile || currentIndex >= activeDeals.length) return;
+      if (!profile || currentIndex >= visibleDeals.length) return;
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
@@ -410,26 +451,20 @@ export default function SwipeDeckScreen() {
         return;
       }
 
-      if (!isPremium && action === "super") {
-        const savedCount = allSwipes.filter((s) => s.action === "super").length;
-        if (savedCount >= MAX_SAVES) {
-          logEvent("daily_limit_hit", { reason: "max_saves" });
-          navigation.navigate("Paywall", { entryPoint: "swipe_max_saves" });
-          return;
-        }
-      }
-
-      const deal = activeDeals[currentIndex];
+      const deal = visibleDeals[currentIndex];
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
 
+      // Normalize: old "super" action (from ExpandedDeal onSave path) counts as "right"
+      const normalizedAction = action === "super" ? "right" : action;
+
       logEvent("swipe", {
-        action,
+        action: normalizedAction,
         deal_type: deal.deal_type ?? null,
         destination: deal.destination,
         price: deal.price,
       });
-      if (action === "super") {
+      if (normalizedAction === "right") {
         logEvent("deal_saved", {
           deal_type: deal.deal_type ?? null,
           destination: deal.destination,
@@ -438,18 +473,20 @@ export default function SwipeDeckScreen() {
       }
 
       // Track for undo
-      setLastSwipedDeal({ deal, action });
+      setLastSwipedDeal({ deal, action: normalizedAction });
 
       // Sound feedback
-      if (action === "right") play("like");
-      else if (action === "left") play("pass");
-      else if (action === "super") play("save");
+      if (normalizedAction === "right") play("save");
+      else if (normalizedAction === "left") play("pass");
 
       // Show swipe tutorial toast for first swipe of each type this session
-      if (!shownTutorialTypes.has(action)) {
-        setTutorialAction(action);
-        setShownTutorialTypes((prev) => new Set([...prev, action]));
-        setTimeout(() => setTutorialAction(null), 3000);
+      if (normalizedAction !== "right" || !shownTutorialTypes.has("right")) {
+        const toastAction = normalizedAction as "left" | "right";
+        if (!shownTutorialTypes.has(toastAction)) {
+          setTutorialAction(toastAction);
+          setShownTutorialTypes((prev) => new Set([...prev, toastAction]));
+          setTimeout(() => setTutorialAction(null), 3000);
+        }
       }
 
       if (!user) return;
@@ -460,17 +497,19 @@ export default function SwipeDeckScreen() {
         setShowAILearning(true);
       }
 
-      // Save position
-      const today = new Date().toISOString().split("T")[0];
-      const posKey =
-        deckMode === "business"
-          ? `business_deck_position_${today}_${profile.homeAirport}`
-          : `deck_position_${today}_${profile.homeAirport}`;
-      await setItem(posKey, newIndex);
+      // Save position (only when unfiltered — filtered positions are transient)
+      if (destFilter === "both") {
+        const today = new Date().toISOString().split("T")[0];
+        const posKey =
+          deckMode === "business"
+            ? `business_deck_position_${today}_${profile.homeAirport}`
+            : `deck_position_${today}_${profile.homeAirport}`;
+        await setItem(posKey, newIndex);
+      }
 
-      // Save full deal on super swipe
-      if (action === "super") {
-        await saveDeal({
+      // Save full deal on right swipe
+      if (normalizedAction === "right") {
+        const docId = await saveDeal({
           userId: user.uid,
           originalDealId: deal.id,
           destination: deal.destination,
@@ -494,13 +533,14 @@ export default function SwipeDeckScreen() {
           layoverInfo: deal.layover_info,
           isBusinessClass: deal.is_business_class || false,
         });
+        lastSavedDealDocId.current = docId;
       }
 
       // Record swipe
       await createSwipeAction({
         userId: user.uid,
         dealId: deal.id,
-        action,
+        action: normalizedAction,
         dealType: deal.deal_type ?? null,
         destination: deal.destination,
         continent: deal.continent ?? null,
@@ -522,6 +562,10 @@ export default function SwipeDeckScreen() {
         const lvl = (profile.dealHunterLevel || 1) + 1;
         updates.dealHunterLevel = lvl;
         setNewLevel(lvl);
+        // Snapshot the count at level-up time so the modal renders
+        // a stable progress bar even if more swipes happen in the
+        // background before the user dismisses it.
+        setNewSwipeCount(newSwipeCount);
       }
 
       await updateProfile(updates);
@@ -530,7 +574,7 @@ export default function SwipeDeckScreen() {
       // Track swipe locally
       const newSwipeRecord = {
         dealId: deal.id,
-        action,
+        action: normalizedAction,
         dealType: deal.deal_type,
         destination: deal.destination,
         continent: deal.continent,
@@ -562,16 +606,25 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
-    [currentIndex, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, shownTutorialTypes]
+    [currentIndex, visibleDeals, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, destFilter, shownTutorialTypes]
   );
 
-  const handleButtonSwipe = (action: "left" | "right" | "super") => {
+  const handleButtonSwipe = (action: "left" | "right") => {
     if (!isPremium && swipesLeft <= 0) {
       setDeckPhase("daily_limit");
       return;
     }
     setTriggerSwipe(action);
     setTimeout(() => setTriggerSwipe(null), 400);
+  };
+
+  const handleCenterButton = () => {
+    if (!isPremium && swipesLeft <= 0) {
+      setDeckPhase("daily_limit");
+      return;
+    }
+    const deal = visibleDeals[currentIndex];
+    if (deal) setExpandedDeal(deal);
   };
 
   if (loading && deckPhase === "swiping") {
@@ -621,6 +674,42 @@ export default function SwipeDeckScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Domestic / International filter — only for users who chose "both" */}
+      {profile?.destinationPreference === "both" && (
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: theme.muted,
+            borderRadius: 999,
+            padding: 3,
+            marginHorizontal: 16,
+            marginTop: 8,
+            alignSelf: "center",
+          }}
+        >
+          {(["both", "domestic", "international"] as const).map((opt) => {
+            const labels = { both: "🌎 Both", domestic: "🇺🇸 Domestic", international: "🌍 International" };
+            const isActive = destFilter === opt;
+            return (
+              <TouchableOpacity
+                key={opt}
+                onPress={() => setDestFilter(opt)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: isActive ? theme.card : "transparent",
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "700", color: isActive ? theme.foreground : theme.mutedForeground }}>
+                  {labels[opt]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
@@ -777,21 +866,45 @@ export default function SwipeDeckScreen() {
                 </Text>
               </View>
             )}
-            {activeDeals
-              .slice(currentIndex, currentIndex + 3)
-              .reverse()
-              .map((deal, i, arr) => (
-                <SwipeCard
-                  key={deal.id}
-                  deal={deal}
-                  isTop={i === arr.length - 1}
-                  onSwipe={handleSwipe}
-                  onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
-                  triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
-                  isSwipeDisabled={!isPremium && swipesLeft <= 0}
-                  isUndone={deal.id === undoneDealId}
-                />
-              ))}
+            {/* Empty-filter state: the full deck has deals but none match the filter */}
+            {visibleDeals.length === 0 && activeDeals.length > 0 && deckPhase === "swiping" ? (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}
+              >
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>
+                  {destFilter === "domestic" ? "🇺🇸" : "🌍"}
+                </Text>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+                  No {destFilter === "domestic" ? "domestic" : "international"} deals right now
+                </Text>
+                <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
+                  Switch to "Both" to see all available deals.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setDestFilter("both")}
+                  style={{ backgroundColor: colors.brand.traceRed, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28 }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Show All Deals</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : (
+              visibleDeals
+                .slice(currentIndex, currentIndex + 3)
+                .reverse()
+                .map((deal, i, arr) => (
+                  <SwipeCard
+                    key={deal.id}
+                    deal={deal}
+                    isTop={i === arr.length - 1}
+                    onSwipe={handleSwipe}
+                    onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
+                    triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
+                    isSwipeDisabled={!isPremium && swipesLeft <= 0}
+                    isUndone={deal.id === undoneDealId}
+                  />
+                ))
+            )}
           </View>
 
           {/* Undo button — just below the card */}
@@ -812,8 +925,8 @@ export default function SwipeDeckScreen() {
           </View>
 
           {/* Swipes left indicator */}
-          {!isPremium && swipesLeft > 0 && swipesLeft <= 3 && (
-            <Animated.View entering={FadeIn.duration(300)}>
+          {!isPremium && swipesLeft > 0 && swipesLeft <= 8 && (
+            <Animated.View entering={FadeIn.duration(300)} style={{ alignItems: "center", gap: 6, marginBottom: 8 }}>
               <TouchableOpacity
                 onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_low_swipes_warning" })}
                 style={{
@@ -827,7 +940,6 @@ export default function SwipeDeckScreen() {
                   borderRadius: 999,
                   borderWidth: 1,
                   borderColor: colors.brand.amber200,
-                  marginBottom: 8,
                 }}
               >
                 <Text style={{ fontSize: 14 }}>⚡</Text>
@@ -835,33 +947,14 @@ export default function SwipeDeckScreen() {
                   {swipesLeft} swipe{swipesLeft !== 1 ? "s" : ""} left today
                 </Text>
               </TouchableOpacity>
-            </Animated.View>
-          )}
-
-          {/* 1 save left warning */}
-          {!isPremium && allSwipes.filter((s) => s.action === "super").length === MAX_SAVES - 1 && (
-            <Animated.View entering={FadeIn.duration(300)}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_one_save_left" })}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  alignSelf: "center",
-                  gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  backgroundColor: "#fdf2f8",
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: "#f9a8d4",
-                  marginBottom: 8,
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>🔖</Text>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
-                  1 save left — upgrade for unlimited
-                </Text>
-              </TouchableOpacity>
+              {swipesLeft <= 5 && (
+                <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_upgrade_nudge" })}>
+                  <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
+                    Upgrade for{" "}
+                    <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>unlimited swipes</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           )}
 
@@ -898,7 +991,7 @@ export default function SwipeDeckScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleButtonSwipe("super")}
+              onPress={handleCenterButton}
               style={{
                 width: 72,
                 height: 72,
@@ -956,14 +1049,15 @@ export default function SwipeDeckScreen() {
         onDismiss={() => setUnlockedBadge(null)}
       />
 
-      {/* Level Up Notification */}
-      {/* swipeCount was being passed but LevelUpNotification doesn't
-          accept it (and currently doesn't reference total swipes in
-          its UI). Removed to make TypeScript happy; if we ever want
-          to surface swipe count on this modal, add the prop to
-          LevelUpNotificationProps + the UI first. */}
+      {/* Level Up Notification.
+          The component renders a progress bar + "X more swipes to
+          unlock" text driven by `swipeCount`, so this prop matters
+          to the UI — Trevor's earlier removal silenced the TS error
+          but broke the displayed progress (NaN%, "NaN more swipes").
+          Now snapshotted at level-up time via `newSwipeCount` state. */}
       <LevelUpNotification
         level={newLevel}
+        swipeCount={newSwipeCount}
         visible={showLevelUp}
         onDismiss={() => setShowLevelUp(false)}
       />
@@ -982,7 +1076,7 @@ export default function SwipeDeckScreen() {
           userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => {
-            handleSwipe("super");
+            handleSwipe("right");
             setExpandedDeal(null);
           }}
           onBook={() => {
@@ -991,20 +1085,14 @@ export default function SwipeDeckScreen() {
               Linking.openURL(expandedDeal.url);
             }
           }}
-          onShare={handleShareDeal}
+          userName={resolvedUserName}
+          onShare={(name) => {
+            doShare(expandedDeal, name);
+            // Persist the name so they're never asked again
+            if (profile?.id) updateUserProfile(profile.id, { displayName: name }).catch(() => {});
+          }}
         />
       )}
-
-      {/* Share name prompt */}
-      <ShareNamePromptModal
-        visible={showShareNamePrompt}
-        onDismiss={() => { setShowShareNamePrompt(false); setPendingShareDeal(null); }}
-        onSave={(name) => {
-          setShowShareNamePrompt(false);
-          if (pendingShareDeal) doShare(pendingShareDeal, name);
-          setPendingShareDeal(null);
-        }}
-      />
 
     </SafeAreaView>
   );

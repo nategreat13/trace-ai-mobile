@@ -8,6 +8,7 @@ import { promoRoutes } from "./routes/promo";
 import { adminPushRoutes } from "./routes/admin-push";
 import { deleteAccountRoutes } from "./routes/delete-account";
 import { shareRoutes } from "./routes/share";
+import { supportRoutes } from "./routes/support";
 
 export const app = express();
 
@@ -34,6 +35,7 @@ app.use(promoRoutes);
 app.use(adminPushRoutes);
 app.use(deleteAccountRoutes);
 app.use(shareRoutes);
+app.use(supportRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

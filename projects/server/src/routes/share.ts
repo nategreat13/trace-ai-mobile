@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import * as admin from "firebase-admin";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 import { sendToUser } from "../lib/push";
 
 export const shareRoutes = Router();
@@ -14,8 +14,7 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
     return;
   }
   try {
-    const db = getDb();
-    const ref = await db.collection("sharedDeals").add({
+    const ref = await colRef("sharedDeals").add({
       dealSnapshot,
       sharerId,
       sharerName,
@@ -33,11 +32,10 @@ shareRoutes.post("/share-deal", async (req: Request, res: Response) => {
 
 // GET /share-deal/:shareId
 // Returns the share record so the app can render the deal.
-shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>, res: Response) => {
-  const { shareId } = req.params;
+shareRoutes.get("/share-deal/:shareId", async (req: Request, res: Response) => {
+  const shareId = req.params.shareId as string;
   try {
-    const db = getDb();
-    const doc = await db.collection("sharedDeals").doc(shareId).get();
+    const doc = await colRef("sharedDeals").doc(shareId).get();
     if (!doc.exists) {
       res.status(404).json({ error: "Share not found" });
       return;
@@ -52,16 +50,15 @@ shareRoutes.get("/share-deal/:shareId", async (req: Request<{ shareId: string }>
 
 // POST /share-deal/:shareId/opened
 // Marks the share as opened and notifies the original sharer.
-shareRoutes.post("/share-deal/:shareId/opened", async (req: Request<{ shareId: string }>, res: Response) => {
-  const { shareId } = req.params;
+shareRoutes.post("/share-deal/:shareId/opened", async (req: Request, res: Response) => {
+  const shareId = req.params.shareId as string;
   const { openedByUserId, openerName } = req.body;
   if (!openedByUserId || !openerName) {
     res.status(400).json({ error: "openedByUserId, openerName required" });
     return;
   }
   try {
-    const db = getDb();
-    const docRef = db.collection("sharedDeals").doc(shareId);
+    const docRef = colRef("sharedDeals").doc(shareId);
     const doc = await docRef.get();
     if (!doc.exists) {
       res.status(404).json({ error: "Share not found" });

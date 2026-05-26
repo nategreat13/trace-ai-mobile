@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { AppState, DeviceEventEmitter } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { registerPushToken } from "../services/push";
+import { getItem, removeItem, setItem } from "../lib/storage";
 
 /**
  * Per-device gate for the push-notifications soft-prompt screen.
@@ -40,7 +40,11 @@ import { registerPushToken } from "../services/push";
  *       OS=undetermined, AS flag set → no prompt. ✓
  */
 
-const SOFT_PROMPT_DISMISSED_KEY = "trace.push.softPromptDismissedAt";
+// Storage key passed to env-aware `getItem`/`setItem` from lib/storage.
+// The wrapper auto-prefixes with `trace.{env}.`, so on disk this becomes
+// `trace.prod.push.softPromptDismissedAt` (or `trace.staging.…`),
+// keeping prod and staging dismissal state cleanly separated.
+const SOFT_PROMPT_DISMISSED_KEY = "push.softPromptDismissedAt";
 const RECHECK_EVENT = "trace.notificationGate.recheck";
 
 export type DeviceNotificationGate = {
@@ -120,9 +124,7 @@ export function useDeviceNotificationGate(
         // OR status === "denied" with canAskAgain (typical Android 13+
         // first launch). Show the soft prompt unless the user already
         // dismissed it on this install.
-        const dismissedAt = await AsyncStorage.getItem(
-          SOFT_PROMPT_DISMISSED_KEY
-        );
+        const dismissedAt = await getItem<string>(SOFT_PROMPT_DISMISSED_KEY);
         if (!cancelled) {
           setState({
             resolved: true,
@@ -187,15 +189,10 @@ export function triggerGateRecheck(): void {
  * cold launch while OS state remains "undetermined".
  */
 export async function markSoftPromptDismissed(): Promise<void> {
-  try {
-    await AsyncStorage.setItem(
-      SOFT_PROMPT_DISMISSED_KEY,
-      new Date().toISOString()
-    );
-  } catch {
-    // best-effort; if AsyncStorage fails the user just sees the prompt
-    // again next launch, which is annoying but not broken.
-  }
+  // setItem is best-effort and swallows errors internally — if
+  // AsyncStorage fails the user just sees the prompt again next
+  // launch, which is annoying but not broken.
+  await setItem(SOFT_PROMPT_DISMISSED_KEY, new Date().toISOString());
 }
 
 /**
@@ -205,9 +202,5 @@ export async function markSoftPromptDismissed(): Promise<void> {
  * wired into any UI.
  */
 export async function clearSoftPromptDismissal(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(SOFT_PROMPT_DISMISSED_KEY);
-  } catch {
-    // ignore
-  }
+  await removeItem(SOFT_PROMPT_DISMISSED_KEY);
 }

@@ -1,4 +1,4 @@
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
 
 /**
  * Notification templates — admin-editable copy keyed by trigger.
@@ -227,8 +227,7 @@ const KNOWN_KEYS = Object.keys(TEMPLATE_DEFAULTS);
 export async function getTemplate(key: string): Promise<NotificationTemplate | null> {
   const fallback = TEMPLATE_DEFAULTS[key] ?? null;
   try {
-    const db = getDb();
-    const snap = await db.collection("notificationTemplates").doc(key).get();
+    const snap = await colRef("notificationTemplates").doc(key).get();
     if (!snap.exists) return fallback;
     const data = snap.data() as Partial<NotificationTemplate>;
     return {
@@ -263,10 +262,9 @@ export function renderString(template: string, vars: Record<string, string | num
  * have a doc. Idempotent; re-running won't overwrite admin edits.
  */
 export async function seedTemplatesIfMissing(): Promise<{ created: string[] }> {
-  const db = getDb();
   const created: string[] = [];
   for (const key of KNOWN_KEYS) {
-    const ref = db.collection("notificationTemplates").doc(key);
+    const ref = colRef("notificationTemplates").doc(key);
     const snap = await ref.get();
     if (snap.exists) continue;
     const def = TEMPLATE_DEFAULTS[key];
@@ -285,3 +283,26 @@ export async function seedTemplatesIfMissing(): Promise<{ created: string[] }> {
 }
 
 export const KNOWN_TEMPLATE_KEYS = KNOWN_KEYS;
+
+export type NotificationCategory = "deals" | "account" | "reengagement" | "offers";
+
+export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
+  welcome: "account",
+  trial_ending_3d: "account",
+  trial_ending_24h: "account",
+  billing_issue: "account",
+  subscription_renewal_24h: "account",
+  welcome_to_premium: "account",
+  inactivity_3d: "reengagement",
+  inactivity_7d: "reengagement",
+  inactivity_14d: "reengagement",
+  hot_deal_alert: "deals",
+  deal_alert_match: "deals",
+  premium_nudge: "offers",
+  premium_nudge_10d: "offers",
+  premium_nudge_20d: "offers",
+  discount_on_premium: "offers",
+  business_class_nudge_5d: "offers",
+  business_class_nudge: "offers",
+  discount_on_business: "offers",
+};

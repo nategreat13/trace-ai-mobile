@@ -1,11 +1,80 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
-import { getDb } from "../firebase";
+import { colRef } from "../firebase";
+import { runWithEnv } from "../env";
 import { sendToUser } from "../lib/push";
-import { getTemplate, renderString } from "../lib/notification-templates";
+import { getTemplate, renderString, TEMPLATE_CATEGORY } from "../lib/notification-templates";
+
+type NotificationPrefs = {
+  deals?: boolean;
+  account?: boolean;
+  reengagement?: boolean;
+  offers?: boolean;
+};
 
 const DEALS_API_BASE = "https://us-central1-embarckstravel.cloudfunctions.net/api";
 const DEALS_API_KEY = process.env.DEALS_API_KEY || "web-api-key";
+
+type RawDeal = {
+  discount_pct?: number;
+  destination?: string;
+  price?: number;
+  domestic_or_international?: string;
+  deal_type?: string | null;
+};
+
+/**
+ * Returns the deal type tags for a deal based on destination keywords and price.
+ * Mirrors the logic in projects/app/src/lib/dealClassifier.ts — kept in sync manually.
+ */
+function classifyDeal(deal: RawDeal): string[] {
+  const types = new Set<string>();
+  const dest = (deal.destination || "").toLowerCase();
+  const price = deal.price || 0;
+  const discount = deal.discount_pct || 0;
+  const apiType = (deal.deal_type || "").toLowerCase();
+
+  if (apiType) types.add(apiType);
+  if (price > 0 && price <= 350) types.add("budget");
+  if (discount >= 35) types.add("budget");
+  if (price >= 800 || /maldives|bora bora|dubai|mykonos|santorini|seychelles|tahiti|aspen|monaco/.test(dest)) types.add("luxury");
+  if (/patagonia|peru|machu picchu|galapagos|costa rica|kenya|safari|nepal|iceland|faroe|fjord|dolomites|queenstown|milford/.test(dest)) types.add("adventure");
+  if (/rome|paris|athens|istanbul|cairo|florence|venice|kyoto|delhi|agra|marrakech|mexico city|havana|istanbul/.test(dest)) types.add("cultural");
+  if (/cancun|cabo|bali|phuket|hawaii|honolulu|maui|bahamas|aruba|punta cana|maldives|seychelles|riviera|barbados|jamaica/.test(dest)) types.add("relaxation");
+  if (/orlando|disney|universal|san diego|new york|chicago|london|paris|tokyo|sydney|cancun|bahamas|hawaii/.test(dest)) types.add("family");
+
+  return Array.from(types);
+}
+
+/**
+ * Returns the best deal for a user given their preferences.
+ * - Respects destinationPreference (domestic / international / both)
+ * - Respects dealTypes (filters by classified type; "surprise" matches everything)
+ * - Among matching deals, picks the highest discount_pct
+ */
+function pickDealForUser(
+  deals: RawDeal[],
+  dealTypes: string[],
+  destinationPreference: string,
+): RawDeal | null {
+  const wantsSurprise = dealTypes.length === 0 || dealTypes.includes("surprise");
+
+  const filtered = deals.filter((d) => {
+    // Domestic / international filter
+    if (destinationPreference !== "both") {
+      const isdom = (d.domestic_or_international ?? "").toLowerCase() === "domestic";
+      if (destinationPreference === "domestic" && !isdom) return false;
+      if (destinationPreference === "international" && isdom) return false;
+    }
+    // Deal type filter
+    if (wantsSurprise) return true;
+    const tags = classifyDeal(d);
+    return dealTypes.some((t) => tags.includes(t));
+  });
+
+  if (filtered.length === 0) return null;
+  return filtered.reduce((a, b) => (a.discount_pct ?? 0) >= (b.discount_pct ?? 0) ? a : b);
+}
 
 /**
  * Scheduled cron functions that fan out notifications based on user
@@ -32,8 +101,13 @@ const adminApiToken = defineSecret("ADMIN_API_TOKEN");
 async function sendForTemplate(
   userId: string,
   templateKey: string,
-  vars: Record<string, string | number>
+  vars: Record<string, string | number>,
+  prefs?: NotificationPrefs
 ): Promise<void> {
+  if (prefs) {
+    const category = TEMPLATE_CATEGORY[templateKey];
+    if (category && prefs[category] === false) return;
+  }
   const template = await getTemplate(templateKey);
   if (!template || !template.enabled) return;
   const title = renderString(template.title, vars);
@@ -74,31 +148,38 @@ export const dailyNotificationTriggers = onSchedule(
     secrets: [adminApiToken],
   },
   async () => {
-    const db = getDb();
+    // Cron is prod-only by default. The staging counterpart (gated on
+    // `ENABLE_STAGING_CRON`) wraps `runDailyNotifications` in
+    // `runWithEnv("staging", …)` and lives below.
+    return runWithEnv("prod", () => runDailyNotifications());
+  }
+);
+
+async function runDailyNotifications() {
     const now = new Date();
 
     // ─── Welcome (T+1 day after signup) ───────────────────────────
     {
       const cutoffStart = new Date(now.getTime() - 25 * 60 * 60 * 1000);
       const cutoffEnd = new Date(now.getTime() - 23 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const dealCount = await dealCountForUser(data.homeAirport);
         await sendForTemplate(data.userId, "welcome", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] welcome: scanned ${snap.size} candidates`);
     }
@@ -107,20 +188,20 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() + 73 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() + 71 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
         .where("subscriptionSource", "==", "store")
-        .select("userId", "notificationsEnabled")
+        .select("userId", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "trial_ending_3d", {});
+        await sendForTemplate(data.userId, "trial_ending_3d", {}, data.notificationPreferences);
       }
       console.log(`[cron] trial_ending_3d: scanned ${snap.size} candidates`);
     }
@@ -129,20 +210,20 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
         .where("subscriptionSource", "==", "store")
-        .select("userId", "notificationsEnabled")
+        .select("userId", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "trial_ending_24h", {});
+        await sendForTemplate(data.userId, "trial_ending_24h", {}, data.notificationPreferences);
       }
       console.log(`[cron] trial_ending_24h: scanned ${snap.size} candidates`);
     }
@@ -151,24 +232,24 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const dealCount = await dealCountForUser(data.homeAirport);
         await sendForTemplate(data.userId, "inactivity_3d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_3d: scanned ${snap.size} candidates`);
     }
@@ -177,24 +258,24 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const dealCount = await dealCountForUser(data.homeAirport);
         await sendForTemplate(data.userId, "inactivity_7d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_7d: scanned ${snap.size} candidates`);
     }
@@ -203,24 +284,24 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const dealCount = await dealCountForUser(data.homeAirport);
         await sendForTemplate(data.userId, "inactivity_14d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_14d: scanned ${snap.size} candidates`);
     }
@@ -229,24 +310,36 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const hotDealTemplate = await getTemplate("hot_deal_alert");
       if (hotDealTemplate?.enabled) {
-        const snap = await db
-          .collection("userProfiles")
+        const snap = await colRef("userProfiles")
           .where("notificationsEnabled", "==", true)
-          .select("userId", "homeAirport", "subscriptionStatus")
+          .select("userId", "homeAirport", "subscriptionStatus", "notificationPreferences", "dealTypes", "destinationPreference")
           .get();
 
         // Group eligible users by home airport to minimise external API calls.
-        const byAirport = new Map<string, Array<{ userId: string }>>();
+        const byAirport = new Map<string, Array<{
+          userId: string;
+          prefs?: NotificationPrefs;
+          dealTypes: string[];
+          destinationPreference: string;
+        }>>();
         for (const doc of snap.docs) {
           const data = doc.data() as {
             userId?: string;
             homeAirport?: string;
             subscriptionStatus?: string;
+            notificationPreferences?: NotificationPrefs;
+            dealTypes?: string[];
+            destinationPreference?: string;
           };
           if (!data.userId || !data.homeAirport) continue;
           if (data.subscriptionStatus !== "premium" && data.subscriptionStatus !== "business") continue;
           if (!byAirport.has(data.homeAirport)) byAirport.set(data.homeAirport, []);
-          byAirport.get(data.homeAirport)!.push({ userId: data.userId });
+          byAirport.get(data.homeAirport)!.push({
+            userId: data.userId,
+            prefs: data.notificationPreferences,
+            dealTypes: data.dealTypes ?? [],
+            destinationPreference: data.destinationPreference ?? "both",
+          });
         }
 
         let sent = 0;
@@ -258,23 +351,41 @@ export const dailyNotificationTriggers = onSchedule(
             );
             if (!response.ok) continue;
             const raw = await response.json() as unknown;
-            const deals: Array<{ discount_pct?: number; destination?: string; price?: number }> =
-              Array.isArray(raw) ? raw : ((raw as Record<string, unknown>).deals as typeof deals ?? []);
+            const allDeals: RawDeal[] =
+              Array.isArray(raw) ? raw : ((raw as Record<string, unknown>).deals as RawDeal[] ?? []);
 
-            const hotDeals = deals.filter((d) => (d.discount_pct ?? 0) >= 60);
+            const hotDeals = allDeals.filter((d) => (d.discount_pct ?? 0) >= 60);
             if (hotDeals.length === 0) continue;
 
-            const best = hotDeals.reduce((a, b) =>
-              (a.discount_pct ?? 0) >= (b.discount_pct ?? 0) ? a : b
-            );
-
             for (const user of users) {
+              // Pick the best deal matching this user's preferences.
+              const best = pickDealForUser(hotDeals, user.dealTypes, user.destinationPreference);
+              if (!best) continue;
+
+              // Dedup per user — skip if this destination was sent within the last 7 days.
+              const destination = (best.destination ?? "").toLowerCase().trim();
+              const cacheRef = colRef("hotDealCache").doc(user.userId);
+              const cacheDoc = await cacheRef.get();
+              const sentLog: Record<string, number> = cacheDoc.exists
+                ? (cacheDoc.data()?.sentLog ?? {})
+                : {};
+              const lastSent = sentLog[destination] ?? 0;
+              const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+              if (Date.now() - lastSent < sevenDaysMs) continue;
+              sentLog[destination] = Date.now();
+              // Prune entries older than 30 days to keep the doc small.
+              const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+              for (const dest of Object.keys(sentLog)) {
+                if (Date.now() - sentLog[dest] > thirtyDaysMs) delete sentLog[dest];
+              }
+              await cacheRef.set({ sentLog });
+
               await sendForTemplate(user.userId, "hot_deal_alert", {
                 discount: Math.round(best.discount_pct ?? 60),
                 destination: best.destination ?? airport,
                 price: best.price ?? 0,
                 homeAirport: airport,
-              });
+              }, user.prefs);
               sent++;
             }
           } catch (err) {
@@ -291,8 +402,7 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
       const cutoffEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionSource", "==", "store")
         .where("trialEndDate", ">=", cutoffStart)
         .where("trialEndDate", "<", cutoffEnd)
@@ -303,11 +413,12 @@ export const dailyNotificationTriggers = onSchedule(
           userId?: string;
           subscriptionStatus?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         // Only paid subscribers — exclude trial users who share the same date field.
         if (data.subscriptionStatus !== "premium" && data.subscriptionStatus !== "business") continue;
-        await sendForTemplate(data.userId, "subscription_renewal_24h", {});
+        await sendForTemplate(data.userId, "subscription_renewal_24h", {}, data.notificationPreferences);
       }
       console.log(`[cron] subscription_renewal_24h: scanned ${snap.size} candidates`);
     }
@@ -316,23 +427,23 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         await sendForTemplate(data.userId, "business_class_nudge_5d", {
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] business_class_nudge_5d: scanned ${snap.size} candidates`);
     }
@@ -341,23 +452,23 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         await sendForTemplate(data.userId, "business_class_nudge", {
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] business_class_nudge: scanned ${snap.size} candidates`);
     }
@@ -366,23 +477,23 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         await sendForTemplate(data.userId, "premium_nudge", {
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] premium_nudge: scanned ${snap.size} candidates`);
     }
@@ -391,23 +502,23 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 11 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         await sendForTemplate(data.userId, "premium_nudge_10d", {
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] premium_nudge_10d: scanned ${snap.size} candidates`);
     }
@@ -416,23 +527,23 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         await sendForTemplate(data.userId, "premium_nudge_20d", {
           homeAirport: data.homeAirport ?? "your home airport",
-        });
+        }, data.notificationPreferences);
       }
       console.log(`[cron] premium_nudge_20d: scanned ${snap.size} candidates`);
     }
@@ -441,20 +552,20 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 25 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 26 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "free")
         .where("createdAt", ">=", cutoffStart)
         .where("createdAt", "<", cutoffEnd)
-        .select("userId", "notificationsEnabled")
+        .select("userId", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "discount_on_premium", {});
+        await sendForTemplate(data.userId, "discount_on_premium", {}, data.notificationPreferences);
       }
       console.log(`[cron] discount_on_premium: scanned ${snap.size} candidates`);
     }
@@ -463,28 +574,27 @@ export const dailyNotificationTriggers = onSchedule(
     {
       const cutoffEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const cutoffStart = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000);
-      const snap = await db
-        .collection("userProfiles")
+      const snap = await colRef("userProfiles")
         .where("subscriptionStatus", "==", "premium")
         .where("firstPurchaseAt", ">=", cutoffStart)
         .where("firstPurchaseAt", "<", cutoffEnd)
-        .select("userId", "notificationsEnabled")
+        .select("userId", "notificationsEnabled", "notificationPreferences")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
           userId?: string;
           notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "discount_on_business", {});
+        await sendForTemplate(data.userId, "discount_on_business", {}, data.notificationPreferences);
       }
       console.log(`[cron] discount_on_business: scanned ${snap.size} candidates`);
     }
 
     // ─── Deal alert match (premium/business users with saved alerts) ─
     {
-      const alertsSnap = await db
-        .collection("dealAlerts")
+      const alertsSnap = await colRef("dealAlerts")
         .where("status", "==", "active")
         .get();
 
@@ -524,17 +634,17 @@ export const dailyNotificationTriggers = onSchedule(
 
         let sent = 0;
         for (const [userId, alerts] of alertsByUser) {
-          const profileSnap = await db
-            .collection("userProfiles")
+          const profileSnap = await colRef("userProfiles")
             .where("userId", "==", userId)
             .limit(1)
-            .select("homeAirport", "subscriptionStatus", "notificationsEnabled")
+            .select("homeAirport", "subscriptionStatus", "notificationsEnabled", "notificationPreferences")
             .get();
           if (profileSnap.empty) continue;
           const profile = profileSnap.docs[0].data() as {
             homeAirport?: string;
             subscriptionStatus?: string;
             notificationsEnabled?: boolean;
+            notificationPreferences?: NotificationPrefs;
           };
           if (!profile.notificationsEnabled) continue;
           if (profile.subscriptionStatus !== "premium" && profile.subscriptionStatus !== "business") continue;
@@ -557,9 +667,9 @@ export const dailyNotificationTriggers = onSchedule(
               destination: alert.destination,
               price: match.price ?? 0,
               discount: Math.round(match.discount_pct ?? 0),
-            });
+            }, profile.notificationPreferences);
             // Mark matched so this alert never fires again.
-            await db.collection("dealAlerts").doc(alert.id).update({ status: "matched" });
+            await colRef("dealAlerts").doc(alert.id).update({ status: "matched" });
             sent++;
           }
         }
@@ -568,5 +678,23 @@ export const dailyNotificationTriggers = onSchedule(
         console.log("[cron] deal_alert_match: no active alerts");
       }
     }
-  }
-);
+}
+
+/**
+ * Optional staging cron. Off by default (decision 6: "Off"). Enable on a
+ * per-deploy basis by setting `ENABLE_STAGING_CRON=1` in the function's
+ * env. Reads/writes staging_* collections; otherwise identical to the
+ * prod variant. Useful when QA needs to verify a notification trigger
+ * end-to-end before shipping.
+ */
+export const dailyStagingNotificationTriggers =
+  process.env.ENABLE_STAGING_CRON === "1"
+    ? onSchedule(
+        {
+          schedule: "0 14 * * *",
+          timeZone: "UTC",
+          secrets: [adminApiToken],
+        },
+        async () => runWithEnv("staging", () => runDailyNotifications())
+      )
+    : null;
