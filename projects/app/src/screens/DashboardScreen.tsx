@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { ChevronRight, ChevronDown, ChevronUp, Trash2, BellRing, Plane } from "lucide-react-native";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import SavedDeals from "../components/dashboard/SavedDeals";
 import TraceLoader from "../components/TraceLoader";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -215,6 +216,16 @@ export default function DashboardScreen() {
   const level = profile?.dealHunterLevel || 1;
   const swipeCount = profile?.swipeCount || 0;
   const streakDays = profile?.streakDays || 0;
+
+  // Shape adapter: services/firestore returns SavedDealRecord (= SavedDeal & {id, dateString?}),
+  // but the SavedDeals component takes SavedDealEntry ({id, deal, savedAt}). Map once via
+  // memo so the component's filter/sort doesn't see a new array reference on every render.
+  // MUST be declared above the early `if (loading) return` below — Rules of Hooks:
+  // hooks have to be called in the same order on every render, including the loading one.
+  const savedDealEntries = useMemo(
+    () => deals.map((d: any) => ({ id: d.id, deal: d, savedAt: d.createdAt })),
+    [deals]
+  );
 
   if (loading) {
     return (
@@ -553,8 +564,12 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
       <FlatList
-        data={tab === "saved" ? deals : alerts}
-        renderItem={tab === "saved" ? renderSavedDeal : renderAlert}
+        // The saved tab is now rendered as a single <SavedDeals> block in
+        // ListFooterComponent below (it owns its own search/filter/sort UI
+        // and an internal card list). Keep data=[] so FlatList renders just
+        // header + footer for that tab.
+        data={tab === "saved" ? [] : alerts}
+        renderItem={tab === "saved" ? () => null : renderAlert}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
         refreshControl={
@@ -768,18 +783,38 @@ export default function DashboardScreen() {
             </View>
           </View>
         }
+        ListFooterComponent={
+          tab === "saved" ? (
+            <SavedDeals
+              deals={savedDealEntries}
+              onDelete={handleDeleteDeal}
+              // Preserve the existing tap-to-expand UX: SavedDeals fires
+              // onBook(url) when a card is tapped; we look up the full
+              // deal and open the ExpandedDeal modal (where the user gets
+              // the "Book" / "Share" actions). This keeps users from being
+              // booted straight out of the app on a single tap.
+              onBook={(url) => {
+                const item = deals.find((d) => d.url === url);
+                if (item) setExpandedDeal(savedDealToDeal(item));
+              }}
+            />
+          ) : null
+        }
         ListEmptyComponent={
-          <View style={{ alignItems: "center", paddingVertical: 48 }}>
-            <Text style={{ fontSize: 48, marginBottom: 16 }}>{tab === "saved" ? "✈️" : "🔔"}</Text>
-            <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>
-              {tab === "saved" ? "No saved deals yet" : "No alerts set"}
-            </Text>
-            <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center" }}>
-              {tab === "saved"
-                ? "Swipe up on a deal to save it here"
-                : "Set alerts in Explore to get notified"}
-            </Text>
-          </View>
+          // Only the alerts tab uses this empty state now — the saved tab
+          // always has the <SavedDeals> footer, which renders its own
+          // "No saved deals yet" copy when the list is empty.
+          tab === "alerts" ? (
+            <View style={{ alignItems: "center", paddingVertical: 48 }}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>🔔</Text>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: theme.foreground, marginBottom: 8 }}>
+                No alerts set
+              </Text>
+              <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center" }}>
+                Set alerts in Explore to get notified
+              </Text>
+            </View>
+          ) : null
         }
       />
 
