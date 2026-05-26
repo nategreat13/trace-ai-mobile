@@ -244,6 +244,7 @@ export default function SwipeDeckScreen() {
   );
 
   const [deckMode, setDeckMode] = useState<"economy" | "business">("economy");
+  const [destFilter, setDestFilter] = useState<"both" | "domestic" | "international">("both");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted" | "daily_limit">("swiping");
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
@@ -281,13 +282,40 @@ export default function SwipeDeckScreen() {
     [deckMode, premiumDeals, deals]
   );
 
+  // Classify a deal as domestic or international using the same logic as useDealFetch.
+  const getDealDestType = useCallback((deal: Deal): "domestic" | "international" => {
+    if (deal.domestic_or_international) {
+      return deal.domestic_or_international.toLowerCase().includes("international")
+        ? "international" : "domestic";
+    }
+    if (deal.continent) {
+      const c = deal.continent.toLowerCase();
+      return c.includes("north america") ? "domestic" : "international";
+    }
+    return "domestic"; // default unknown deals to domestic
+  }, []);
+
+  // Deals visible after applying the dest filter. No reload needed — we just
+  // slice the already-loaded deck. Only applied when profile chose "both".
+  const visibleDeals = useMemo(() => {
+    if (destFilter === "both") return activeDeals;
+    return activeDeals.filter((d) => getDealDestType(d) === destFilter);
+  }, [activeDeals, destFilter, getDealDestType]);
+
+  // Reset deck position whenever the filter changes so the user starts fresh.
+  useEffect(() => {
+    setCurrentIndex(0);
+    setLastSwipedDeal(null);
+    lastSavedDealDocId.current = null;
+  }, [destFilter]);
+
   // Pre-fetch destination info for current + next 2 deals as soon as they're
   // visible, so the Destination tab loads instantly when the user opens it.
   useEffect(() => {
-    prefetchDestinationInfo(activeDeals[currentIndex] ?? null);
-    prefetchDestinationInfo(activeDeals[currentIndex + 1] ?? null);
-    prefetchDestinationInfo(activeDeals[currentIndex + 2] ?? null);
-  }, [currentIndex, activeDeals]);
+    prefetchDestinationInfo(visibleDeals[currentIndex] ?? null);
+    prefetchDestinationInfo(visibleDeals[currentIndex + 1] ?? null);
+    prefetchDestinationInfo(visibleDeals[currentIndex + 2] ?? null);
+  }, [currentIndex, visibleDeals]);
 
   async function doShare(deal: Deal, name: string) {
     try {
@@ -353,14 +381,17 @@ export default function SwipeDeckScreen() {
     }
   }, [profile?.subscriptionStatus, premiumDeals.length]);
 
-  // When the deck runs out during normal swiping: reload to expand the pool
+  // When the deck runs out during normal swiping: reload to expand the pool.
+  // Exception: if the filter is the reason the visible deck is empty (not a
+  // real out-of-deals), don't reload — the full deck still has cards.
   useEffect(() => {
-    const isOutOfDeals = activeDeals.length - currentIndex <= 0;
-    if (!isOutOfDeals || loading || deckPhase !== "swiping") return;
+    const isOutOfDeals = visibleDeals.length - currentIndex <= 0;
+    const isFilterEmpty = destFilter !== "both" && visibleDeals.length === 0 && activeDeals.length > 0;
+    if (!isOutOfDeals || isFilterEmpty || loading || deckPhase !== "swiping") return;
     setDeckPhase("expanding");
     setCurrentIndex(0);
     reload();
-  }, [activeDeals.length, currentIndex, loading, deckPhase]);
+  }, [visibleDeals.length, activeDeals.length, currentIndex, loading, deckPhase, destFilter]);
 
   // Transition to daily limit screen when a free user hits 0 swipes
   useEffect(() => {
@@ -411,7 +442,7 @@ export default function SwipeDeckScreen() {
 
   const handleSwipe = useCallback(
     async (action: "left" | "right" | "super") => {
-      if (!profile || currentIndex >= activeDeals.length) return;
+      if (!profile || currentIndex >= visibleDeals.length) return;
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
@@ -420,7 +451,7 @@ export default function SwipeDeckScreen() {
         return;
       }
 
-      const deal = activeDeals[currentIndex];
+      const deal = visibleDeals[currentIndex];
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
 
@@ -466,13 +497,15 @@ export default function SwipeDeckScreen() {
         setShowAILearning(true);
       }
 
-      // Save position
-      const today = new Date().toISOString().split("T")[0];
-      const posKey =
-        deckMode === "business"
-          ? `business_deck_position_${today}_${profile.homeAirport}`
-          : `deck_position_${today}_${profile.homeAirport}`;
-      await setItem(posKey, newIndex);
+      // Save position (only when unfiltered — filtered positions are transient)
+      if (destFilter === "both") {
+        const today = new Date().toISOString().split("T")[0];
+        const posKey =
+          deckMode === "business"
+            ? `business_deck_position_${today}_${profile.homeAirport}`
+            : `deck_position_${today}_${profile.homeAirport}`;
+        await setItem(posKey, newIndex);
+      }
 
       // Save full deal on right swipe
       if (normalizedAction === "right") {
@@ -573,7 +606,7 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
-    [currentIndex, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, shownTutorialTypes]
+    [currentIndex, visibleDeals, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, destFilter, shownTutorialTypes]
   );
 
   const handleButtonSwipe = (action: "left" | "right") => {
@@ -590,7 +623,7 @@ export default function SwipeDeckScreen() {
       setDeckPhase("daily_limit");
       return;
     }
-    const deal = activeDeals[currentIndex];
+    const deal = visibleDeals[currentIndex];
     if (deal) setExpandedDeal(deal);
   };
 
@@ -641,6 +674,42 @@ export default function SwipeDeckScreen() {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Domestic / International filter — only for users who chose "both" */}
+      {profile?.destinationPreference === "both" && (
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: theme.muted,
+            borderRadius: 999,
+            padding: 3,
+            marginHorizontal: 16,
+            marginTop: 8,
+            alignSelf: "center",
+          }}
+        >
+          {(["both", "domestic", "international"] as const).map((opt) => {
+            const labels = { both: "🌎 Both", domestic: "🇺🇸 Domestic", international: "🌍 International" };
+            const isActive = destFilter === opt;
+            return (
+              <TouchableOpacity
+                key={opt}
+                onPress={() => setDestFilter(opt)}
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 6,
+                  borderRadius: 999,
+                  backgroundColor: isActive ? theme.card : "transparent",
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "700", color: isActive ? theme.foreground : theme.mutedForeground }}>
+                  {labels[opt]}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
 
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
@@ -797,21 +866,45 @@ export default function SwipeDeckScreen() {
                 </Text>
               </View>
             )}
-            {activeDeals
-              .slice(currentIndex, currentIndex + 3)
-              .reverse()
-              .map((deal, i, arr) => (
-                <SwipeCard
-                  key={deal.id}
-                  deal={deal}
-                  isTop={i === arr.length - 1}
-                  onSwipe={handleSwipe}
-                  onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
-                  triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
-                  isSwipeDisabled={!isPremium && swipesLeft <= 0}
-                  isUndone={deal.id === undoneDealId}
-                />
-              ))}
+            {/* Empty-filter state: the full deck has deals but none match the filter */}
+            {visibleDeals.length === 0 && activeDeals.length > 0 && deckPhase === "swiping" ? (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}
+              >
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>
+                  {destFilter === "domestic" ? "🇺🇸" : "🌍"}
+                </Text>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+                  No {destFilter === "domestic" ? "domestic" : "international"} deals right now
+                </Text>
+                <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
+                  Switch to "Both" to see all available deals.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setDestFilter("both")}
+                  style={{ backgroundColor: colors.brand.traceRed, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28 }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Show All Deals</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : (
+              visibleDeals
+                .slice(currentIndex, currentIndex + 3)
+                .reverse()
+                .map((deal, i, arr) => (
+                  <SwipeCard
+                    key={deal.id}
+                    deal={deal}
+                    isTop={i === arr.length - 1}
+                    onSwipe={handleSwipe}
+                    onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
+                    triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
+                    isSwipeDisabled={!isPremium && swipesLeft <= 0}
+                    isUndone={deal.id === undoneDealId}
+                  />
+                ))
+            )}
           </View>
 
           {/* Undo button — just below the card */}
