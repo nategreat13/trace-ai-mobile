@@ -10,8 +10,8 @@ import { Deal } from "@trace/shared";
 const DESTINATION_IMAGE_OVERRIDES: Record<string, string> = {
   florence: "https://images.pexels.com/photos/18101408/pexels-photo-18101408.jpeg?cs=srgb&dl=pexels-dico-baskoro-693731013-18101408.jpg&fm=jpg",
   // Flickr originals for these destinations are 404 — replaced with Pexels
-  asheville: "https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg",
-  bermuda: "https://images.pexels.com/photos/1174732/pexels-photo-1174732.jpeg",
+  asheville: "https://images.pexels.com/photos/877994/pexels-photo-877994.jpeg",   // Biltmore Estate
+  bermuda: "https://images.pexels.com/photos/35864358/pexels-photo-35864358.jpeg", // pink sand beach
 };
 
 function applyImageOverride(
