@@ -123,8 +123,7 @@ export const ALL_BADGES: Badge[] = [
     desc: "Saved 5 luxury deals",
     requirement: (_, swipes) =>
       swipes.filter(
-        (s: any) =>
-          s.dealType === "luxury" && (s.action === "right" || s.action === "super")
+        (s: any) => s.dealType === "luxury" && s.action === "right"
       ).length >= 5,
   },
   {
@@ -134,8 +133,7 @@ export const ALL_BADGES: Badge[] = [
     desc: "Saved 5 budget deals",
     requirement: (_, swipes) =>
       swipes.filter(
-        (s: any) =>
-          s.dealType === "budget" && (s.action === "right" || s.action === "super")
+        (s: any) => s.dealType === "budget" && s.action === "right"
       ).length >= 5,
   },
   {
@@ -151,14 +149,6 @@ export const ALL_BADGES: Badge[] = [
     name: "Deal Hunter Pro",
     desc: "Reach level 5",
     requirement: (p) => (p.dealHunterLevel || 1) >= 5,
-  },
-  {
-    id: "super_swiper",
-    emoji: "\u{1F680}",
-    name: "Super Swiper",
-    desc: "Used 10 super swipes",
-    requirement: (_, swipes) =>
-      swipes.filter((s: any) => s.action === "super").length >= 10,
   },
 ];
 

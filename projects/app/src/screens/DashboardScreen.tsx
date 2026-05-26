@@ -30,7 +30,6 @@ import {
   getSavedDeals,
   getSwipeActions,
   deleteSavedDeal,
-  deleteSwipeAction,
   getDealAlerts,
   deleteDealAlert,
   updateUserProfile,
@@ -185,8 +184,6 @@ export default function DashboardScreen() {
       await deleteSavedDeal(dealId);
       setDeals((prev) => prev.filter((d) => d.id !== dealId));
       setDeletingIds((prev) => { const s = new Set(prev); s.delete(dealId); return s; });
-      const swipe = swipes.find((s: any) => s.dealId === dealId && s.action === "super");
-      if (swipe) await deleteSwipeAction(swipe.id);
     }, 250);
   };
 
@@ -199,8 +196,6 @@ export default function DashboardScreen() {
         onPress: async () => {
           for (const deal of deals) {
             await deleteSavedDeal(deal.id);
-            const swipe = swipes.find((s: any) => s.dealId === deal.id && s.action === "super");
-            if (swipe) await deleteSwipeAction(swipe.id);
           }
           setDeals([]);
         },

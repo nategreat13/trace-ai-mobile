@@ -33,11 +33,11 @@ import {
   createSwipeAction,
   getSwipeActions,
   saveDeal,
+  deleteSavedDeal,
   updateUserProfile,
 } from "../services/firestore";
 import {
   MAX_DAILY_SWIPES,
-  MAX_SAVES,
   UNLIMITED_SWIPES,
   ALL_BADGES,
 } from "../lib/constants";
@@ -248,17 +248,18 @@ export default function SwipeDeckScreen() {
   const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted" | "daily_limit">("swiping");
   const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
-  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | "super" | null>(null);
+  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
 
-  // Undo state
+  // Undo state — also tracks the Firestore doc ID of a saved deal so undo can delete it
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
+  const lastSavedDealDocId = useRef<string | null>(null);
 
   // Tutorial/modal state
   const [showHowToSwipe, setShowHowToSwipe] = useState(false);
   const [showAILearning, setShowAILearning] = useState(false);
-  const [tutorialAction, setTutorialAction] = useState<"left" | "right" | "super" | null>(null);
+  const [tutorialAction, setTutorialAction] = useState<"left" | "right" | null>(null);
   const [shownTutorialTypes, setShownTutorialTypes] = useState<Set<string>>(new Set());
 
   // Badge/Level notification state
@@ -395,6 +396,11 @@ export default function SwipeDeckScreen() {
   const handleUndo = useCallback(() => {
     if (!lastSwipedDeal || currentIndex <= 0) return;
     const restoredId = lastSwipedDeal.deal.id;
+    // If the last swipe was a right-swipe (save), also remove the saved deal from Firestore
+    if (lastSwipedDeal.action === "right" && lastSavedDealDocId.current) {
+      deleteSavedDeal(lastSavedDealDocId.current).catch(() => {});
+      lastSavedDealDocId.current = null;
+    }
     setCurrentIndex((prev) => prev - 1);
     setLastSwipedDeal(null);
     setAllSwipes((prev) => prev.slice(1));
@@ -414,26 +420,20 @@ export default function SwipeDeckScreen() {
         return;
       }
 
-      if (!isPremium && action === "super") {
-        const savedCount = allSwipes.filter((s) => s.action === "super").length;
-        if (savedCount >= MAX_SAVES) {
-          logEvent("daily_limit_hit", { reason: "max_saves" });
-          navigation.navigate("Paywall", { entryPoint: "swipe_max_saves" });
-          return;
-        }
-      }
-
       const deal = activeDeals[currentIndex];
       const newIndex = currentIndex + 1;
       setCurrentIndex(newIndex);
 
+      // Normalize: old "super" action (from ExpandedDeal onSave path) counts as "right"
+      const normalizedAction = action === "super" ? "right" : action;
+
       logEvent("swipe", {
-        action,
+        action: normalizedAction,
         deal_type: deal.deal_type ?? null,
         destination: deal.destination,
         price: deal.price,
       });
-      if (action === "super") {
+      if (normalizedAction === "right") {
         logEvent("deal_saved", {
           deal_type: deal.deal_type ?? null,
           destination: deal.destination,
@@ -442,18 +442,20 @@ export default function SwipeDeckScreen() {
       }
 
       // Track for undo
-      setLastSwipedDeal({ deal, action });
+      setLastSwipedDeal({ deal, action: normalizedAction });
 
       // Sound feedback
-      if (action === "right") play("like");
-      else if (action === "left") play("pass");
-      else if (action === "super") play("save");
+      if (normalizedAction === "right") play("save");
+      else if (normalizedAction === "left") play("pass");
 
       // Show swipe tutorial toast for first swipe of each type this session
-      if (!shownTutorialTypes.has(action)) {
-        setTutorialAction(action);
-        setShownTutorialTypes((prev) => new Set([...prev, action]));
-        setTimeout(() => setTutorialAction(null), 3000);
+      if (normalizedAction !== "right" || !shownTutorialTypes.has("right")) {
+        const toastAction = normalizedAction as "left" | "right";
+        if (!shownTutorialTypes.has(toastAction)) {
+          setTutorialAction(toastAction);
+          setShownTutorialTypes((prev) => new Set([...prev, toastAction]));
+          setTimeout(() => setTutorialAction(null), 3000);
+        }
       }
 
       if (!user) return;
@@ -472,9 +474,9 @@ export default function SwipeDeckScreen() {
           : `deck_position_${today}_${profile.homeAirport}`;
       await setItem(posKey, newIndex);
 
-      // Save full deal on super swipe
-      if (action === "super") {
-        await saveDeal({
+      // Save full deal on right swipe
+      if (normalizedAction === "right") {
+        const docId = await saveDeal({
           userId: user.uid,
           originalDealId: deal.id,
           destination: deal.destination,
@@ -498,13 +500,14 @@ export default function SwipeDeckScreen() {
           layoverInfo: deal.layover_info,
           isBusinessClass: deal.is_business_class || false,
         });
+        lastSavedDealDocId.current = docId;
       }
 
       // Record swipe
       await createSwipeAction({
         userId: user.uid,
         dealId: deal.id,
-        action,
+        action: normalizedAction,
         dealType: deal.deal_type ?? null,
         destination: deal.destination,
         continent: deal.continent ?? null,
@@ -538,7 +541,7 @@ export default function SwipeDeckScreen() {
       // Track swipe locally
       const newSwipeRecord = {
         dealId: deal.id,
-        action,
+        action: normalizedAction,
         dealType: deal.deal_type,
         destination: deal.destination,
         continent: deal.continent,
@@ -573,13 +576,22 @@ export default function SwipeDeckScreen() {
     [currentIndex, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, shownTutorialTypes]
   );
 
-  const handleButtonSwipe = (action: "left" | "right" | "super") => {
+  const handleButtonSwipe = (action: "left" | "right") => {
     if (!isPremium && swipesLeft <= 0) {
       setDeckPhase("daily_limit");
       return;
     }
     setTriggerSwipe(action);
     setTimeout(() => setTriggerSwipe(null), 400);
+  };
+
+  const handleCenterButton = () => {
+    if (!isPremium && swipesLeft <= 0) {
+      setDeckPhase("daily_limit");
+      return;
+    }
+    const deal = activeDeals[currentIndex];
+    if (deal) setExpandedDeal(deal);
   };
 
   if (loading && deckPhase === "swiping") {
@@ -853,33 +865,6 @@ export default function SwipeDeckScreen() {
             </Animated.View>
           )}
 
-          {/* 1 save left warning */}
-          {!isPremium && allSwipes.filter((s) => s.action === "super").length === MAX_SAVES - 1 && (
-            <Animated.View entering={FadeIn.duration(300)}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_one_save_left" })}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  alignSelf: "center",
-                  gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  backgroundColor: "#fdf2f8",
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: "#f9a8d4",
-                  marginBottom: 8,
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>🔖</Text>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
-                  1 save left — upgrade for unlimited
-                </Text>
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-
           {/* Action buttons */}
           <View
             style={{
@@ -913,7 +898,7 @@ export default function SwipeDeckScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => handleButtonSwipe("super")}
+              onPress={handleCenterButton}
               style={{
                 width: 72,
                 height: 72,
@@ -998,7 +983,7 @@ export default function SwipeDeckScreen() {
           userProfile={profile}
           onClose={() => setExpandedDeal(null)}
           onSave={() => {
-            handleSwipe("super");
+            handleSwipe("right");
             setExpandedDeal(null);
           }}
           onBook={() => {

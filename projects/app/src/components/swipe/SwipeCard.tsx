@@ -18,20 +18,15 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ── Thresholds ──────────────────────────────────────────────────────────
 const SWIPE_X_THRESHOLD = 80;
-const SWIPE_Y_THRESHOLD = 80;
 const VELOCITY_THRESHOLD = 300;
 const EXIT_X = 500;
-const EXIT_Y = -800;
 const EXIT_X_DURATION = 300;
-const EXIT_Y_DURATION = 400;
 
 // ── Indicator interpolation anchors ─────────────────────────────────────
 const LEFT_INDICATOR_INPUT = [-150, -50, 0];
 const LEFT_INDICATOR_OUTPUT = [1, 0, 0];
 const RIGHT_INDICATOR_INPUT = [0, 50, 150];
 const RIGHT_INDICATOR_OUTPUT = [0, 0, 1];
-const UP_INDICATOR_INPUT = [-150, -60, 0];
-const UP_INDICATOR_OUTPUT = [1, 0, 0];
 
 // ── Rotation / scale ────────────────────────────────────────────────────
 const ROTATION_INPUT = [-300, 0, 300];
@@ -108,10 +103,6 @@ export default function SwipeCard({
       translateX.value = withTiming(EXIT_X, { duration: EXIT_X_DURATION }, () => {
         runOnJS(handleSwipe)("right");
       });
-    } else if (triggerSwipe === "super") {
-      translateY.value = withTiming(EXIT_Y, { duration: EXIT_Y_DURATION }, () => {
-        runOnJS(handleSwipe)("super");
-      });
     }
   }, [triggerSwipe, isTop, translateX, translateY, handleSwipe]);
 
@@ -141,11 +132,6 @@ export default function SwipeCard({
           velocityX > VELOCITY_THRESHOLD
         ) {
           runOnJS(handleSwipe)("right");
-        } else if (
-          translationY < -SWIPE_Y_THRESHOLD ||
-          velocityY < -VELOCITY_THRESHOLD
-        ) {
-          runOnJS(handleSwipe)("super");
         }
         translateX.value = withTiming(0, { duration: 200 });
         translateY.value = withTiming(0, { duration: 200 });
@@ -177,21 +163,6 @@ export default function SwipeCard({
           { duration: EXIT_X_DURATION },
           () => {
             runOnJS(handleSwipe)("right");
-          },
-        );
-        return;
-      }
-
-      // ── Super swipe (up) ────────────────────────────────────────
-      if (
-        translationY < -SWIPE_Y_THRESHOLD ||
-        velocityY < -VELOCITY_THRESHOLD
-      ) {
-        translateY.value = withTiming(
-          EXIT_Y,
-          { duration: EXIT_Y_DURATION },
-          () => {
-            runOnJS(handleSwipe)("super");
           },
         );
         return;
@@ -258,14 +229,6 @@ export default function SwipeCard({
     ),
   }));
 
-  const upIndicatorStyle = useAnimatedStyle(() => {
-    const progress = interpolate(translateY.value, UP_INDICATOR_INPUT, UP_INDICATOR_OUTPUT);
-    return {
-      opacity: progress,
-      transform: [{ scale: interpolate(progress, [0, 1], [0.7, 1.15]) }],
-    };
-  });
-
   // ── Derived display values ──────────────────────────────────────────
   const formattedPrice = `$${deal.price}`;
 
@@ -307,16 +270,11 @@ export default function SwipeCard({
           </View>
         </Animated.View>
 
-        {/* Right swipe → LIKE stamp (top-left, tilted) */}
+        {/* Right swipe → SAVE stamp (top-left, tilted) */}
         <Animated.View style={[styles.indicatorRight, rightIndicatorStyle]}>
           <View style={styles.likeStamp}>
-            <Text style={styles.likeText}>LIKE</Text>
+            <Text style={styles.likeText}>SAVE</Text>
           </View>
-        </Animated.View>
-
-        {/* Up swipe → logo fade */}
-        <Animated.View style={[styles.indicatorUp, upIndicatorStyle]}>
-          <Image source={require("../../../assets/Bluelogo.png")} style={{ width: 72, height: 72, resizeMode: "contain" }} />
         </Animated.View>
 
         {/* ── Bottom content ───────────────────────────────────────── */}
@@ -436,14 +394,6 @@ const styles = StyleSheet.create({
     left: 24,
     zIndex: 10,
     transform: [{ rotate: "-15deg" }],
-  },
-  indicatorUp: {
-    position: "absolute",
-    top: "28%",
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    zIndex: 10,
   },
   nopeStamp: {
     borderWidth: 4,
