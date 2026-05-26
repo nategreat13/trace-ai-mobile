@@ -54,15 +54,16 @@ export default function SwipeCard({
   isSwipeDisabled,
   isUndone = false,
 }: SwipeCardProps) {
-  const FALLBACK_IMAGE = "https://www.dripuploads.com/uploads/image_upload/image/2696582/embeddable_6ba76abc-9af6-42e4-883c-1f830abeef8b.png";
-  const [imageUri, setImageUri] = useState(deal.image_url || FALLBACK_IMAGE);
+  // null = no image / failed — renders a gradient placeholder instead of a
+  // wrong photo. We intentionally avoid any hardcoded fallback URL because
+  // a URL that happens to be Tokyo's photo was previously used here, causing
+  // every failed image load to display Tokyo for unrelated destinations.
+  const [imageUri, setImageUri] = useState<string | null>(deal.image_url || null);
 
-  // Sync imageUri whenever the deal changes. Without this, if React reuses
-  // this component instance for a different deal (e.g. when deal.id is
-  // undefined/duplicate and React falls back to array-index keys), the image
-  // stays frozen on the previous deal's photo.
+  // Sync imageUri whenever the deal changes (handles React component reuse
+  // when keys are unstable, e.g. duplicate or missing deal IDs).
   useEffect(() => {
-    setImageUri(deal.image_url || FALLBACK_IMAGE);
+    setImageUri(deal.image_url || null);
   }, [deal.image_url]);
 
   // ── Shared values ───────────────────────────────────────────────────
@@ -236,14 +237,23 @@ export default function SwipeCard({
   return (
     <GestureDetector gesture={composedGesture}>
       <Animated.View style={[styles.card, cardAnimatedStyle]}>
-        {/* Background image */}
-        <Image
-          source={{ uri: imageUri }}
-          style={styles.image}
-          contentFit="cover"
-          transition={200}
-          onError={() => setImageUri(FALLBACK_IMAGE)}
-        />
+        {/* Background image — only rendered when we have a valid URI.
+            Falls back to a dark gradient so no placeholder photo (e.g. Tokyo)
+            ever shows for an unrelated destination. */}
+        {imageUri ? (
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+            onError={() => setImageUri(null)}
+          />
+        ) : (
+          <LinearGradient
+            colors={["#1a2035", "#2d3a5c", "#1a2035"]}
+            style={styles.image}
+          />
+        )}
 
         {/* Gradient overlay — heavy at bottom like Tinder */}
         <LinearGradient

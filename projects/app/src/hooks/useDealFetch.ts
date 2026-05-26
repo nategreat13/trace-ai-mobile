@@ -134,7 +134,12 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
           ? [...dedupedPreferred, ...dedupedRemaining]
           : dedupeByDestination(sortByBestDeal(apiDeals));
 
-      const deckDeals = weightedShuffle(finalDeals);
+      // Final global dedup: if a destination appeared in BOTH the matched
+      // and unmatched buckets (e.g. some Sydney deals matched preferences,
+      // others didn't), one copy slipped through each bucket's individual
+      // dedup pass. This catches those cross-bucket duplicates.
+      const globalDeduped = dedupeByDestination(finalDeals);
+      const deckDeals = weightedShuffle(globalDeduped);
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
