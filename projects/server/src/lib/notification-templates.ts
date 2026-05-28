@@ -78,33 +78,33 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_3d: {
     key: "inactivity_3d",
-    title: "{{dealCount}} new deals waiting",
-    body: "Haven't seen you in a few days. Come check what's new from {{homeAirport}}.",
+    title: "✈️ {{destination}} for ${{price}}",
+    body: "Haven't seen you in a few days — your top deal is waiting.",
     deepLink: "/swipe",
     enabled: false,
     description:
       "Sent to users who haven't opened the app in ~3 days. First-line re-engagement.",
-    variables: ["dealCount", "homeAirport"],
+    variables: ["destination", "price", "dealCount", "homeAirport"],
   },
   inactivity_7d: {
     key: "inactivity_7d",
     title: "We miss you ✈️",
-    body: "Your home airport has {{dealCount}} new deals this week.",
+    body: "{{destination}} for ${{price}} — one of {{dealCount}} deals waiting from {{homeAirport}}.",
     deepLink: "/swipe",
     enabled: false,
     description:
       "Sent to users who haven't opened the app in ~7 days. Last-ditch reactivation push.",
-    variables: ["dealCount", "homeAirport"],
+    variables: ["destination", "price", "dealCount", "homeAirport"],
   },
   inactivity_14d: {
     key: "inactivity_14d",
     title: "Still looking for a deal? ✈️",
-    body: "It's been a while. {{dealCount}} deals are waiting from {{homeAirport}}.",
+    body: "{{destination}} for ${{price}} — come back and swipe.",
     deepLink: "/swipe",
     enabled: false,
     description:
       "Sent to users who haven't opened the app in ~14 days. Final re-engagement attempt.",
-    variables: ["dealCount", "homeAirport"],
+    variables: ["destination", "price", "dealCount", "homeAirport"],
   },
   hot_deal_alert: {
     key: "hot_deal_alert",

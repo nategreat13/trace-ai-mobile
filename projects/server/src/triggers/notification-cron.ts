@@ -119,19 +119,39 @@ async function sendForTemplate(
 }
 
 /**
- * Counts the number of distinct deals the user could see for their
- * home airport in the last 7 days. Used as the {{dealCount}} variable
- * across re-engagement templates. Best-effort — falls back to a
- * generic copy if we can't compute (e.g. no homeAirport).
+ * In-memory cache for deals fetched from the external API during a single
+ * cron run. Keyed by airport code. Prevents re-fetching the same airport
+ * for users who share a home airport.
+ */
+const _dealsFetchCache = new Map<string, RawDeal[]>();
+
+async function fetchDealsForAirport(airport: string): Promise<RawDeal[]> {
+  if (_dealsFetchCache.has(airport)) return _dealsFetchCache.get(airport)!;
+  try {
+    const res = await fetch(`${DEALS_API_BASE}/deals/${airport}?limit=500`, {
+      headers: { "x-api-key": DEALS_API_KEY },
+    });
+    if (!res.ok) { _dealsFetchCache.set(airport, []); return []; }
+    const raw = await res.json() as unknown;
+    const deals: RawDeal[] = Array.isArray(raw)
+      ? (raw as RawDeal[])
+      : (((raw as Record<string, unknown>).deals as RawDeal[]) ?? []);
+    _dealsFetchCache.set(airport, deals);
+    return deals;
+  } catch {
+    _dealsFetchCache.set(airport, []);
+    return [];
+  }
+}
+
+/**
+ * Returns the real count of deals available for a home airport.
+ * Used as the {{dealCount}} variable in re-engagement templates.
  */
 async function dealCountForUser(homeAirport: string | undefined): Promise<number> {
   if (!homeAirport) return 0;
-  // The deals collection isn't part of this server project's responsibilities,
-  // so this is a safe stub: we'd query the upstream deals API to get the
-  // count, but for now we return a reasonable default that sounds plausible
-  // in copy. Trevor can wire this to a real count once we expose a deal-count
-  // endpoint.
-  return 12;
+  const deals = await fetchDealsForAirport(homeAirport);
+  return deals.length;
 }
 
 /**
@@ -235,7 +255,7 @@ async function runDailyNotifications() {
       const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences", "dealTypes", "destinationPreference")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
@@ -243,12 +263,18 @@ async function runDailyNotifications() {
           homeAirport?: string;
           notificationsEnabled?: boolean;
           notificationPreferences?: NotificationPrefs;
+          dealTypes?: string[];
+          destinationPreference?: string;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        const dealCount = await dealCountForUser(data.homeAirport);
+        const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        const dealCount = deals.length;
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
         await sendForTemplate(data.userId, "inactivity_3d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
+          destination: best?.destination ?? "",
+          price: best?.price ?? 0,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_3d: scanned ${snap.size} candidates`);
@@ -261,7 +287,7 @@ async function runDailyNotifications() {
       const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences", "dealTypes", "destinationPreference")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
@@ -269,12 +295,18 @@ async function runDailyNotifications() {
           homeAirport?: string;
           notificationsEnabled?: boolean;
           notificationPreferences?: NotificationPrefs;
+          dealTypes?: string[];
+          destinationPreference?: string;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        const dealCount = await dealCountForUser(data.homeAirport);
+        const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        const dealCount = deals.length;
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
         await sendForTemplate(data.userId, "inactivity_7d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
+          destination: best?.destination ?? "",
+          price: best?.price ?? 0,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_7d: scanned ${snap.size} candidates`);
@@ -287,7 +319,7 @@ async function runDailyNotifications() {
       const snap = await colRef("userProfiles")
         .where("lastSeenAt", ">=", cutoffStart)
         .where("lastSeenAt", "<", cutoffEnd)
-        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
+        .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences", "dealTypes", "destinationPreference")
         .get();
       for (const doc of snap.docs) {
         const data = doc.data() as {
@@ -295,12 +327,18 @@ async function runDailyNotifications() {
           homeAirport?: string;
           notificationsEnabled?: boolean;
           notificationPreferences?: NotificationPrefs;
+          dealTypes?: string[];
+          destinationPreference?: string;
         };
         if (!data.userId || !data.notificationsEnabled) continue;
-        const dealCount = await dealCountForUser(data.homeAirport);
+        const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        const dealCount = deals.length;
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
         await sendForTemplate(data.userId, "inactivity_14d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
+          destination: best?.destination ?? "",
+          price: best?.price ?? 0,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_14d: scanned ${snap.size} candidates`);
