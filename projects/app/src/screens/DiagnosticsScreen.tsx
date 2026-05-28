@@ -350,10 +350,16 @@ function DiagnosticsScreenInner() {
           <View style={{ flexDirection: "row", gap: 8 }}>
             {(["prod", "staging"] as TraceEnv[]).map((opt) => {
               const active = opt === env;
+              // Disable the toggle while authed. Switching env mid-session
+              // is destructive (signs out + reloads, and the new env may not
+              // have a userProfile for the current UID) — safer to require
+              // an explicit sign-out first via the button below.
+              const disabled = !!authUid;
               return (
                 <Pressable
                   key={opt}
-                  onPress={() => handleSwitchEnv(opt)}
+                  onPress={disabled ? undefined : () => handleSwitchEnv(opt)}
+                  disabled={disabled}
                   style={{
                     flex: 1,
                     paddingVertical: 12,
@@ -364,6 +370,7 @@ function DiagnosticsScreenInner() {
                         : "#2563eb"
                       : theme.muted,
                     alignItems: "center",
+                    opacity: disabled && !active ? 0.4 : 1,
                   }}
                 >
                   <Text
@@ -378,6 +385,18 @@ function DiagnosticsScreenInner() {
               );
             })}
           </View>
+          {authUid ? (
+            <Text
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                color: theme.mutedForeground,
+                fontStyle: "italic",
+              }}
+            >
+              Sign out below to switch environments.
+            </Text>
+          ) : null}
           {env === "staging" && (
             <Text
               style={{
