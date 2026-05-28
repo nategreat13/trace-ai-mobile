@@ -59,7 +59,17 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const filtered = useMemo(() => {
-    let result = [...deals];
+    // Dedup by originalDealId — keep only the most-recently-saved copy.
+    // Guards against duplicates that slipped in before the save guard was added.
+    const seen = new Set<string>();
+    const deduped = deals.filter(({ deal, id }) => {
+      const key = deal.originalDealId || id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    let result = [...deduped];
 
     // Text search
     if (searchQuery.trim()) {

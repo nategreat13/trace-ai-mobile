@@ -169,6 +169,20 @@ export function subscribeToSwipeActions(
 // ──── Flight Deals (saved) ────
 
 export async function saveDeal(data: Record<string, any>): Promise<string> {
+  // Prevent duplicate saves: if this user already has this deal saved,
+  // return the existing doc ID rather than creating a second one.
+  if (data.userId && data.originalDealId) {
+    const existing = await getDocs(
+      query(
+        envCollection("flightDeals"),
+        where("userId", "==", data.userId),
+        where("originalDealId", "==", data.originalDealId),
+        limit(1)
+      )
+    );
+    if (!existing.empty) return existing.docs[0].id;
+  }
+
   const ref = await addDoc(envCollection("flightDeals"), stripUndefined({
     ...data,
     createdAt: Timestamp.now(),

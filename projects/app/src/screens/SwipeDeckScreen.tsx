@@ -356,8 +356,10 @@ export default function SwipeDeckScreen() {
       const swipeHistory = await getSwipeActions(user.uid);
       setAllSwipes(swipeHistory);
 
-      // Restore deck position
-      const posKey = `deck_position_${today}_${profile.homeAirport}`;
+      // Restore deck position (business members use a separate key)
+      const posKey = profile.subscriptionStatus === "business"
+        ? `business_deck_position_${today}_${profile.homeAirport}`
+        : `deck_position_${today}_${profile.homeAirport}`;
       const stored = await getItem<number>(posKey);
       if (stored && stored > 0) setCurrentIndex(stored);
     };
