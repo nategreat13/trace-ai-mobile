@@ -196,6 +196,23 @@ export async function getFunnelCounts(
   // refuses the query with FAILED_PRECONDITION even though the index
   // exists. The page-level catch swallows the error as 0, masking
   // the misconfiguration as "no data".
+  // Pre-profile events fire BEFORE `createUserProfile()` runs. At the
+  // moment they're logged, no userProfile doc exists for the userId yet
+  // — for abandoners (Firebase Auth succeeded, onboarding never finished),
+  // it never will. shouldIncludeUid() can't distinguish "abandoner" from
+  // "deleted user" and would silently drop both, so the funnel must
+  // skip the `validUserIds` orphan filter for these events. Excluded-UID
+  // and tainted-device filtering still apply — those exclude internal
+  // testers regardless of profile state.
+  const PRE_PROFILE_EVENTS = new Set([
+    "signup_completed",
+    "onboarding_started",
+    // landing_viewed always has userId="guest", so the orphan filter
+    // already skips it via the early `if (userId === "guest")` return —
+    // listed here for completeness / future per-step events.
+    "landing_viewed",
+  ]);
+
   async function countEvent(name: string): Promise<number> {
     const snap = await colRef(env, "events")
       .where("timestamp", ">=", since)
@@ -206,13 +223,24 @@ export async function getFunnelCounts(
     let n = 0;
     const dedupeBySession = name === "landing_viewed";
     const seenSessions = dedupeBySession ? new Set<string>() : null;
+    const skipOrphanFilter = PRE_PROFILE_EVENTS.has(name);
     snap.forEach((doc) => {
       const userId = doc.get("userId") as string | undefined;
       const sessionId = doc.get("props.session_id") as string | undefined;
       const deviceId = doc.get("props.device_id") as string | undefined;
 
-      // 1. Standard userId-based exclusion.
-      if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
+      // 1. Standard userId-based exclusion. For pre-profile events, pass
+      //    `undefined` for validUserIds so abandoners (UID exists, no
+      //    profile) aren't dropped as orphans.
+      if (
+        !shouldIncludeUid(
+          userId,
+          excluded,
+          skipOrphanFilter ? undefined : validUserIds
+        )
+      ) {
+        return;
+      }
       // 2. Guest event whose session belonged to an excluded user.
       if (userId === "guest" && sessionId && taintedSessions.has(sessionId)) return;
       // 3. Guest event whose device belonged to an excluded user. This
