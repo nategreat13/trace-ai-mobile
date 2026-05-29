@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-      <p className="text-gray-500 mb-10">Last updated: March 27, 2026</p>
+      <p className="text-gray-500 mb-10">Last updated: May 29, 2026</p>
 
       <div className="space-y-8 text-gray-700 leading-relaxed">
         <section>
@@ -74,9 +74,12 @@ export default function PrivacyPage() {
             Information We Do Not Collect
           </h2>
           <p>
-            We do not collect your location or GPS data, device advertising
-            identifiers, contacts, browsing history outside the app, health
-            data, or phone number.
+            We do not collect your precise location or GPS data, contacts,
+            browsing history outside the app, health data, or phone number. We
+            do not request access to Apple&apos;s cross-app advertising
+            identifier (IDFA), and we do not show the iOS App Tracking
+            Transparency prompt — this means our advertising partners cannot
+            link your activity in Trace to your activity in other apps you use.
           </p>
         </section>
 
@@ -113,11 +116,72 @@ export default function PrivacyPage() {
             <li>
               <strong>Expo</strong> — app updates and delivery
             </li>
+            <li>
+              <strong>Meta Platforms (Facebook)</strong> — advertising
+              measurement and attribution. See the &quot;Advertising and
+              Analytics&quot; section below for details on what is shared.
+            </li>
           </ul>
           <p className="mt-2">
             These services may process your data in accordance with their own
-            privacy policies. We do not sell your data to third parties or use it
-            for advertising.
+            privacy policies. We do not sell your personal data. We do share
+            limited, primarily anonymous or hashed information with Meta
+            Platforms to measure how effective our advertising campaigns are —
+            described in detail below.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Advertising and Analytics
+          </h2>
+          <p>
+            We run advertising campaigns on platforms such as Facebook and
+            Instagram to reach people who would benefit from Trace. To measure
+            how effective those campaigns are and to improve them over time, we
+            share a limited amount of information with Meta Platforms, Inc.:
+          </p>
+          <ul className="list-disc pl-5 space-y-2 mt-3">
+            <li>
+              <strong>From your device</strong> (collected by the Meta SDK
+              integrated into the Trace app): an anonymous Meta-generated
+              identifier scoped to this app install (sometimes called{" "}
+              <code className="text-xs">_fbp</code>), app event signals such as
+              when you first install or open the app, and diagnostic data such
+              as crash reports from the Meta SDK itself. This identifier is not
+              shared with other apps you use.
+            </li>
+            <li>
+              <strong>From our server</strong> (when you sign up or complete
+              onboarding): hashed copies of your email address, first name, last
+              name, and two-letter country code, along with your IP address and
+              browser/device user-agent string at the moment you signed up.
+              These are sent to Meta&apos;s Conversions API so Meta can
+              statistically match your sign-up to an ad you may have seen,
+              without us exposing the underlying values. Hashing converts the
+              original value into a one-way fingerprint that cannot be reversed.
+            </li>
+          </ul>
+          <p className="mt-3">
+            We do <strong>not</strong> enable Apple&apos;s App Tracking
+            Transparency prompt or read Apple&apos;s IDFA, which means Meta
+            cannot link your activity in Trace to your activity in other apps.
+          </p>
+          <p className="mt-3">
+            Meta processes the information we share according to its own data
+            policy, available at{" "}
+            <a
+              href="https://www.facebook.com/policy.php"
+              className="text-rose-500 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              facebook.com/policy.php
+            </a>
+            . You can manage how Meta uses information about you in your
+            Facebook or Instagram account&apos;s ad preferences. If you delete
+            your Trace account, our server stops sending information about you
+            to Meta.
           </p>
         </section>
 
