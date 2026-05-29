@@ -175,6 +175,17 @@ export default function OnboardingScreen() {
           userId: user.uid,
           email: user.email || "",
           displayName: fullName || "Travel Explorer",
+          // Persist first/last name separately too. UserProfile schema
+          // already supports these optional fields; the userProfile-
+          // creation Cloud Function trigger reads them and forwards
+          // to Meta CAPI as the "Lead" event's user_data — which lifts
+          // match rate by 10-20% over email-only matching.
+          firstName: data.firstName.trim()
+            ? capitalizeName(data.firstName)
+            : undefined,
+          lastName: data.lastName.trim()
+            ? capitalizeName(data.lastName)
+            : undefined,
           homeAirport: data.homeAirport,
           destinationPreference: data.destinationPreference,
           dealTypes: data.dealTypes,

@@ -17,6 +17,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { login, signup, requestPasswordReset } from "../services/auth";
+import { auth } from "../services/firebase";
+import { trackSignup } from "../services/trackingApi";
 import { logEvent } from "../lib/analytics";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -70,6 +72,30 @@ export default function LoginScreen() {
       if (isSignup) {
         await signup(email.trim(), password);
         logEvent("signup_completed", { method: "email" });
+        // Fire Meta CAPI `CompleteRegistration` via our server. This is
+        // the *acquisition* signal — fires for every new Auth signup,
+        // including users who later abandon onboarding. Fire-and-forget;
+        // never blocks the navigation to the next screen. The server
+        // also enriches with the request IP + user-agent before
+        // forwarding to Meta, which is the highest-value match signal
+        // we have without the Meta Mobile SDK installed.
+        let country: string | null = null;
+        try {
+          const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+          if (locale && locale.includes("-")) {
+            country = locale.split("-")[1];
+          }
+        } catch {
+          /* best-effort */
+        }
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          trackSignup({
+            userId: currentUser.uid,
+            email: email.trim() || currentUser.email || null,
+            country,
+          });
+        }
       } else {
         await login(email.trim(), password);
         logEvent("login", { method: "email" });

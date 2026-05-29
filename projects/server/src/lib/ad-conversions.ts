@@ -19,7 +19,26 @@ import crypto from "crypto";
 // Meta Dataset ID — not a secret, safe to hardcode.
 const META_DATASET_ID = "1001080219009504";
 
-type ConversionKind = "sign_up" | "start_trial" | "purchase" | "subscribe";
+// Distinct conversion kinds we forward. Meaning vs Meta event_name:
+//   sign_up      → "CompleteRegistration" — fired right after Firebase Auth
+//                  succeeds. This is the *acquisition* signal. Critical
+//                  that this fires for ALL Auth-signups including ones
+//                  that abandon onboarding — otherwise Meta's algorithm
+//                  is blind to the top of the funnel.
+//   lead         → "Lead" — fired when the userProfile doc is created
+//                  (i.e. user finished onboarding). The "qualified user"
+//                  signal: best optimization target once we have ~50/wk.
+//   start_trial  → "StartTrial"
+//   purchase     → "Purchase"
+//   subscribe    → "Purchase" (same Meta event, kept distinct in our
+//                  taxonomy so the analytics log can split renewal vs
+//                  initial purchase if we ever care).
+type ConversionKind =
+  | "sign_up"
+  | "lead"
+  | "start_trial"
+  | "purchase"
+  | "subscribe";
 
 export interface ConversionEvent {
   kind: ConversionKind;
@@ -28,6 +47,21 @@ export interface ConversionEvent {
   amountUsd?: number;
   currency?: string;
   productId?: string;
+  /** PII for matching — hashed by sendMeta before transmission. */
+  firstName?: string | null;
+  lastName?: string | null;
+  city?: string | null;
+  /** ISO 3166 alpha-2 country code, e.g. "US", "GB". */
+  country?: string | null;
+  /**
+   * Plain (not hashed) request-context fields. Meta scores match rate
+   * higher when these are present alongside hashed identifiers — they
+   * help with fingerprinting when email match fails (Apple-relay etc).
+   * Only populated for events fired from HTTP routes where we have a
+   * real request; trigger-driven events leave these null.
+   */
+  clientIp?: string | null;
+  clientUserAgent?: string | null;
   /** Optional external ad click id we stored on the user doc */
   fbp?: string | null;
   fbc?: string | null;
@@ -35,11 +69,30 @@ export interface ConversionEvent {
   gclid?: string | null;
 }
 
-function hashEmail(email: string): string {
+/**
+ * SHA256(lowercased + trimmed). Meta's spec for hashed PII fields
+ * (em, fn, ln, ct, country, etc). All hashed identifiers must be
+ * normalized identically before hashing or Meta won't match.
+ */
+function hashPii(value: string): string {
   return crypto
     .createHash("sha256")
-    .update(email.trim().toLowerCase())
+    .update(value.trim().toLowerCase())
     .digest("hex");
+}
+
+/**
+ * For first/last name and city, Meta requires stripping non-alphanumeric
+ * chars before hashing. "Mary-Jane" and "MaryJane" must hash identically.
+ */
+function hashName(value: string): string {
+  return hashPii(value.replace(/[^a-z0-9]/gi, ""));
+}
+
+// Backwards-compatible alias — call sites still say hashEmail(email)
+// for readability, but it's just hashPii under the hood now.
+function hashEmail(email: string): string {
+  return hashPii(email);
 }
 
 async function sendMeta(event: ConversionEvent): Promise<void> {
@@ -61,16 +114,27 @@ async function sendMeta(event: ConversionEvent): Promise<void> {
   const eventName =
     event.kind === "sign_up"
       ? "CompleteRegistration"
+      : event.kind === "lead"
+      ? "Lead"
       : event.kind === "start_trial"
       ? "StartTrial"
       : event.kind === "purchase" || event.kind === "subscribe"
       ? "Purchase"
       : "CustomEvent";
 
+  // Build user_data. Every additional matchable field lifts Meta's match
+  // rate — we pass everything we have. Order matches Meta's docs.
   const userData: Record<string, unknown> = {
-    external_id: [hashEmail(event.userId)],
+    external_id: [hashPii(event.userId)],
   };
   if (event.email) userData.em = [hashEmail(event.email)];
+  if (event.firstName) userData.fn = [hashName(event.firstName)];
+  if (event.lastName) userData.ln = [hashName(event.lastName)];
+  if (event.city) userData.ct = [hashName(event.city)];
+  if (event.country) userData.country = [hashPii(event.country)];
+  // Plain (not hashed) per Meta spec.
+  if (event.clientIp) userData.client_ip_address = event.clientIp;
+  if (event.clientUserAgent) userData.client_user_agent = event.clientUserAgent;
   if (event.fbp) userData.fbp = event.fbp;
   if (event.fbc) userData.fbc = event.fbc;
 

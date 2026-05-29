@@ -9,6 +9,7 @@ import { adminPushRoutes } from "./routes/admin-push";
 import { deleteAccountRoutes } from "./routes/delete-account";
 import { shareRoutes } from "./routes/share";
 import { supportRoutes } from "./routes/support";
+import { trackRoutes } from "./routes/track";
 
 export const app = express();
 
@@ -36,6 +37,7 @@ app.use(adminPushRoutes);
 app.use(deleteAccountRoutes);
 app.use(shareRoutes);
 app.use(supportRoutes);
+app.use(trackRoutes);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });

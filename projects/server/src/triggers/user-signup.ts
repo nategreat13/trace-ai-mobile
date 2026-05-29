@@ -36,17 +36,30 @@ async function handleUserSignup(event: {
     const email: string = data.email ?? "(no email)";
     const userId: string = data.userId ?? "";
     const homeAirport: string = data.homeAirport ?? "(unknown)";
+    const firstName: string | null = data.firstName ?? null;
+    const lastName: string | null = data.lastName ?? null;
+    const country: string | null = data.country ?? null;
 
-    // Fire ad platform signup conversion. MUST be awaited — not void'd.
-    // Cloud Functions freezes the instance once the handler's promise
-    // resolves; an un-awaited fetch to Meta gets suspended mid-flight
-    // and never completes (no error, no event — exactly the silent
-    // failure we hit). fanOutConversion swallows all errors internally,
-    // so awaiting it is safe — it can't break the trigger.
+    // Fire ad platform "qualified user" conversion. MUST be awaited —
+    // not void'd. Cloud Functions freezes the instance once the handler's
+    // promise resolves; an un-awaited fetch to Meta gets suspended mid-
+    // flight and never completes. fanOutConversion swallows all errors
+    // internally, so awaiting it is safe.
+    //
+    // KIND CHANGE — was "sign_up" (Meta event "CompleteRegistration").
+    // Now "lead" (Meta event "Lead"). The CompleteRegistration signal
+    // moved upstream to fire from /track-signup as soon as Firebase Auth
+    // completes — that catches abandoners who never reach this trigger.
+    // The userProfile-creation event is now the "qualified user"
+    // milestone: anyone who reached this point successfully completed
+    // the entire onboarding flow.
     await fanOutConversion({
-      kind: "sign_up",
+      kind: "lead",
       userId,
       email: email !== "(no email)" ? email : null,
+      firstName,
+      lastName,
+      country,
     });
     const createdAtRaw: any = data.createdAt;
     const createdAt: Date =
