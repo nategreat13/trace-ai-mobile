@@ -406,6 +406,231 @@ export async function getUserCount(
 }
 
 /**
+ * Distinct device_id values seen in the events collection, excluding
+ * devices that have ever logged an event under an excluded user's UID
+ * (the same cross-session "tainted devices" logic used by getFunnelCounts).
+ *
+ * What this is: a count of unique installs that have *opened* the app at
+ * least once. We can't see installs that never launched — every event in
+ * here implies at least one app open.
+ *
+ * Why no time window: with the events collection freshly wiped on the
+ * ads-launch baseline, "all time" is the meaningful window. If the
+ * collection grows past ~100k events this becomes a heavy scan and we'd
+ * want a `days` param + the existing `(timestamp DESC)` composite index.
+ *
+ * Devices whose only events were as a "guest" (pre-auth) but whose
+ * device_id later appeared under an excluded UID are correctly dropped
+ * via the tainted-devices set.
+ */
+export async function getUniqueDeviceCount(
+  env: TraceEnv,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<number> {
+  // Build the tainted-devices set: device_ids that have ever logged an
+  // event under one of the excluded UIDs. The `in` query is chunked at 30
+  // (Firestore's limit) so it scales with the exclusion list size.
+  const taintedDevices = new Set<string>();
+  if (excluded && excluded.userIds.size > 0) {
+    const userIdsArr = Array.from(excluded.userIds);
+    for (let i = 0; i < userIdsArr.length; i += 30) {
+      const chunk = userIdsArr.slice(i, i + 30);
+      const snap = await colRef(env, "events")
+        .where("userId", "in", chunk)
+        .select("props.device_id")
+        .get();
+      snap.forEach((doc) => {
+        const did = doc.get("props.device_id") as string | undefined;
+        if (did) taintedDevices.add(did);
+      });
+    }
+  }
+
+  // Full scan with .select() so we only pay for the fields we read.
+  const snap = await colRef(env, "events")
+    .select("userId", "props.device_id")
+    .get();
+  const devices = new Set<string>();
+  snap.forEach((doc) => {
+    const userId = doc.get("userId") as string | undefined;
+    const deviceId = doc.get("props.device_id") as string | undefined;
+    if (!deviceId) return;
+    if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
+    if (taintedDevices.has(deviceId)) return;
+    devices.add(deviceId);
+  });
+  return devices.size;
+}
+
+// -- Per-device drill-down ------------------------------------------------
+
+export interface DeviceRow {
+  deviceId: string;
+  platform: string | null;
+  appVersion: string | null;
+  osVersion: string | null;
+  country: string | null;
+  locale: string | null;
+  firstSeenAt: Date | null;
+  lastSeenAt: Date | null;
+  eventCount: number;
+  /** Most-recent non-guest UID seen on this device, if any. */
+  lastUserId: string | null;
+  /** True if this device fired signup_completed for some UID. */
+  signedUp: boolean;
+  /** True if a userProfile doc exists for lastUserId. Set by the page. */
+  hasProfile?: boolean;
+  /** Profile email if hasProfile. */
+  email?: string | null;
+  /** Profile onboardingComplete if hasProfile. */
+  onboardingComplete?: boolean;
+}
+
+/**
+ * Returns one row per non-excluded device_id seen in events. Same tainted-
+ * devices filtering as `getUniqueDeviceCount` so the page count matches.
+ *
+ * Resolution of profile metadata (hasProfile / email / onboardingComplete)
+ * happens in the calling page so we can batch the userProfiles lookup —
+ * keeping this function as a single events scan.
+ */
+export async function listDevices(
+  env: TraceEnv,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<DeviceRow[]> {
+  // 1. Build tainted-devices set — same pattern as getFunnelCounts.
+  const taintedDevices = new Set<string>();
+  if (excluded && excluded.userIds.size > 0) {
+    const userIdsArr = Array.from(excluded.userIds);
+    for (let i = 0; i < userIdsArr.length; i += 30) {
+      const chunk = userIdsArr.slice(i, i + 30);
+      const snap = await colRef(env, "events")
+        .where("userId", "in", chunk)
+        .select("props.device_id")
+        .get();
+      snap.forEach((doc) => {
+        const did = doc.get("props.device_id") as string | undefined;
+        if (did) taintedDevices.add(did);
+      });
+    }
+  }
+
+  // 2. Scan all events with the props we need.
+  const snap = await colRef(env, "events")
+    .select(
+      "userId",
+      "name",
+      "timestamp",
+      "props.device_id",
+      "props.platform",
+      "props.app_version",
+      "props.os_version",
+      "props.country",
+      "props.locale"
+    )
+    .get();
+
+  // 3. Bucket by device_id, applying exclusion filters as we go.
+  const buckets = new Map<string, DeviceRow>();
+  snap.forEach((doc) => {
+    const userId = doc.get("userId") as string | undefined;
+    const deviceId = doc.get("props.device_id") as string | undefined;
+    if (!deviceId) return;
+    if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
+    if (taintedDevices.has(deviceId)) return;
+
+    const name = (doc.get("name") as string | undefined) ?? "";
+    const ts = (doc.get("timestamp") as FirebaseFirestore.Timestamp | undefined)?.toDate?.() ?? null;
+
+    let row = buckets.get(deviceId);
+    if (!row) {
+      row = {
+        deviceId,
+        platform: (doc.get("props.platform") as string | undefined) ?? null,
+        appVersion: (doc.get("props.app_version") as string | undefined) ?? null,
+        osVersion: (doc.get("props.os_version") as string | undefined) ?? null,
+        country: (doc.get("props.country") as string | undefined) ?? null,
+        locale: (doc.get("props.locale") as string | undefined) ?? null,
+        firstSeenAt: ts,
+        lastSeenAt: ts,
+        eventCount: 0,
+        lastUserId: null,
+        signedUp: false,
+      };
+      buckets.set(deviceId, row);
+    }
+
+    row.eventCount++;
+    if (ts) {
+      if (!row.firstSeenAt || ts < row.firstSeenAt) row.firstSeenAt = ts;
+      if (!row.lastSeenAt || ts > row.lastSeenAt) row.lastSeenAt = ts;
+    }
+    // Track the latest non-guest UID; later events overwrite earlier ones
+    // (we want the *current* user of this device, not the first).
+    if (userId && userId !== "guest") {
+      if (
+        !row.lastUserId ||
+        (ts && row.lastSeenAt && ts >= row.lastSeenAt)
+      ) {
+        row.lastUserId = userId;
+      }
+    }
+    if (name === "signup_completed") row.signedUp = true;
+  });
+
+  // 4. Most-recent first. Use lastSeenAt; null sorts last.
+  return Array.from(buckets.values()).sort((a, b) => {
+    const at = a.lastSeenAt?.getTime() ?? 0;
+    const bt = b.lastSeenAt?.getTime() ?? 0;
+    return bt - at;
+  });
+}
+
+export interface DeviceEvent {
+  id: string;
+  name: string;
+  userId: string | null;
+  timestamp: Date | null;
+  props: Record<string, unknown>;
+}
+
+/**
+ * Full event timeline for a single device_id (no exclusion filtering — if
+ * you've already navigated to a specific device's detail page you want to
+ * see everything that happened on it, including any later excluded-user
+ * events to surface "this tester later used the device").
+ */
+export async function getDeviceEvents(
+  env: TraceEnv,
+  deviceId: string,
+  limit = 500
+): Promise<DeviceEvent[]> {
+  // Note: where + orderBy on different fields needs a composite index. To
+  // avoid maintaining one for a low-traffic admin page, query by equality
+  // only and sort in memory. A single device's event count is well under
+  // any practical limit.
+  const snap = await colRef(env, "events")
+    .where("props.device_id", "==", deviceId)
+    .limit(limit)
+    .get();
+  const events: DeviceEvent[] = snap.docs.map((d) => {
+    const data = d.data();
+    const props = (data.props as Record<string, unknown> | undefined) ?? {};
+    return {
+      id: d.id,
+      name: (data.name as string | undefined) ?? "",
+      userId: (data.userId as string | undefined) ?? null,
+      timestamp: (data.timestamp as FirebaseFirestore.Timestamp | undefined)?.toDate?.() ?? null,
+      props,
+    };
+  });
+  events.sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0));
+  return events;
+}
+
+/**
  * Returns the in-app purchase flow drop-off, plus the breakdown of failed/
  * canceled purchases. The order from `paywall_viewed` to `purchase_completed`
  * tells us where users abandon the upgrade flow:

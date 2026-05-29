@@ -6,6 +6,7 @@ import {
   getRetentionCohorts,
   getAdSpend,
   getUserCount,
+  getUniqueDeviceCount,
   getPurchaseFlowFunnel,
   getLoginCount,
   getSubscriptionLifecycle,
@@ -52,6 +53,7 @@ export default async function AnalyticsPage() {
     retention,
     adSpend,
     userCount,
+    uniqueDeviceCount,
     purchaseFlow,
     loginCount,
     subscriptionLifecycle,
@@ -67,6 +69,10 @@ export default async function AnalyticsPage() {
     getRetentionCohorts(env, 8, excluded, validUserIds).catch(() => []),
     getAdSpend(env).catch(() => []),
     getUserCount(env, excluded).catch(() => 0),
+    getUniqueDeviceCount(env, excluded, validUserIds).catch((e) => {
+      console.error("[analytics] getUniqueDeviceCount failed:", e);
+      return 0;
+    }),
     getPurchaseFlowFunnel(env, 30, excluded, validUserIds).catch(() => null),
     getLoginCount(env, 30, excluded, validUserIds).catch(() => 0),
     getSubscriptionLifecycle(env, 30, excluded, validUserIds).catch(() => null),
@@ -82,6 +88,7 @@ export default async function AnalyticsPage() {
       retention={retention}
       adSpend={adSpend}
       userCount={userCount}
+      uniqueDeviceCount={uniqueDeviceCount}
       purchaseFlow={purchaseFlow}
       loginCount={loginCount}
       subscriptionLifecycle={subscriptionLifecycle}

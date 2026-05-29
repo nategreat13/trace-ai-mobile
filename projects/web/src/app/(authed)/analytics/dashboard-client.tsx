@@ -58,6 +58,7 @@ interface Props {
   retention: RetentionRow[];
   adSpend: AdSpendRow[];
   userCount: number;
+  uniqueDeviceCount: number;
   purchaseFlow: PurchaseFlowData | null;
   loginCount: number;
   subscriptionLifecycle: SubscriptionLifecycleData | null;
@@ -109,6 +110,7 @@ export default function AnalyticsDashboardClient({
   retention,
   adSpend,
   userCount,
+  uniqueDeviceCount,
   purchaseFlow,
   loginCount,
   subscriptionLifecycle,
@@ -145,7 +147,11 @@ export default function AnalyticsDashboardClient({
 
         {/* Top-line stats */}
         <Section title="Overview">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* 5 columns at md+ to fit the new Unique installs card next to
+              Total users — they're related ("how many installed" vs "how
+              many signed up"), so pairing them visually makes the install→
+              signup gap easy to eyeball. */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard label="MRR" value={summary ? dollars(summary.mrrCents) : "—"} sub="Monthly recurring revenue" />
             <StatCard
               label="Active subscribers"
@@ -155,6 +161,11 @@ export default function AnalyticsDashboardClient({
                   ? `${summary.activeByTier.premium} premium · ${summary.activeByTier.business} business`
                   : undefined
               }
+            />
+            <StatCard
+              label="Unique installs"
+              value={uniqueDeviceCount.toLocaleString()}
+              sub="Distinct devices that opened the app"
             />
             <StatCard
               label="Total users"

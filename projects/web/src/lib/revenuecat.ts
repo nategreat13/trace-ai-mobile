@@ -192,66 +192,28 @@ function productBilling(productId: string): "monthly" | "annual" | null {
   return null;
 }
 
-export async function getSubscriptionSummary(): Promise<SubscriptionSummary> {
-  const subs = await listAllSubscriptions(2000);
-
-  const summary: SubscriptionSummary = {
-    activeSubscribers: 0,
-    activeByTier: { premium: 0, business: 0 },
-    activeByBilling: { monthly: 0, annual: 0 },
-    activeTrialing: 0,
-    mrrCents: 0,
-    arrCents: 0,
-    churnedLast30Days: 0,
-    trialStartedLast30Days: 0,
-    trialConvertedLast30Days: 0,
-  };
-
-  const now = Date.now();
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-
-  for (const sub of subs) {
-    const isActive =
-      sub.gives_access &&
-      (sub.status === "active" || sub.status === "in_grace_period");
-
-    if (isActive) {
-      summary.activeSubscribers++;
-      const tier = productTier(sub.product_id);
-      const billing = productBilling(sub.product_id);
-      if (tier) summary.activeByTier[tier]++;
-      if (billing) summary.activeByBilling[billing]++;
-      if (sub.is_trial) summary.activeTrialing++;
-      summary.mrrCents += productMonthlyCents(sub.product_id);
-    }
-
-    // Churn in last 30d = subscriptions that ended within 30d and are not active
-    if (
-      !isActive &&
-      sub.current_period_ends_at &&
-      sub.current_period_ends_at >= thirtyDaysAgo &&
-      sub.current_period_ends_at <= now
-    ) {
-      summary.churnedLast30Days++;
-    }
-
-    // Trial starts/conversions in last 30d
-    if (sub.starts_at >= thirtyDaysAgo && sub.is_trial) {
-      summary.trialStartedLast30Days++;
-    }
-    if (
-      sub.starts_at >= thirtyDaysAgo &&
-      !sub.is_trial &&
-      sub.auto_renewal_status === "will_renew"
-    ) {
-      // Approximate: a non-trial active subscription that started in last 30d
-      // counts as either a new subscribe or a trial-to-paid conversion.
-      // RC doesn't cleanly expose which — we'll refine once we have the
-      // data shape from our own webhook logs.
-      summary.trialConvertedLast30Days++;
-    }
-  }
-
-  summary.arrCents = summary.mrrCents * 12;
-  return summary;
+/**
+ * @deprecated Implementation broken — RC v2 changed `/projects/{pid}/subscriptions`
+ * from a list endpoint to a single-item search endpoint that requires a
+ * `store_subscription_identifier` query parameter. The aggregation strategy
+ * here (enumerate all subs, compute summary client-side) is no longer
+ * viable.
+ *
+ * Migration path (separate task): switch to RC's dedicated metrics + charts
+ * endpoints, which return the aggregates we want directly:
+ *   - GET /projects/{pid}/metrics/overview      → activeSubscribers, activeTrialing
+ *   - GET /projects/{pid}/metrics/revenue       → MRR / ARR / revenue over range
+ *   - GET /projects/{pid}/charts/actives        → active count by tier/billing
+ *   - GET /projects/{pid}/charts/mrr            → MRR over time
+ *   - Trial cohort / churn need /customers iteration or chart endpoints
+ *
+ * Until migrated, return null so the dashboard renders "—" gracefully
+ * (page.tsx already .catches errors → null). The console.warn replaces the
+ * thrown error so the preview stays clean.
+ */
+export async function getSubscriptionSummary(): Promise<SubscriptionSummary | null> {
+  console.warn(
+    "[RC summary] disabled — needs migration from deprecated /subscriptions endpoint to /metrics + /charts endpoints"
+  );
+  return null;
 }
