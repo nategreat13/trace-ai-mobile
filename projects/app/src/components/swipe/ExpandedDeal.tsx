@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
+import { logEvent } from "../../lib/analytics";
 import WeatherPreview from "./WeatherPreview";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealTravelTips from "./DealTravelTips";
@@ -199,6 +200,22 @@ export default function ExpandedDeal({
 
   const [saved, setSaved] = useState(false);
   const saveScale = useRef(new Animated.Value(1)).current;
+
+  // Analytics: a deal's detail view was opened. Fires once each time the
+  // modal transitions to visible (keyed on deal id so re-opening a
+  // different deal re-logs). This is the `deal_expanded` funnel signal.
+  useEffect(() => {
+    if (!visible) return;
+    logEvent("deal_expanded", {
+      deal_id: deal.id,
+      destination_code: deal.destination_code ?? null,
+      price: deal.price ?? null,
+      deal_type: deal.deal_type ?? null,
+      domestic_or_international: deal.domestic_or_international ?? null,
+      is_business_class: deal.is_business_class ?? false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, deal.id]);
 
   // Share name prompt — rendered inside this Modal so iOS stacks it correctly.
   // A sibling Modal in the parent component doesn't appear over a full-screen
@@ -604,7 +621,22 @@ export default function ExpandedDeal({
               </TouchableOpacity>
             </Animated.View>
 
-            <TouchableOpacity onPress={onBook} activeOpacity={0.8} style={styles.bookButton}>
+            <TouchableOpacity
+              onPress={() => {
+                // Analytics: the user tapped through to the deal's booking
+                // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
+                logEvent("deal_book_tapped", {
+                  deal_id: deal.id,
+                  destination_code: deal.destination_code ?? null,
+                  price: deal.price ?? null,
+                  deal_type: deal.deal_type ?? null,
+                  domestic_or_international: deal.domestic_or_international ?? null,
+                });
+                onBook();
+              }}
+              activeOpacity={0.8}
+              style={styles.bookButton}
+            >
               <LinearGradient
                 colors={[colors.brand.traceRed, colors.brand.tracePink]}
                 start={{ x: 0, y: 0 }}

@@ -24,6 +24,7 @@ import Animated, {
 import { Check, ArrowRight, Zap } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useFreeTrial } from "../context/TrialContext";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -61,6 +62,7 @@ export default function UpgradeScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile } = useAuth();
+  const { business: businessTrial } = useFreeTrial();
 
   const [dealIdx, setDealIdx] = useState(0);
   const [testimonialIdx, setTestimonialIdx] = useState(0);
@@ -361,12 +363,18 @@ export default function UpgradeScreen() {
                 <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, width: 80, opacity: 0.3 }, shimmerStyle]}>
                   <LinearGradient colors={["transparent", "rgba(255,255,255,0.6)", "transparent"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
                 </Animated.View>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>Unlock Business Class</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>
+                  {businessTrial.available
+                    ? `Start ${businessTrial.label} free trial`
+                    : "Unlock Business Class"}
+                </Text>
                 <ArrowRight color="#fff" size={20} />
               </LinearGradient>
             </TouchableOpacity>
             <Text style={{ textAlign: "center", fontSize: 11, color: theme.mutedForeground, marginTop: 8 }}>
-              Members save an average of $2,400/year · Cancel anytime
+              {businessTrial.available
+                ? `Free for ${businessTrial.labelLong}, then billed · Cancel anytime`
+                : "Members save an average of $2,400/year · Cancel anytime"}
             </Text>
           </>
         )}

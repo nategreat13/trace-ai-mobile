@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useFreeTrial } from "../context/TrialContext";
 import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { createSwipeAction, saveDeal, getSwipeActions, createDealAlert } from "../services/firestore";
 import { dealMatchesType } from "../lib/dealClassifier";
@@ -37,6 +38,7 @@ export default function ExploreScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
+  const { available: trialAvailable, label: trialLabel } = useFreeTrial();
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [savedDealIds, setSavedDealIds] = useState<Set<string>>(new Set());
@@ -400,7 +402,7 @@ export default function ExploreScreen() {
                 </View>
                 <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff", letterSpacing: 0.3 }}>Premium Deal</Text>
                 <View style={{ borderWidth: 1.5, borderColor: "rgba(255,255,255,0.6)", borderRadius: 999, paddingHorizontal: 18, paddingVertical: 7 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>Unlock Access →</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>{trialAvailable ? "Try Free →" : "Unlock Access →"}</Text>
                 </View>
               </View>
             ) : (
@@ -528,10 +530,12 @@ export default function ExploreScreen() {
       }}
     >
       <Text style={{ fontSize: 20, fontWeight: "800", color: theme.foreground, marginBottom: 8 }}>
-        🔓 Unlock Full Access
+        {trialAvailable ? "🎉 Try Premium Free" : "🔓 Unlock Full Access"}
       </Text>
       <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginBottom: 20 }}>
-        Get access to all {filteredDeals.length}+ deals with premium features
+        {trialAvailable
+          ? `Start your ${trialLabel} free trial — all ${filteredDeals.length}+ deals, unlimited swipes & alerts`
+          : `Get access to all ${filteredDeals.length}+ deals with premium features`}
       </Text>
       <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, width: "100%" }}>
         {[
@@ -552,7 +556,9 @@ export default function ExploreScreen() {
         style={{ borderRadius: 12, width: "100%" }}
       >
         <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_view_plans" })} style={{ paddingVertical: 14, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>View Plans</Text>
+          <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+            {trialAvailable ? `Start ${trialLabel} free trial` : "View Plans"}
+          </Text>
         </TouchableOpacity>
       </LinearGradient>
     </View>

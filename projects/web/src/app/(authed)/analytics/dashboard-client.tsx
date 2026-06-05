@@ -31,6 +31,40 @@ type PurchaseFlowData = {
   purchaseFailed: number;
   failuresByCode: Array<{ code: string; count: number }>;
 };
+type TrialFunnelData = {
+  paywallViewed: number;
+  trialOfferShown: number;
+  trialCtaTapped: number;
+  trialStarted: number;
+  trialStartedServer: number;
+};
+type TrialStateData = {
+  currentlyInTrial: number;
+  trialsStarted: number;
+  converted: number;
+};
+type DepthDistribution = {
+  key: string;
+  label: string;
+  totalEvents: number;
+  usersWithAny: number;
+  avgPerUser: number;
+  avgPerActiveUser: number;
+  medianPerActiveUser: number;
+  buckets: Array<{ threshold: number; users: number; pct: number }>;
+};
+type EngagementDepth = {
+  userBase: number;
+  swipes: DepthDistribution;
+  saves: DepthDistribution;
+  views: DepthDistribution;
+  clicks: DepthDistribution;
+  sessions: DepthDistribution;
+  swipesPerSession: number;
+  swipesPerActiveDay: number;
+  activeDays: number;
+  totalSessions: number;
+};
 type TierBreakdown = { total: number; premium: number; business: number; unknown: number };
 type SubscriptionLifecycleData = {
   renewed: TierBreakdown;
@@ -60,6 +94,9 @@ interface Props {
   userCount: number;
   uniqueDeviceCount: number;
   purchaseFlow: PurchaseFlowData | null;
+  trialFunnel: TrialFunnelData | null;
+  trialState: TrialStateData | null;
+  engagementDepth: EngagementDepth | null;
   loginCount: number;
   subscriptionLifecycle: SubscriptionLifecycleData | null;
   purchaseFailuresByDay: FailureDayRow[];
@@ -102,6 +139,67 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+/**
+ * One engagement metric: average + median, plus the threshold-bucket
+ * distribution (# users with N+ of the action, and what % of the user base
+ * that is). `notInstrumentedHint` shows a soft note when there's no data yet
+ * (e.g. deal views/clicks before that event ships).
+ */
+function DepthCard({ d }: { d: DepthDistribution }) {
+  const noData = d.totalEvents === 0;
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">{d.label}</h3>
+        <span className="text-xs text-gray-400 tabular-nums">
+          {d.totalEvents.toLocaleString()} total · {d.usersWithAny} users
+        </span>
+      </div>
+      {noData ? (
+        <p className="text-sm text-gray-400">
+          No data yet — this event was only recently instrumented.
+        </p>
+      ) : (
+        <>
+          <div className="flex gap-6 mb-4">
+            <div>
+              <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                {d.avgPerUser.toFixed(1)}
+              </div>
+              <div className="text-xs text-gray-500">avg / user</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                {d.avgPerActiveUser.toFixed(1)}
+              </div>
+              <div className="text-xs text-gray-500">avg / active user</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900 tabular-nums">
+                {d.medianPerActiveUser}
+              </div>
+              <div className="text-xs text-gray-500">median / active</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-6 gap-2">
+            {d.buckets.map((b) => (
+              <div key={b.threshold} className="text-center">
+                <div className="text-xs text-gray-400 mb-1">{b.threshold}+</div>
+                <div className="text-base font-semibold text-gray-900 tabular-nums">
+                  {b.users}
+                </div>
+                <div className="text-xs text-gray-500 tabular-nums">
+                  {Math.round(b.pct)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AnalyticsDashboardClient({
   summary,
   signupsByDay,
@@ -112,6 +210,9 @@ export default function AnalyticsDashboardClient({
   userCount,
   uniqueDeviceCount,
   purchaseFlow,
+  trialFunnel,
+  trialState,
+  engagementDepth,
   loginCount,
   subscriptionLifecycle,
   purchaseFailuresByDay,
@@ -533,6 +634,149 @@ export default function AnalyticsDashboardClient({
                 </p>
               </div>
             </div>
+          </Section>
+        )}
+
+        {/* Free trial funnel */}
+        {trialFunnel && (
+          <Section title="Free trial funnel (last 30 days)">
+            {trialState && (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <StatCard
+                  label="Currently in trial"
+                  value={trialState.currentlyInTrial}
+                  sub="active right now"
+                />
+                <StatCard
+                  label="Trials started (30d)"
+                  value={trialState.trialsStarted}
+                />
+                <StatCard
+                  label="Converted to paid (30d)"
+                  value={trialState.converted}
+                />
+                <StatCard
+                  label="Trial → paid rate"
+                  value={
+                    trialState.trialsStarted > 0
+                      ? `${Math.round(
+                          (trialState.converted / trialState.trialsStarted) * 100
+                        )}%`
+                      : "—"
+                  }
+                  sub="converted ÷ started (rough)"
+                />
+              </div>
+            )}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">
+                Trial path: offered → started
+              </h3>
+              <div className="space-y-3">
+                {[
+                  { name: "Paywall viewed", value: trialFunnel.paywallViewed },
+                  { name: "Trial offer shown", value: trialFunnel.trialOfferShown },
+                  { name: "Trial CTA tapped", value: trialFunnel.trialCtaTapped },
+                  { name: "Trial started", value: trialFunnel.trialStarted },
+                ].map((step, i, arr) => {
+                  const top = arr[0].value || 1;
+                  const pct = Math.round((step.value / top) * 100);
+                  const prev = i > 0 ? arr[i - 1].value : null;
+                  const dropoff =
+                    prev && prev > 0
+                      ? Math.round(((prev - step.value) / prev) * 100)
+                      : null;
+                  return (
+                    <div key={step.name}>
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-sm font-medium text-gray-700">
+                          {step.name}
+                        </span>
+                        <span className="text-sm tabular-nums">
+                          <span className="font-semibold text-gray-900">
+                            {step.value.toLocaleString()}
+                          </span>
+                          <span className="text-gray-400 ml-2">{pct}%</span>
+                          {dropoff != null && i > 0 && (
+                            <span
+                              className={`ml-2 text-xs ${
+                                dropoff > 50 ? "text-red-600" : "text-gray-400"
+                              }`}
+                            >
+                              -{dropoff}%
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400 mt-4">
+                &quot;Trial offer shown&quot; fires only when a free trial is
+                actually rendered (user eligible + product carries a free intro
+                offer), so it&apos;s the true trial top-of-funnel. Client
+                <span className="font-medium"> trial_started</span> ={" "}
+                {trialFunnel.trialStarted.toLocaleString()} vs. server
+                <span className="font-medium"> trial_started_server</span> ={" "}
+                {trialFunnel.trialStartedServer.toLocaleString()} (RevenueCat
+                webhook) — these should converge; a persistent gap means client
+                events are dropping.
+              </p>
+            </div>
+          </Section>
+        )}
+
+        {/* Engagement depth */}
+        {engagementDepth && (
+          <Section title="Engagement depth (last 30 days)">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+              <StatCard
+                label="User base"
+                value={engagementDepth.userBase}
+                sub="non-excluded signups"
+              />
+              <StatCard
+                label="Avg sessions / user"
+                value={engagementDepth.sessions.avgPerUser.toFixed(1)}
+                sub={`${engagementDepth.totalSessions} sessions`}
+              />
+              <StatCard
+                label="Swipes / session"
+                value={engagementDepth.swipesPerSession.toFixed(1)}
+              />
+              <StatCard
+                label="Swipes / active day"
+                value={engagementDepth.swipesPerActiveDay.toFixed(1)}
+                sub={`${engagementDepth.activeDays} active days`}
+              />
+              <StatCard
+                label="Avg swipes / user"
+                value={engagementDepth.swipes.avgPerUser.toFixed(1)}
+                sub={`${engagementDepth.swipes.totalEvents} swipes`}
+              />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <DepthCard d={engagementDepth.swipes} />
+              <DepthCard d={engagementDepth.saves} />
+              <DepthCard d={engagementDepth.views} />
+              <DepthCard d={engagementDepth.clicks} />
+              <DepthCard d={engagementDepth.sessions} />
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              % columns are share of the {engagementDepth.userBase}-user
+              non-excluded base. &quot;Active user&quot; = did the action at
+              least once. Sessions = distinct sessions containing any deal
+              interaction (app_open is under-instrumented, so not used). Deal
+              views &amp; URL clicks were instrumented recently and backfill from
+              ship date forward.
+            </p>
           </Section>
         )}
 

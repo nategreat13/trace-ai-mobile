@@ -50,6 +50,7 @@ export const COLLECTION_NAMES = [
   "sharedDeals",
   "adSpend",
   "hotDealCache",
+  "webhookEvents",
 ] as const;
 
 export type CollectionName = (typeof COLLECTION_NAMES)[number];

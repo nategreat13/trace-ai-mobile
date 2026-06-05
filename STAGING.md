@@ -34,6 +34,7 @@ Every top-level Firestore collection has a sibling prefixed with `staging_`:
 | `destinationContent` | `staging_destinationContent` |
 | `sharedDeals` | `staging_sharedDeals` |
 | `adSpend` | `staging_adSpend` |
+| `webhookEvents` | `staging_webhookEvents` | (server-only; RevenueCat webhook idempotency lock — one doc per processed event id) |
 
 `firestore.rules` and `firestore.indexes.json` mirror every prod block/index for the staging twin. If you change one side, change the other side or you'll get a permission denied / missing index error in staging.
 

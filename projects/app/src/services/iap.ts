@@ -55,6 +55,56 @@ export function hasEntitlement(
   );
 }
 
+/**
+ * Distilled view of the user's *live* entitlement state straight from
+ * RevenueCat (the payments source of truth) — independent of the Firestore
+ * profile the webhook maintains. Used by AuthContext to grant access even if
+ * a webhook was missed, and to know whether the active period is a free trial.
+ */
+export interface EntitlementState {
+  /** Any active premium-or-business entitlement. */
+  isPremium: boolean;
+  /** The active entitlement is currently in its free-trial period. */
+  isTrial: boolean;
+  /** Highest active tier, or null. */
+  tier: "premium" | "business" | null;
+  /** When the current period (trial or paid) ends. */
+  expiresAt: Date | null;
+}
+
+export function readEntitlementState(
+  info: CustomerInfo | null | undefined
+): EntitlementState {
+  if (!info) {
+    return { isPremium: false, isTrial: false, tier: null, expiresAt: null };
+  }
+  const business = info.entitlements.active["business"];
+  const premium = info.entitlements.active["premium"];
+  const active = business ?? premium;
+  const tier: "premium" | "business" | null = business
+    ? "business"
+    : premium
+      ? "premium"
+      : null;
+  return {
+    isPremium: !!active,
+    isTrial: active?.periodType === "TRIAL",
+    tier,
+    expiresAt: active?.expirationDate ? new Date(active.expirationDate) : null,
+  };
+}
+
+/**
+ * Subscribe to live RevenueCat CustomerInfo changes (purchases, renewals,
+ * restores, and expirations the SDK detects). Returns an unsubscribe fn.
+ */
+export function addCustomerInfoListener(
+  cb: (info: CustomerInfo) => void
+): () => void {
+  Purchases.addCustomerInfoUpdateListener(cb);
+  return () => Purchases.removeCustomerInfoUpdateListener(cb);
+}
+
 export async function logOutIAP(): Promise<void> {
   if (!initialized) return;
   try {

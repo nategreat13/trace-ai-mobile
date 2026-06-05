@@ -243,6 +243,13 @@ async function sendRevenueSlack(args: {
 }
 
 revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
+  // Idempotency lock ref; released in the catch ONLY if we failed before
+  // committing a non-idempotent write (revenue increment). Once `committed`
+  // is set, the lock is kept even on a later failure so a retry can't
+  // double-count revenue — the downstream side effects (push/Slack/ad
+  // fan-out) are best-effort and acceptable to drop on a partial failure.
+  let dedupeRef: admin.firestore.DocumentReference | null = null;
+  let committed = false;
   try {
     // Verify Authorization header
     const authHeader = req.headers.authorization;
@@ -314,6 +321,29 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       period_type: period_type ?? null,
     };
 
+    // Idempotency: RevenueCat retries webhooks (e.g. after a timeout), which
+    // would otherwise double-process — most importantly double-counting
+    // lifetimeRevenueCents on RENEWAL. Use the event id as a once-only lock:
+    // create() fails if we've already handled this id, so retries-after-success
+    // are skipped. If processing later throws, the catch deletes the lock so a
+    // genuine failure can still be retried.
+    const eventId = typeof ev.id === "string" ? ev.id : null;
+    if (eventId) {
+      dedupeRef = colRef("webhookEvents").doc(eventId);
+      try {
+        await dedupeRef.create({
+          type: type ?? null,
+          appUserId: app_user_id,
+          processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch {
+        console.log("[RC Webhook] Duplicate event, skipping:", eventId);
+        dedupeRef = null; // don't delete a lock we didn't create
+        res.status(200).json({ ok: true, duplicate: true });
+        return;
+      }
+    }
+
     switch (type) {
       case "INITIAL_PURCHASE":
       case "RENEWAL":
@@ -355,6 +385,7 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           firstPurchaseAt?: any;
           lifetimeRevenueCents?: number;
           everUsedFreeTrial?: boolean;
+          inTrial?: boolean;
         };
         if (type === "INITIAL_PURCHASE" && !profileData.firstPurchaseAt) {
           updates.firstPurchaseAt = now;
@@ -372,8 +403,27 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           updates.everUsedFreeTrial = true;
         }
 
+        // Maintain the current-trial flag (distinguishes trial from paid,
+        // since subscriptionStatus is the tier during a trial). A RENEWAL
+        // arriving while the profile was in a trial, now no longer TRIAL,
+        // is the trial→paid conversion.
+        const nowInTrial = period_type === "TRIAL";
+        updates.inTrial = nowInTrial;
+        const isTrialConversion =
+          type === "RENEWAL" && profileData.inTrial === true && !nowInTrial;
+
         await profileRef.update(updates);
+        // Past the non-idempotent revenue increment — keep the dedupe lock
+        // even if a later step throws, so a retry can't double-count.
+        committed = true;
         console.log("[RC Webhook] Updated profile to:", tier);
+
+        if (isTrialConversion) {
+          await logAnalyticsEvent("trial_converted", app_user_id, {
+            ...baseEventProps,
+            tier,
+          });
+        }
 
         // Welcome push for first paid purchase (not trial starts).
         // Fires immediately via webhook so the user gets it right after checkout,
@@ -534,11 +584,19 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
         // overwrite". The next webhook that does carry source info
         // (INITIAL_PURCHASE / NON_RENEWING_PURCHASE / etc.) will correct it.
         let remaining: Awaited<ReturnType<typeof listActiveEntitlements>> = [];
+        let entitlementsFetchOk = true;
         try {
           remaining = await listActiveEntitlements(app_user_id);
         } catch (err) {
+          // Fetch failed — we genuinely don't know what remains. Do NOT
+          // assume "free" (that would wrongly strip a user who still holds
+          // another entitlement). Leave the profile untouched; the live
+          // RevenueCat reconciliation in the app keeps access correct, and
+          // the next webhook (or a later EXPIRATION retry) corrects the
+          // profile.
+          entitlementsFetchOk = false;
           console.warn(
-            `[RC Webhook] EXPIRATION: failed to fetch active entitlements for ${app_user_id}; falling back to free:`,
+            `[RC Webhook] EXPIRATION: failed to fetch active entitlements for ${app_user_id}; leaving profile unchanged:`,
             err
           );
         }
@@ -548,11 +606,18 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           (e) => typeof TIER_RANK[e.entitlement_id] === "number"
         );
 
-        if (tieredRemaining.length === 0) {
+        if (!entitlementsFetchOk) {
+          // Couldn't determine remaining entitlements — skip the profile
+          // mutation entirely (see comment above).
+          console.log(
+            "[RC Webhook] EXPIRATION: entitlement fetch failed; profile left as-is"
+          );
+        } else if (tieredRemaining.length === 0) {
           await profileRef.update({
             subscriptionStatus: "free",
             subscriptionSource: null,
             trialEndDate: null,
+            inTrial: false,
           });
           console.log(
             "[RC Webhook] EXPIRATION: no entitlements remain, reset to free"
@@ -563,7 +628,10 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           );
           const winner = tieredRemaining[0];
           const winnerTier = winner.entitlement_id as "premium" | "business";
-          const updates: Record<string, any> = { subscriptionStatus: winnerTier };
+          const updates: Record<string, any> = {
+            subscriptionStatus: winnerTier,
+            inTrial: false,
+          };
           if (winner.expires_at) {
             updates.trialEndDate = new Date(winner.expires_at);
           }
@@ -668,6 +736,12 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error("[RC Webhook] Error processing webhook:", error);
+    // Release the idempotency lock so RevenueCat's retry can re-process —
+    // but ONLY if we hadn't yet committed a non-idempotent write. Once
+    // committed, keep the lock so the retry is skipped (no double revenue).
+    if (dedupeRef && !committed) {
+      await dedupeRef.delete().catch(() => {});
+    }
     res.status(500).json({ error: "Internal server error" });
   }
 });

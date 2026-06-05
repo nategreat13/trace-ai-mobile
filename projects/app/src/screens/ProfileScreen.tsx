@@ -42,6 +42,7 @@ import {
 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useFreeTrial } from "../context/TrialContext";
 import { useProfile } from "../hooks/useProfile";
 import { logout } from "../services/auth";
 import { deleteAccount } from "../services/deleteAccountApi";
@@ -62,7 +63,8 @@ export default function ProfileScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium } = useAuth();
+  const { user, profile, isPremium, isTrialPeriod, trialEndsAt } = useAuth();
+  const { available: trialAvailable, label: trialLabel } = useFreeTrial();
   const { updateProfile } = useProfile();
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -417,6 +419,29 @@ export default function ProfileScreen() {
                   >
                     {profile?.subscriptionStatus || "free"}
                   </Text>
+                  {isTrialPeriod && (
+                    <View
+                      style={{
+                        backgroundColor: "rgba(244,63,94,0.10)",
+                        borderWidth: 1,
+                        borderColor: colors.brand.rose500,
+                        borderRadius: 6,
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 10,
+                          fontWeight: "800",
+                          color: colors.brand.rose500,
+                          letterSpacing: 0.5,
+                        }}
+                      >
+                        ✨ FREE TRIAL
+                      </Text>
+                    </View>
+                  )}
                   {profile?.subscriptionSource === "promo" && (
                     <View
                       style={{
@@ -448,16 +473,20 @@ export default function ProfileScreen() {
                     marginTop: 4,
                   }}
                 >
-                  {profile?.subscriptionStatus === "trial" &&
-                  profile?.trialEndDate
-                    ? `Trial ends ${new Date(profile.trialEndDate).toLocaleDateString()}`
-                    : profile?.subscriptionSource === "promo" &&
+                  {isTrialPeriod
+                    ? trialEndsAt
+                      ? `Free trial — ends ${trialEndsAt.toLocaleDateString()}`
+                      : "Free trial active"
+                    : profile?.subscriptionStatus === "trial" &&
                         profile?.trialEndDate
-                      ? `Promo access through ${new Date(profile.trialEndDate).toLocaleDateString()}`
-                      : profile?.subscriptionStatus === "premium" ||
-                          profile?.subscriptionStatus === "business"
-                        ? "Active subscription"
-                        : "Upgrade to unlock premium features"}
+                      ? `Trial ends ${new Date(profile.trialEndDate).toLocaleDateString()}`
+                      : profile?.subscriptionSource === "promo" &&
+                          profile?.trialEndDate
+                        ? `Promo access through ${new Date(profile.trialEndDate).toLocaleDateString()}`
+                        : profile?.subscriptionStatus === "premium" ||
+                            profile?.subscriptionStatus === "business"
+                          ? "Active subscription"
+                          : "Upgrade to unlock premium features"}
                 </Text>
               </View>
               <Crown color={colors.brand.rose500} size={20} />
@@ -494,7 +523,9 @@ export default function ProfileScreen() {
                   : profile?.subscriptionStatus === "premium" ||
                       profile?.subscriptionStatus === "business"
                     ? "Manage Subscription"
-                    : "View Plans"}
+                    : trialAvailable
+                      ? `Start ${trialLabel} free trial`
+                      : "View Plans"}
               </Text>
             </TouchableOpacity>
           </LinearGradient>

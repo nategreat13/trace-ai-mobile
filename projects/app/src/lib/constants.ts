@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import { getEnv } from "./env";
 
-export const MAX_DAILY_SWIPES = 10;
+export const MAX_DAILY_SWIPES = 5;
 export const MAX_SAVES = 5;
 export const UNLIMITED_SWIPES = 999999;
 

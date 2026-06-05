@@ -55,6 +55,12 @@ export interface UserProfile {
   lastPurchaseAt?: Date;
   lifetimeRevenueCents?: number;
   everUsedFreeTrial?: boolean;
+  // Whether the user is CURRENTLY in a free-trial period (set true on a
+  // trial INITIAL_PURCHASE, false once it converts to paid or expires).
+  // Maintained by the RevenueCat webhook; powers the admin "in trial" count.
+  // Note: `subscriptionStatus` is the tier ("premium"/"business") during a
+  // trial, so this flag is what distinguishes trial from paid server-side.
+  inTrial?: boolean;
   // Push notifications. Each device that grants permission registers an
   // Expo push token here; the server fans out to every active token when
   // sending a push. expired-token cleanup happens server-side based on

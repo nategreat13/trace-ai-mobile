@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Platform } from "react-native";
 import {
   PurchasesOfferings,
   PurchasesPackage,
@@ -63,19 +64,41 @@ export function useIAP(): UseIAPResult {
         const off = await getOfferings();
         if (!cancelled) setOfferings(off);
 
-        // Check trial eligibility across all products. User is eligible if any
-        // product still offers them the intro offer.
+        // Determine trial eligibility. This is platform-specific:
+        //
+        //  • iOS: checkTrialOrIntroductoryPriceEligibility returns a real
+        //    per-product status. We only treat ELIGIBLE as eligible —
+        //    INELIGIBLE (already used the trial) and UNKNOWN both hide the
+        //    trial, per RevenueCat's guidance, so we never mislead a user
+        //    whose status we can't confirm.
+        //
+        //  • Android: the same API *always* returns UNKNOWN (documented RC
+        //    behavior), so the iOS rule above would hide the trial from every
+        //    Android user even when a Play Console trial exists. Google Play
+        //    enforces real per-user eligibility at purchase time, so we treat
+        //    Android as eligible here and let the paywall's introPrice gate
+        //    (product actually carries a free offer) decide whether a trial
+        //    is shown.
         try {
-          const eligibility =
-            await Purchases.checkTrialOrIntroductoryPriceEligibility([
-              ...PRODUCT_IDS,
-            ]);
-          const eligible = Object.values(eligibility).some(
-            (e) => e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
-          );
-          if (!cancelled) setTrialEligible(eligible);
+          if (Platform.OS === "android") {
+            if (!cancelled) setTrialEligible(true);
+          } else {
+            const eligibility =
+              await Purchases.checkTrialOrIntroductoryPriceEligibility([
+                ...PRODUCT_IDS,
+              ]);
+            const eligible = Object.values(eligibility).some(
+              (e) => e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
+            );
+            if (!cancelled) setTrialEligible(eligible);
+          }
         } catch {
-          if (!cancelled) setTrialEligible(true);
+          // If we can't confirm eligibility, default to NOT eligible so the
+          // paywall never advertises a free trial the store won't actually
+          // grant (a mismatch at the App Store sheet is a top cause of
+          // purchase abandonment). The paywall additionally gates the trial
+          // CTA on the selected product carrying a real free intro offer.
+          if (!cancelled) setTrialEligible(false);
         }
       } catch (err: any) {
         console.error("[useIAP] Failed to load offerings:", err);

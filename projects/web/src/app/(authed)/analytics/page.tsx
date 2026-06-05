@@ -8,6 +8,9 @@ import {
   getUserCount,
   getUniqueDeviceCount,
   getPurchaseFlowFunnel,
+  getTrialFunnel,
+  getTrialStateSummary,
+  getEngagementDepth,
   getLoginCount,
   getSubscriptionLifecycle,
   getPurchaseFailuresByDay,
@@ -55,6 +58,9 @@ export default async function AnalyticsPage() {
     userCount,
     uniqueDeviceCount,
     purchaseFlow,
+    trialFunnel,
+    trialState,
+    engagementDepth,
     loginCount,
     subscriptionLifecycle,
     purchaseFailuresByDay,
@@ -74,6 +80,9 @@ export default async function AnalyticsPage() {
       return 0;
     }),
     getPurchaseFlowFunnel(env, 30, excluded, validUserIds).catch(() => null),
+    getTrialFunnel(env, 30, excluded, validUserIds).catch(() => null),
+    getTrialStateSummary(env, 30, excluded, validUserIds).catch(() => null),
+    getEngagementDepth(env, 30, excluded, validUserIds).catch(() => null),
     getLoginCount(env, 30, excluded, validUserIds).catch(() => 0),
     getSubscriptionLifecycle(env, 30, excluded, validUserIds).catch(() => null),
     getPurchaseFailuresByDay(env, 30, excluded, validUserIds).catch(() => []),
@@ -90,6 +99,9 @@ export default async function AnalyticsPage() {
       userCount={userCount}
       uniqueDeviceCount={uniqueDeviceCount}
       purchaseFlow={purchaseFlow}
+      trialFunnel={trialFunnel}
+      trialState={trialState}
+      engagementDepth={engagementDepth}
       loginCount={loginCount}
       subscriptionLifecycle={subscriptionLifecycle}
       purchaseFailuresByDay={purchaseFailuresByDay}

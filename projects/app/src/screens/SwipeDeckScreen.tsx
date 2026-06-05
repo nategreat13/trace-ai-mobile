@@ -25,6 +25,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { useFreeTrial } from "../context/TrialContext";
 import { useDealFetch } from "../hooks/useDealFetch";
 import { useSounds } from "../hooks/useSounds";
 import { useProfile } from "../hooks/useProfile";
@@ -125,6 +126,7 @@ function DailyLimitView({
   onUpgrade: () => void;
   onExplore: () => void;
 }) {
+  const { available: trialAvailable, label: trialLabel } = useFreeTrial();
   const [timeLeft, setTimeLeft] = React.useState(() => {
     const now = new Date();
     const midnight = new Date(now);
@@ -209,7 +211,9 @@ function DailyLimitView({
             end={{ x: 1, y: 0 }}
             style={{ paddingVertical: 14, alignItems: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>Unlock Unlimited Swipes</Text>
+            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+              {trialAvailable ? `Start ${trialLabel} free trial` : "Unlock Unlimited Swipes"}
+            </Text>
           </LinearGradient>
         </TouchableOpacity>
 
@@ -237,6 +241,7 @@ export default function SwipeDeckScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
+  const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
@@ -952,8 +957,17 @@ export default function SwipeDeckScreen() {
               {swipesLeft <= 5 && (
                 <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_upgrade_nudge" })}>
                   <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                    Upgrade for{" "}
-                    <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>unlimited swipes</Text>
+                    {trialAvailable ? (
+                      <>
+                        Try{" "}
+                        <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>free for {trialLabelLong}</Text>
+                      </>
+                    ) : (
+                      <>
+                        Upgrade for{" "}
+                        <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>unlimited swipes</Text>
+                      </>
+                    )}
                   </Text>
                 </TouchableOpacity>
               )}

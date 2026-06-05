@@ -57,6 +57,12 @@ export type AnalyticsEventName =
   // Paywall
   | "paywall_viewed"
   | "paywall_tier_selected"
+  // Fired when the paywall actually renders a free-trial CTA to the user
+  // (i.e. the user is intro-eligible AND the selected product carries a
+  // free intro offer). Distinct from paywall_viewed because trial
+  // eligibility resolves asynchronously after offerings load — so this is
+  // the true "a trial was offered" funnel signal.
+  | "trial_offer_shown"
   | "paywall_cta_tapped"
   | "paywall_restore_tapped"
   | "paywall_dismissed"
@@ -74,6 +80,8 @@ export type AnalyticsEventName =
   | "subscription_started"
   | "subscription_started_promo"
   | "trial_started_server"
+  // Fired by the webhook when a free trial converts to a paid subscription.
+  | "trial_converted"
   | "subscription_renewed"
   | "subscription_uncanceled"
   | "subscription_changed"

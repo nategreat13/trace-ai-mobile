@@ -752,6 +752,301 @@ export async function getPurchaseFlowFunnel(
 }
 
 /**
+ * Free-trial funnel (last N days). Tracks the trial path specifically, which
+ * the generic purchase flow can't separate from direct paid subscriptions:
+ *
+ *   paywall_viewed → trial_offer_shown → trial CTA tapped → trial_started
+ *
+ * `trialCtaTapped` counts `paywall_cta_tapped` events whose `is_trial` prop
+ * is true (tagged in PaywallScreen). `trialStarted` is the client-side
+ * `trial_started` event; `trialStartedServer` is the RevenueCat-webhook
+ * `trial_started_server` event, surfaced alongside for reconciliation (the
+ * two should converge; a persistent gap means client events are dropping).
+ */
+export async function getTrialFunnel(
+  env: TraceEnv,
+  days = 30,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<{
+  paywallViewed: number;
+  trialOfferShown: number;
+  trialCtaTapped: number;
+  trialStarted: number;
+  trialStartedServer: number;
+}> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  // orderBy timestamp DESC — same composite index (name, timestamp) used by
+  // getFunnelCounts / getPurchaseFlowFunnel; no new index required.
+  async function countEvent(name: string): Promise<number> {
+    const snap = await colRef(env, "events")
+      .where("timestamp", ">=", since)
+      .where("name", "==", name)
+      .orderBy("timestamp", "desc")
+      .select("userId")
+      .get();
+    let n = 0;
+    snap.forEach((doc) => {
+      if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
+    });
+    return n;
+  }
+
+  // paywall_cta_tapped events are only counted here when they were taps on a
+  // free-trial CTA (props.is_trial === true). Older events predating the flag
+  // simply lack it and are correctly excluded.
+  async function countTrialCtaTapped(): Promise<number> {
+    const snap = await colRef(env, "events")
+      .where("timestamp", ">=", since)
+      .where("name", "==", "paywall_cta_tapped")
+      .orderBy("timestamp", "desc")
+      .select("props", "userId")
+      .get();
+    let n = 0;
+    snap.forEach((doc) => {
+      const data = doc.data();
+      if (!shouldIncludeUid(data.userId as string | undefined, excluded, validUserIds)) return;
+      const props = (data.props ?? {}) as Record<string, unknown>;
+      if (props.is_trial === true) n++;
+    });
+    return n;
+  }
+
+  const [paywallViewed, trialOfferShown, trialCtaTapped, trialStarted, trialStartedServer] =
+    await Promise.all([
+      countEvent("paywall_viewed"),
+      countEvent("trial_offer_shown"),
+      countTrialCtaTapped(),
+      countEvent("trial_started"),
+      countEvent("trial_started_server"),
+    ]);
+
+  return { paywallViewed, trialOfferShown, trialCtaTapped, trialStarted, trialStartedServer };
+}
+
+/**
+ * Engagement depth — per-user distribution of core actions, bucketed by
+ * threshold so you can see "how many users swiped 5+ / 10+ / 25+ times",
+ * plus averages. Denominator for the % columns is the eligible (non-excluded)
+ * user base, so "44%" means 44% of all real signed-up users.
+ *
+ * Sessions are counted as the distinct `session_id`s a user produced across
+ * any of the tracked deal interactions (swipe/save/view/click). `app_open`
+ * is intentionally NOT used — it's under-instrumented (fires only a handful
+ * of times), so it would undercount. This means a "session" here is one in
+ * which the user did something with a deal.
+ *
+ * Note: `deal_expanded` (views) and `deal_book_tapped` (clicks) were only
+ * instrumented recently — they read 0 for any window predating that ship.
+ */
+const DEPTH_THRESHOLDS = [1, 5, 10, 25, 50, 100] as const;
+
+export type DepthDistribution = {
+  key: string;
+  label: string;
+  totalEvents: number;
+  usersWithAny: number;
+  avgPerUser: number; // total / userBase
+  avgPerActiveUser: number; // total / usersWithAny
+  medianPerActiveUser: number;
+  buckets: Array<{ threshold: number; users: number; pct: number }>; // pct of userBase
+};
+
+export type EngagementDepth = {
+  userBase: number;
+  swipes: DepthDistribution;
+  saves: DepthDistribution;
+  views: DepthDistribution;
+  clicks: DepthDistribution;
+  sessions: DepthDistribution;
+  swipesPerSession: number;
+  swipesPerActiveDay: number;
+  activeDays: number;
+  totalSessions: number;
+};
+
+function buildDepthDistribution(
+  key: string,
+  label: string,
+  perUser: Map<string, number>,
+  totalEvents: number,
+  userBase: number
+): DepthDistribution {
+  const counts = Array.from(perUser.values());
+  const usersWithAny = counts.length;
+  const sorted = [...counts].sort((a, b) => a - b);
+  const median = sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : 0;
+  return {
+    key,
+    label,
+    totalEvents,
+    usersWithAny,
+    avgPerUser: userBase ? totalEvents / userBase : 0,
+    avgPerActiveUser: usersWithAny ? totalEvents / usersWithAny : 0,
+    medianPerActiveUser: median,
+    buckets: DEPTH_THRESHOLDS.map((t) => {
+      const users = counts.filter((c) => c >= t).length;
+      return { threshold: t, users, pct: userBase ? (users / userBase) * 100 : 0 };
+    }),
+  };
+}
+
+export async function getEngagementDepth(
+  env: TraceEnv,
+  days = 30,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<EngagementDepth> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  // Denominator: eligible (non-excluded) user base — mirrors getUserCount.
+  const profSnap = await colRef(env, "userProfiles").select("userId", "email").get();
+  let userBase = 0;
+  profSnap.forEach((doc) => {
+    const d = doc.data();
+    const uid = d.userId as string | undefined;
+    const email = (d.email as string | undefined)?.toLowerCase();
+    if (uid && excluded?.userIds.has(uid)) return;
+    if (email && excluded?.emails.has(email)) return;
+    userBase++;
+  });
+
+  // Accumulators shared across the per-event scans.
+  const sessionsByUser = new Map<string, Set<string>>();
+  const swipeDays = new Set<string>();
+
+  async function scan(
+    eventName: string,
+    key: string,
+    label: string,
+    isSwipe = false
+  ): Promise<DepthDistribution> {
+    const snap = await colRef(env, "events")
+      .where("timestamp", ">=", since)
+      .where("name", "==", eventName)
+      .orderBy("timestamp", "desc")
+      .select("userId", "timestamp", "props.session_id")
+      .get();
+    const perUser = new Map<string, number>();
+    let total = 0;
+    snap.forEach((doc) => {
+      const uid = doc.get("userId") as string | undefined;
+      if (!uid || uid === "guest") return; // per-user metrics exclude guests
+      if (!shouldIncludeUid(uid, excluded, validUserIds)) return;
+      perUser.set(uid, (perUser.get(uid) ?? 0) + 1);
+      total++;
+      const sid = doc.get("props.session_id") as string | undefined;
+      if (sid) {
+        let set = sessionsByUser.get(uid);
+        if (!set) {
+          set = new Set<string>();
+          sessionsByUser.set(uid, set);
+        }
+        set.add(sid);
+      }
+      if (isSwipe) {
+        const ts = doc.get("timestamp") as { toDate?: () => Date } | undefined;
+        const dt = ts?.toDate?.();
+        if (dt) swipeDays.add(dt.toISOString().slice(0, 10));
+      }
+    });
+    return buildDepthDistribution(key, label, perUser, total, userBase);
+  }
+
+  // Sequential — the scans mutate the shared session/day accumulators.
+  const swipes = await scan("swipe", "swipes", "Swipes", true);
+  const saves = await scan("deal_saved", "saves", "Saved deals");
+  const views = await scan("deal_expanded", "views", "Deal details viewed");
+  const clicks = await scan("deal_book_tapped", "clicks", "Deal URLs clicked");
+
+  const sessionsPerUser = new Map<string, number>();
+  let totalSessions = 0;
+  for (const [uid, set] of sessionsByUser) {
+    sessionsPerUser.set(uid, set.size);
+    totalSessions += set.size;
+  }
+  const sessions = buildDepthDistribution(
+    "sessions",
+    "Sessions",
+    sessionsPerUser,
+    totalSessions,
+    userBase
+  );
+
+  return {
+    userBase,
+    swipes,
+    saves,
+    views,
+    clicks,
+    sessions,
+    swipesPerSession: totalSessions ? swipes.totalEvents / totalSessions : 0,
+    swipesPerActiveDay: swipeDays.size ? swipes.totalEvents / swipeDays.size : 0,
+    activeDays: swipeDays.size,
+    totalSessions,
+  };
+}
+
+/**
+ * Trial outcomes: how many users are in a free trial right now (snapshot from
+ * the webhook-maintained `inTrial` profile flag), plus trials started and
+ * converted to paid over the last N days (from webhook events).
+ */
+export async function getTrialStateSummary(
+  env: TraceEnv,
+  days = 30,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<{
+  currentlyInTrial: number;
+  trialsStarted: number;
+  converted: number;
+}> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+
+  // Snapshot: profiles currently flagged in-trial (single-field equality —
+  // no composite index needed).
+  const profSnap = await colRef(env, "userProfiles")
+    .where("inTrial", "==", true)
+    .select("userId", "email")
+    .get();
+  let currentlyInTrial = 0;
+  profSnap.forEach((doc) => {
+    const d = doc.data();
+    const uid = d.userId as string | undefined;
+    const email = (d.email as string | undefined)?.toLowerCase();
+    if (uid && excluded?.userIds.has(uid)) return;
+    if (email && excluded?.emails.has(email)) return;
+    currentlyInTrial++;
+  });
+
+  async function countEvent(name: string): Promise<number> {
+    const snap = await colRef(env, "events")
+      .where("timestamp", ">=", since)
+      .where("name", "==", name)
+      .orderBy("timestamp", "desc")
+      .select("userId")
+      .get();
+    let n = 0;
+    snap.forEach((doc) => {
+      if (shouldIncludeUid(doc.data().userId as string | undefined, excluded, validUserIds)) n++;
+    });
+    return n;
+  }
+
+  const [trialsStarted, converted] = await Promise.all([
+    countEvent("trial_started_server"),
+    countEvent("trial_converted"),
+  ]);
+
+  return { currentlyInTrial, trialsStarted, converted };
+}
+
+/**
  * Returns the count of `login` events in the last N days. Pairs with
  * `getSignupsByDay` so the dashboard can show new vs returning users.
  */

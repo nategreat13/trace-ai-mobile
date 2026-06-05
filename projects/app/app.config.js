@@ -39,10 +39,7 @@ try {
 
 module.exports = ({ config }) => ({
   ...config,
-  plugins: [
-    ...(config.plugins || []),
-    "expo-web-browser",
-  ],
+  plugins: [...(config.plugins || []), "expo-web-browser"],
   extra: {
     ...config.extra,
     devApiUrl,

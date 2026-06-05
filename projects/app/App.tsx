@@ -10,6 +10,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as Updates from "expo-updates";
 import { AuthProvider, useAuth } from "./src/context/AuthContext";
+import { TrialProvider } from "./src/context/TrialContext";
 import RootNavigator from "./src/navigation/RootNavigator";
 import type { RootStackParamList } from "./src/navigation/types";
 import { logEvent } from "./src/lib/analytics";
@@ -281,16 +282,18 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <AnalyticsLifecycle />
-          <DeepLinkHandler navRef={navRef} />
-          <NavigationContainer
-            ref={navRef}
-            onReady={handleNavigationStateChange}
-            onStateChange={handleNavigationStateChange}
-          >
-            <RootNavigator />
-            <StatusBar style="auto" />
-          </NavigationContainer>
+          <TrialProvider>
+            <AnalyticsLifecycle />
+            <DeepLinkHandler navRef={navRef} />
+            <NavigationContainer
+              ref={navRef}
+              onReady={handleNavigationStateChange}
+              onStateChange={handleNavigationStateChange}
+            >
+              <RootNavigator />
+              <StatusBar style="auto" />
+            </NavigationContainer>
+          </TrialProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

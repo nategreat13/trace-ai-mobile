@@ -10,6 +10,7 @@ import {
 import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { Crown, Sparkles } from "lucide-react-native";
 import { colors } from "../theme/colors";
+import { useFreeTrial } from "../context/TrialContext";
 
 interface UpgradePromptProps {
   visible: boolean;
@@ -33,6 +34,7 @@ export default function UpgradePrompt({
 }: UpgradePromptProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+  const { available: trialAvailable, label: trialLabel } = useFreeTrial();
 
   return (
     <Modal
@@ -62,10 +64,12 @@ export default function UpgradePrompt({
 
             {/* Title */}
             <Text style={[styles.title, { color: theme.foreground }]}>
-              {feature || "Upgrade to Premium"}
+              {feature || (trialAvailable ? "Try Premium Free" : "Upgrade to Premium")}
             </Text>
             <Text style={[styles.subtitle, { color: theme.mutedForeground }]}>
-              Unlock unlimited access to all features
+              {trialAvailable
+                ? `Start your ${trialLabel} free trial — cancel anytime`
+                : "Unlock unlimited access to all features"}
             </Text>
 
             {/* Perks list */}
@@ -90,7 +94,9 @@ export default function UpgradePrompt({
               style={styles.ctaButton}
               activeOpacity={0.85}
             >
-              <Text style={styles.ctaText}>View Plans</Text>
+              <Text style={styles.ctaText}>
+                {trialAvailable ? `Start ${trialLabel} free trial` : "View Plans"}
+              </Text>
             </TouchableOpacity>
 
             {/* Dismiss */}

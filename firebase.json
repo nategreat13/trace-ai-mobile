@@ -3,6 +3,8 @@
     "source": "projects/server",
     "runtime": "nodejs20",
     "predeploy": [
+      "yarn workspace @trace/shared build",
+      "rm -rf projects/server/node_modules/@trace/shared/dist && cp -r projects/shared/dist projects/server/node_modules/@trace/shared/dist",
       "rm -rf projects/server/shared && cp -r projects/shared projects/server/shared",
       "yarn --cwd projects/server build"
     ]

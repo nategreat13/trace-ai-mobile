@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -18,6 +18,11 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useIAP } from "../hooks/useIAP";
 import { hasEntitlement } from "../services/iap";
+import {
+  formatTrialLength,
+  formatTrialDuration,
+  trialsEnabledByRemote,
+} from "../lib/trial";
 import { logEvent } from "../lib/analytics";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -56,6 +61,7 @@ export default function PaywallScreen() {
   const { profile, setProfile } = useAuth();
 
   const {
+    offerings,
     premiumAnnualPackage,
     premiumMonthlyPackage,
     businessAnnualPackage,
@@ -113,6 +119,47 @@ export default function PaywallScreen() {
   const isSelectedDowngrade = selected === "premium" && hasBusiness;
   const subscribeDisabled = isSelectedCurrent || isSelectedDowngrade;
 
+  // Free-trial detection — data-driven from the selected package's intro
+  // offer. `introPrice.price === 0` means a *free* trial (vs. a paid intro
+  // price). We only surface the trial CTA when the store actually carries
+  // a free offer AND RevenueCat reports the user is eligible, so we never
+  // promise a trial the purchase sheet won't honor. Also excludes existing
+  // premium users and current-plan/downgrade selections.
+  //
+  // NOTE: this block (and the useRef/useEffect below) MUST stay above the
+  // `if (loading)` / `if (!hasAnyPackage)` early returns further down —
+  // hooks cannot run conditionally or React will throw on the loading→ready
+  // transition.
+  const introPrice = selectedPkg?.product.introPrice ?? null;
+  const hasFreeTrial =
+    trialsEnabledByRemote(offerings?.current) &&
+    trialEligible &&
+    !!introPrice &&
+    introPrice.price === 0 &&
+    !hasPremium &&
+    !subscribeDisabled;
+  const trialLengthLabel = introPrice ? formatTrialLength(introPrice) : "";
+  const trialDurationLabel = introPrice ? formatTrialDuration(introPrice) : "";
+
+  // Log `trial_offer_shown` once per paywall session, the first time a free
+  // trial actually becomes offerable to this user. Trial eligibility resolves
+  // asynchronously (offerings load + RevenueCat eligibility check), so this
+  // can't be folded into the on-mount `paywall_viewed` event — it would
+  // always read false there. This is the real top-of-funnel signal for the
+  // trial flow ("of users shown a trial, how many started one?").
+  const trialOfferLoggedRef = useRef(false);
+  useEffect(() => {
+    if (hasFreeTrial && !trialOfferLoggedRef.current) {
+      trialOfferLoggedRef.current = true;
+      logEvent("trial_offer_shown", {
+        tier: selected,
+        billing: billingPeriod,
+        trial_length: trialLengthLabel,
+        entry_point: entryPoint,
+      });
+    }
+  }, [hasFreeTrial, selected, billingPeriod, trialLengthLabel, entryPoint]);
+
   const handlePurchase = async () => {
     if (!selectedPkg) return;
 
@@ -120,11 +167,15 @@ export default function PaywallScreen() {
       tier: selected,
       billing: billingPeriod,
       product_id: selectedPkg.product.identifier,
+      is_trial: hasFreeTrial,
+      trial_length: hasFreeTrial ? trialLengthLabel : null,
     });
     logEvent("purchase_initiated", {
       tier: selected,
       billing: billingPeriod,
       product_id: selectedPkg.product.identifier,
+      is_trial: hasFreeTrial,
+      trial_length: hasFreeTrial ? trialLengthLabel : null,
     });
 
     const info = await purchase(selectedPkg, {
@@ -314,6 +365,55 @@ export default function PaywallScreen() {
           </Text>
         </View>
 
+        {/* Free-trial callout — prominent, above the fold */}
+        {hasFreeTrial && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                backgroundColor:
+                  scheme === "dark"
+                    ? "rgba(244,63,94,0.14)"
+                    : "rgba(244,63,94,0.08)",
+                borderColor:
+                  scheme === "dark"
+                    ? "rgba(244,63,94,0.40)"
+                    : "rgba(244,63,94,0.25)",
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>✨</Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontWeight: "800",
+                    color: theme.foreground,
+                  }}
+                >
+                  Start your {trialLengthLabel} free trial
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: theme.mutedForeground,
+                    marginTop: 2,
+                  }}
+                >
+                  Free for {trialDurationLabel}
+                  {priceString
+                    ? `, then ${priceString}/${periodSuffix}. Cancel anytime.`
+                    : ". Cancel anytime."}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Billing period toggle */}
         <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
           <View
@@ -439,6 +539,11 @@ export default function PaywallScreen() {
                   <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 2 }}>
                     Unlimited swipes & saves
                   </Text>
+                  {hasFreeTrial && (
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: colors.brand.traceRed, marginTop: 4 }}>
+                      ✨ Includes {trialLengthLabel} free trial
+                    </Text>
+                  )}
                   {billingPeriod === "annual" && (
                     <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 4 }}>
                       {getPerMonthFromAnnual(premiumDisplayPkg)} billed annually
@@ -662,8 +767,8 @@ export default function PaywallScreen() {
             ctaLabel = "You already have Business";
           } else if (hasPremium && selected === "business") {
             ctaLabel = `Upgrade to Business — ${priceString}/${periodSuffix}`;
-          } else if (trialEligible && billingPeriod === "annual") {
-            ctaLabel = "Start 3-day free trial";
+          } else if (hasFreeTrial) {
+            ctaLabel = `Start ${trialLengthLabel} free trial`;
           } else {
             ctaLabel = `Subscribe for ${priceString}/${periodSuffix}`;
           }
@@ -697,7 +802,7 @@ export default function PaywallScreen() {
                   )}
                 </LinearGradient>
               </TouchableOpacity>
-              {trialEligible && billingPeriod === "annual" && !subscribeDisabled && !hasPremium && (
+              {hasFreeTrial && (
                 <Text
                   style={{
                     textAlign: "center",
