@@ -1,6 +1,6 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { Platform } from "react-native";
-import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import { col } from "@trace/shared";
 import { auth, db } from "../services/firebase";
 import { getSessionId } from "./session";
@@ -132,11 +132,13 @@ export function setAnalyticsUser(_userId: string | null) {
  * than at module load so values like locale and session_id stay correct
  * as the user moves through the app.
  *
- * `app_version` uses `Updates.runtimeVersion` (set in app.json's
- * `expo.runtimeVersion`) since we don't have `expo-constants` installed.
- * In this codebase runtimeVersion and the marketing version are kept in
- * sync, so this is a faithful proxy. If/when expo-application is added,
- * swap in `Application.nativeApplicationVersion` for the binary version.
+ * `app_version` uses `Constants.expoConfig.version` — the marketing version
+ * (`expo.version` in app.json) baked into whatever JS bundle the device is
+ * running. This is the "code version" the user is on: it updates with an OTA,
+ * so a 1.3.0 binary that received the 1.3.1 bundle reports "1.3.1". (We
+ * deliberately do NOT use the native binary version here — it wouldn't move
+ * on an OTA — nor runtimeVersion, which is the OTA-channel key and can lag
+ * the marketing version.)
  *
  * `country` is parsed out of the locale string (e.g. "en-US" → "US").
  * Falls back to null when only the language is available (e.g. "en").
@@ -160,7 +162,7 @@ function getBaseProps(): Record<string, string | null> {
   return {
     platform: Platform.OS,
     os_version: String(Platform.Version ?? ""),
-    app_version: (Updates.runtimeVersion as string | undefined) ?? null,
+    app_version: (Constants.expoConfig?.version as string | undefined) ?? null,
     locale,
     country,
     session_id: getSessionId(),

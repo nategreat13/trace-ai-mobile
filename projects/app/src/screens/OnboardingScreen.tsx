@@ -7,7 +7,7 @@ import {
   useColorScheme,
   Platform,
 } from "react-native";
-import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
@@ -210,7 +210,11 @@ export default function OnboardingScreen() {
             Platform.OS === "ios" || Platform.OS === "android" || Platform.OS === "web"
               ? Platform.OS
               : undefined,
-          firstAppVersion: (Updates.runtimeVersion as string | undefined) ?? undefined,
+          // Marketing version (expo.version) of the bundle the user signed up
+          // on — updates with OTAs, so it marks the "code version" they joined
+          // with (e.g. "1.3.1" = first version with the deal-detail/click
+          // events). Used as the analytics cohort key.
+          firstAppVersion: (Constants.expoConfig?.version as string | undefined) ?? undefined,
           country,
           lastSeenAt: now,
           lifetimeRevenueCents: 0,

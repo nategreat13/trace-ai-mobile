@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import type { SubscriptionSummary } from "@/lib/revenuecat";
+import CohortFilter from "./cohort-filter";
 
 type SignupRow = { date: string; count: number };
 type EventRow = { name: string; count: number };
@@ -101,6 +102,8 @@ interface Props {
   subscriptionLifecycle: SubscriptionLifecycleData | null;
   purchaseFailuresByDay: FailureDayRow[];
   excludedCount: number;
+  cohortOptions: Array<{ key: string; label: string; count: number }>;
+  selectedCohorts: string[] | null;
 }
 
 function dollars(cents: number) {
@@ -217,6 +220,8 @@ export default function AnalyticsDashboardClient({
   subscriptionLifecycle,
   purchaseFailuresByDay,
   excludedCount,
+  cohortOptions,
+  selectedCohorts,
 }: Props) {
   const signupsTotal30 = signupsByDay.reduce((acc, r) => acc + r.count, 0);
 
@@ -245,6 +250,9 @@ export default function AnalyticsDashboardClient({
             )}
           </p>
         </header>
+
+        {/* Signup-version cohort filter — narrows ALL analytics below */}
+        <CohortFilter options={cohortOptions} selected={selectedCohorts} />
 
         {/* Top-line stats */}
         <Section title="Overview">

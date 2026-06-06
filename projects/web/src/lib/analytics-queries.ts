@@ -49,11 +49,13 @@ function shouldIncludeUid(
 export async function getSignupsByDay(
   env: TraceEnv,
   days = 30,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<Array<{ date: string; count: number }>> {
-  // No validUserIds filter here: by definition every userProfile we read
-  // exists, so there's nothing to "orphan". The only filter is the
-  // explicit exclusion list.
+  // validUserIds is used here only as the cohort filter (when narrowed):
+  // signups are restricted to the selected cohorts so the chart matches the
+  // rest of the dashboard. Without a cohort filter it's every valid user, so
+  // this is a no-op.
   const since = new Date();
   // "Last N days" means N days ending today (inclusive). The window
   // starts (N - 1) days ago at midnight so today's signups land in
@@ -79,8 +81,9 @@ export async function getSignupsByDay(
 
   snap.forEach((doc) => {
     const data = doc.data();
+    const uid = data.userId as string | undefined;
+    if (validUserIds && (!uid || !validUserIds.has(uid))) return;
     if (excluded) {
-      const uid = data.userId as string | undefined;
       const email = (data.email as string | undefined)?.toLowerCase();
       if (uid && excluded.userIds.has(uid)) return;
       if (email && excluded.emails.has(email)) return;
@@ -412,22 +415,29 @@ export async function getAdSpend(
  */
 export async function getUserCount(
   env: TraceEnv,
-  excluded?: ExcludedSets
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
 ): Promise<number> {
-  if (!excluded || (excluded.userIds.size === 0 && excluded.emails.size === 0)) {
+  const hasExclusions =
+    !!excluded && (excluded.userIds.size > 0 || excluded.emails.size > 0);
+  // Fast path only when there's nothing to filter (no exclusions AND no
+  // cohort restriction).
+  if (!hasExclusions && !validUserIds) {
     const snap = await colRef(env, "userProfiles").count().get();
     return snap.data().count;
   }
-  // With exclusions we can't use count() — fetch the userIds + emails and
-  // filter. At small scale this is fine; at 100k+ users move to a counter doc.
+  // With exclusions / a cohort filter we can't use count() — fetch the
+  // userIds + emails and filter. Fine at small scale; at 100k+ users move
+  // to a counter doc.
   const snap = await colRef(env, "userProfiles").select("userId", "email").get();
   let n = 0;
   snap.forEach((doc) => {
     const data = doc.data();
     const uid = data.userId as string | undefined;
     const email = (data.email as string | undefined)?.toLowerCase();
-    if (uid && excluded.userIds.has(uid)) return;
-    if (email && excluded.emails.has(email)) return;
+    if (validUserIds && (!uid || !validUserIds.has(uid))) return;
+    if (uid && excluded?.userIds.has(uid)) return;
+    if (email && excluded?.emails.has(email)) return;
     n++;
   });
   return n;
@@ -902,13 +912,16 @@ export async function getEngagementDepth(
   const since = new Date();
   since.setDate(since.getDate() - days);
 
-  // Denominator: eligible (non-excluded) user base — mirrors getUserCount.
+  // Denominator: eligible user base — non-excluded and (when a cohort filter
+  // narrows validUserIds) restricted to the selected cohorts, so rates like
+  // "% who viewed deal details" use a fair, cohort-matched denominator.
   const profSnap = await colRef(env, "userProfiles").select("userId", "email").get();
   let userBase = 0;
   profSnap.forEach((doc) => {
     const d = doc.data();
     const uid = d.userId as string | undefined;
     const email = (d.email as string | undefined)?.toLowerCase();
+    if (validUserIds && (!uid || !validUserIds.has(uid))) return;
     if (uid && excluded?.userIds.has(uid)) return;
     if (email && excluded?.emails.has(email)) return;
     userBase++;
@@ -1019,6 +1032,7 @@ export async function getTrialStateSummary(
     const d = doc.data();
     const uid = d.userId as string | undefined;
     const email = (d.email as string | undefined)?.toLowerCase();
+    if (validUserIds && (!uid || !validUserIds.has(uid))) return;
     if (uid && excluded?.userIds.has(uid)) return;
     if (email && excluded?.emails.has(email)) return;
     currentlyInTrial++;
@@ -1044,6 +1058,64 @@ export async function getTrialStateSummary(
   ]);
 
   return { currentlyInTrial, trialsStarted, converted };
+}
+
+/** Sentinel cohort key for users who signed up before version tagging. */
+export const NO_VERSION_COHORT = "__none__";
+
+/**
+ * Signup-version cohorts. Each user is tagged at signup with the app version
+ * they joined on (`firstAppVersion`, set from runtimeVersion). This returns:
+ *   - `options`: the distinct cohorts with non-excluded counts, for the UI
+ *     multiselect (newest version first, "no version" bucket last).
+ *   - `userVersion`: userId -> cohort key for EVERY profile (exclusions NOT
+ *     applied here — downstream queries handle exclusions), used to narrow
+ *     the population to the selected cohorts.
+ *
+ * Used to let the admin include/exclude cohorts across all analytics — e.g.
+ * exclude pre-instrumentation users so deal-view / URL-click rates have a
+ * fair denominator.
+ */
+export async function getCohortData(
+  env: TraceEnv,
+  excluded?: ExcludedSets
+): Promise<{
+  options: Array<{ key: string; label: string; count: number }>;
+  userVersion: Record<string, string>;
+}> {
+  const snap = await colRef(env, "userProfiles")
+    .select("userId", "email", "firstAppVersion")
+    .get();
+
+  const userVersion: Record<string, string> = {};
+  const counts: Record<string, number> = {};
+  snap.forEach((doc) => {
+    const d = doc.data();
+    const uid = d.userId as string | undefined;
+    if (!uid) return;
+    const key = (d.firstAppVersion as string | undefined) || NO_VERSION_COHORT;
+    userVersion[uid] = key;
+    // Counts power the UI labels — apply exclusions so cohort sizes reflect
+    // real (non-test) users.
+    const email = (d.email as string | undefined)?.toLowerCase();
+    if (excluded?.userIds.has(uid)) return;
+    if (email && excluded?.emails.has(email)) return;
+    counts[key] = (counts[key] ?? 0) + 1;
+  });
+
+  const options = Object.entries(counts)
+    .map(([key, count]) => ({
+      key,
+      label: key === NO_VERSION_COHORT ? "No version (pre-tracking)" : `v${key}`,
+      count,
+    }))
+    .sort((a, b) => {
+      if (a.key === NO_VERSION_COHORT) return 1;
+      if (b.key === NO_VERSION_COHORT) return -1;
+      return b.key.localeCompare(a.key, undefined, { numeric: true });
+    });
+
+  return { options, userVersion };
 }
 
 /**
