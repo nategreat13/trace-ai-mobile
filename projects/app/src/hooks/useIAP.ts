@@ -52,7 +52,13 @@ const PRODUCT_IDS = [
 
 export function useIAP(): UseIAPResult {
   const [offerings, setOfferings] = useState<PurchasesOfferings | null>(null);
-  const [trialEligible, setTrialEligible] = useState(true);
+  // Start NOT eligible. The real eligibility check resolves asynchronously
+  // after offerings load; defaulting to `true` made `hasFreeTrial` briefly
+  // true once offerings arrived (introPrice present) but BEFORE eligibility
+  // came back — firing a false-positive `trial_offer_shown` (and a flash of
+  // trial copy) for users who turn out ineligible. Starting false means the
+  // trial only ever surfaces after eligibility is confirmed.
+  const [trialEligible, setTrialEligible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [error, setError] = useState<string | null>(null);
