@@ -420,9 +420,9 @@ export default function AnalyticsDashboardClient({
           </div>
         </Section>
 
-        {/* Funnel */}
+        {/* Combined acquisition → conversion funnel */}
         {funnel && (
-          <Section title="Acquisition funnel (last 30 days)">
+          <Section title="Acquisition → conversion funnel (last 30 days)">
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="space-y-3">
                 {[
@@ -430,7 +430,16 @@ export default function AnalyticsDashboardClient({
                   { name: "Signups completed", value: funnel.signupCompleted },
                   { name: "Onboarding completed", value: funnel.onboardingCompleted },
                   { name: "Paywall viewed", value: funnel.paywallViewed },
-                  { name: "Purchase completed", value: funnel.purchaseCompleted },
+                  // Trial path (when trial data is present); otherwise fall
+                  // back to the single "Purchase completed" stage.
+                  ...(trialFunnel
+                    ? [
+                        { name: "Trial offer shown", value: trialFunnel.trialOfferShown },
+                        { name: "Trial CTA tapped", value: trialFunnel.trialCtaTapped },
+                        { name: "Trial started", value: trialFunnel.trialStarted },
+                        { name: "Converted to paid", value: trialState?.converted ?? 0 },
+                      ]
+                    : [{ name: "Purchase completed", value: funnel.purchaseCompleted }]),
                 ].map((step, i, arr) => {
                   const top = arr[0].value || 1;
                   const pct = Math.round((step.value / top) * 100);
@@ -463,6 +472,16 @@ export default function AnalyticsDashboardClient({
                   );
                 })}
               </div>
+              <p className="text-xs text-gray-400 mt-4">
+                One funnel from first app open to paid. Top stages are
+                guest/device activity (before signup); lower stages are
+                authenticated. &quot;Trial offer shown&quot; only fires when a
+                trial is actually rendered (eligible user + a free intro
+                offer). &quot;Converted to paid&quot; counts trials that became
+                paid in the window — trials convert ~7 days after starting, so
+                recently-started trials haven&apos;t matured and the drop from
+                &quot;Trial started&quot; overstates churn until they do.
+              </p>
             </div>
           </Section>
         )}
@@ -645,9 +664,11 @@ export default function AnalyticsDashboardClient({
           </Section>
         )}
 
-        {/* Free trial funnel */}
+        {/* Trial outcomes — the funnel itself now lives in the combined
+            acquisition → conversion funnel above; this keeps the snapshot
+            stats + the client/server reconciliation diagnostic. */}
         {trialFunnel && (
-          <Section title="Free trial funnel (last 30 days)">
+          <Section title="Trial outcomes (last 30 days)">
             {trialState && (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                 <StatCard
@@ -677,70 +698,15 @@ export default function AnalyticsDashboardClient({
               </div>
             )}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">
-                Trial path: offered → started
-              </h3>
-              <div className="space-y-3">
-                {[
-                  { name: "Paywall viewed", value: trialFunnel.paywallViewed },
-                  { name: "Trial offer shown", value: trialFunnel.trialOfferShown },
-                  { name: "Trial CTA tapped", value: trialFunnel.trialCtaTapped },
-                  { name: "Trial started", value: trialFunnel.trialStarted },
-                  { name: "Converted to paid", value: trialState?.converted ?? 0 },
-                ].map((step, i, arr) => {
-                  const top = arr[0].value || 1;
-                  const pct = Math.round((step.value / top) * 100);
-                  const prev = i > 0 ? arr[i - 1].value : null;
-                  const dropoff =
-                    prev && prev > 0
-                      ? Math.round(((prev - step.value) / prev) * 100)
-                      : null;
-                  return (
-                    <div key={step.name}>
-                      <div className="flex justify-between items-baseline mb-1">
-                        <span className="text-sm font-medium text-gray-700">
-                          {step.name}
-                        </span>
-                        <span className="text-sm tabular-nums">
-                          <span className="font-semibold text-gray-900">
-                            {step.value.toLocaleString()}
-                          </span>
-                          <span className="text-gray-400 ml-2">{pct}%</span>
-                          {dropoff != null && i > 0 && (
-                            <span
-                              className={`ml-2 text-xs ${
-                                dropoff > 50 ? "text-red-600" : "text-gray-400"
-                              }`}
-                            >
-                              -{dropoff}%
-                            </span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-gray-400 mt-4">
-                &quot;Trial offer shown&quot; fires only when a free trial is
-                actually rendered (user eligible + product carries a free intro
-                offer), so it&apos;s the true trial top-of-funnel. Client
+              <p className="text-xs text-gray-400">
+                Reconciliation: client
                 <span className="font-medium"> trial_started</span> ={" "}
                 {trialFunnel.trialStarted.toLocaleString()} vs. server
                 <span className="font-medium"> trial_started_server</span> ={" "}
                 {trialFunnel.trialStartedServer.toLocaleString()} (RevenueCat
                 webhook) — these should converge; a persistent gap means client
-                events are dropping. &quot;Converted to paid&quot; counts
-                trials that became paid in the window — trials convert ~7 days
-                after starting, so recently-started trials haven&apos;t had a
-                chance to convert yet; the drop from &quot;Trial started&quot;
-                overstates churn until those mature.
+                events are dropping. The offered → started → converted path is
+                charted in the acquisition → conversion funnel above.
               </p>
             </div>
           </Section>
