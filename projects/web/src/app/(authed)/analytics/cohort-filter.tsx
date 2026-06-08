@@ -8,8 +8,9 @@ type Option = { key: string; label: string; count: number };
 /**
  * Multiselect of signup-version cohorts. Toggling chips narrows ALL analytics
  * on the page to the selected cohorts (event numerators + user-count
- * denominators). Selection lives in the URL (`?cohorts=k1,k2`); "all selected"
- * clears the param. Defaults to all.
+ * denominators). Selection is persisted in a cookie via `/api/set-cohorts`
+ * (survives navigation and sessions, like the env switch); "all selected"
+ * clears it. Defaults to all.
  *
  * Primary use: exclude pre-instrumentation cohorts (e.g. "No version") so
  * deal-view / URL-click rates have a fair, cohort-matched denominator.
@@ -29,10 +30,23 @@ export default function CohortFilter({
   const allIncluded = included.length === options.length;
 
   function apply(keys: string[]) {
-    // All (or none → snaps back to all) clears the param for a clean URL.
+    // All (or none → snaps back to all) clears the cookie. Otherwise persist
+    // the selected keys. The route sets the cookie + revalidates; refresh
+    // re-renders the server component against it.
     const isAll = keys.length === options.length || keys.length === 0;
-    const qs = isAll ? "" : `?cohorts=${encodeURIComponent(keys.join(","))}`;
-    startTransition(() => router.push(`/analytics${qs}`));
+    fetch("/api/set-cohorts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cohorts: isAll ? [] : keys }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`set-cohorts failed: ${r.status}`);
+        startTransition(() => router.refresh());
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-alert
+        alert(`Failed to update cohorts: ${err?.message ?? err}`);
+      });
   }
 
   function toggle(key: string) {

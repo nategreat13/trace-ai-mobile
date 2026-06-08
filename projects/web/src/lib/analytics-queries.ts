@@ -140,7 +140,13 @@ export async function getFunnelCounts(
   env: TraceEnv,
   days = 30,
   excluded?: ExcludedSets,
-  validUserIds?: Set<string>
+  validUserIds?: Set<string>,
+  // Cohort filter (separate from validUserIds, which here is the orphan
+  // filter and is skipped for pre-profile events). When provided, every
+  // stage is restricted to the selected cohorts: authenticated events by
+  // userId, guest events by their device's cohort.
+  cohortUserIds?: Set<string>,
+  cohortDeviceIds?: Set<string>
 ) {
   const since = new Date();
   since.setDate(since.getDate() - days);
@@ -250,6 +256,18 @@ export async function getFunnelCounts(
       //    is the cross-session attribution that fixes the orphan-
       //    session bug — see `lib/device.ts` for the persistent UUID.
       if (userId === "guest" && deviceId && taintedDevices.has(deviceId)) return;
+      // 3b. Cohort filter (when a cohort is selected). Authenticated events
+      //     filter by the user's cohort; guest events by their device's
+      //     cohort. Applied to ALL stages, including the pre-profile ones
+      //     that skip the orphan filter above — so the whole funnel moves
+      //     with the cohort selection.
+      if (cohortUserIds) {
+        if (userId && userId !== "guest") {
+          if (!cohortUserIds.has(userId)) return;
+        } else {
+          if (!deviceId || !cohortDeviceIds?.has(deviceId)) return;
+        }
+      }
       // 4. Per-session dedup (landing_viewed only). Events without a
       //    session_id (legacy data) get counted as-is rather than
       //    being silently dropped.
@@ -464,7 +482,12 @@ export async function getUserCount(
 export async function getUniqueDeviceCount(
   env: TraceEnv,
   excluded?: ExcludedSets,
-  validUserIds?: Set<string>
+  validUserIds?: Set<string>,
+  // When provided (a cohort is selected), count only devices belonging to
+  // the selected cohorts (a device's cohort = the version its signup user
+  // joined on). Guest-only installs that never signed up aren't in any
+  // cohort, so they drop out under a cohort filter — intended.
+  cohortDeviceIds?: Set<string>
 ): Promise<number> {
   // Build the tainted-devices set: device_ids that have ever logged an
   // event under one of the excluded UIDs. The `in` query is chunked at 30
@@ -496,6 +519,7 @@ export async function getUniqueDeviceCount(
     if (!deviceId) return;
     if (!shouldIncludeUid(userId, excluded, validUserIds)) return;
     if (taintedDevices.has(deviceId)) return;
+    if (cohortDeviceIds && !cohortDeviceIds.has(deviceId)) return;
     devices.add(deviceId);
   });
   return devices.size;
@@ -1071,6 +1095,11 @@ export const NO_VERSION_COHORT = "__none__";
  *   - `userVersion`: userId -> cohort key for EVERY profile (exclusions NOT
  *     applied here — downstream queries handle exclusions), used to narrow
  *     the population to the selected cohorts.
+ *   - `deviceVersion`: device_id -> cohort key, derived from the signup_
+ *     completed event on each device (a device's cohort = the version the
+ *     person who signed up on it joined on). Lets device/guest-based metrics
+ *     (unique installs, the landing stage of the acquisition funnel) be
+ *     cohort-attributed too — those events have no userId to filter on.
  *
  * Used to let the admin include/exclude cohorts across all analytics — e.g.
  * exclude pre-instrumentation users so deal-view / URL-click rates have a
@@ -1082,6 +1111,7 @@ export async function getCohortData(
 ): Promise<{
   options: Array<{ key: string; label: string; count: number }>;
   userVersion: Record<string, string>;
+  deviceVersion: Record<string, string>;
 }> {
   const snap = await colRef(env, "userProfiles")
     .select("userId", "email", "firstAppVersion")
@@ -1103,6 +1133,23 @@ export async function getCohortData(
     counts[key] = (counts[key] ?? 0) + 1;
   });
 
+  // device -> cohort, via the signup_completed event (carries the new user's
+  // userId + the device_id). The device's guest events (landing_viewed) share
+  // that same stable device_id, so this attributes pre-signup activity to the
+  // cohort the device's user eventually joined on.
+  const deviceVersion: Record<string, string> = {};
+  const sigSnap = await colRef(env, "events")
+    .where("name", "==", "signup_completed")
+    .select("userId", "props.device_id")
+    .get();
+  sigSnap.forEach((doc) => {
+    const uid = doc.get("userId") as string | undefined;
+    const did = doc.get("props.device_id") as string | undefined;
+    if (!uid || !did) return;
+    const v = userVersion[uid];
+    if (v) deviceVersion[did] = v;
+  });
+
   const options = Object.entries(counts)
     .map(([key, count]) => ({
       key,
@@ -1115,7 +1162,7 @@ export async function getCohortData(
       return b.key.localeCompare(a.key, undefined, { numeric: true });
     });
 
-  return { options, userVersion };
+  return { options, userVersion, deviceVersion };
 }
 
 /**

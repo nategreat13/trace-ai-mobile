@@ -151,6 +151,40 @@ export async function getCustomer(appUserId: string): Promise<RCCustomer | null>
   }
 }
 
+/**
+ * Live renewal state for a customer's active subscription, straight from
+ * RevenueCat — used on the user detail page to show "Free trial" / "Canceled".
+ * `isCanceled` = auto-renew is off (won't renew); `isTrialing` = still in the
+ * free-trial period. Resilient: returns null on any failure / no customer, so
+ * the page renders without the badges rather than erroring.
+ */
+export async function getCustomerRenewalState(
+  appUserId: string
+): Promise<{ isTrialing: boolean; isCanceled: boolean } | null> {
+  try {
+    const pid = await getProjectId();
+    const data = await rcFetch<{
+      items?: Array<{
+        status?: string;
+        auto_renewal_status?: string;
+        gives_access?: boolean;
+      }>;
+    }>(
+      `/projects/${pid}/customers/${encodeURIComponent(appUserId)}/subscriptions`
+    );
+    const items = data.items ?? [];
+    // Prefer an access-granting subscription; else the first one present.
+    const sub = items.find((s) => s.gives_access) ?? items[0];
+    if (!sub) return { isTrialing: false, isCanceled: false };
+    return {
+      isTrialing: sub.status === "trialing",
+      isCanceled: sub.auto_renewal_status === "will_not_renew",
+    };
+  } catch {
+    return null;
+  }
+}
+
 // -- Derived aggregates used by the dashboard ------------------------------
 
 export interface SubscriptionSummary {

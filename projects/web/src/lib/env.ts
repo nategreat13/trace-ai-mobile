@@ -32,3 +32,22 @@ export async function getAdminEnv(): Promise<TraceEnv> {
   // No explicit choice yet — use the build-mode default.
   return process.env.NODE_ENV === "development" ? "staging" : "prod";
 }
+
+/**
+ * Signup-version cohort selection for the analytics dashboard. Persisted in a
+ * cookie (set by `/api/set-cohorts`) so the choice survives navigation and
+ * sessions, like the env switch. Value is a comma-separated list of cohort
+ * keys; absent or empty means "all cohorts".
+ */
+export const ADMIN_COHORTS_COOKIE = "trace_admin_cohorts";
+
+/**
+ * Read the selected cohort keys, or `null` for "all cohorts" (default).
+ */
+export async function getAdminCohorts(): Promise<string[] | null> {
+  const store = await cookies();
+  const raw = store.get(ADMIN_COHORTS_COOKIE)?.value?.trim();
+  if (!raw) return null;
+  const keys = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return keys.length > 0 ? keys : null;
+}

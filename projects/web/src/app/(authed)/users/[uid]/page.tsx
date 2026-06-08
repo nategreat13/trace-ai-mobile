@@ -13,6 +13,7 @@ import {
   listExclusions,
 } from "@/lib/exclusions";
 import { logAuditEvent } from "@/lib/audit";
+import { getCustomerRenewalState } from "@/lib/revenuecat";
 import {
   sendTestPush,
   sendTemplate,
@@ -200,7 +201,7 @@ export default async function UserDetailPage({
   const userId = decodeURIComponent(uid);
   const env = await getAdminEnv();
 
-  const [user, events, counts, excluded] = await Promise.all([
+  const [user, events, counts, excluded, renewalState] = await Promise.all([
     getUserDetail(env, userId),
     getUserEvents(env, userId, 100),
     getUserCollectionCounts(env, userId),
@@ -208,6 +209,8 @@ export default async function UserDetailPage({
       userIds: new Set<string>(),
       emails: new Set<string>(),
     })),
+    // Live renewal state from RevenueCat (trial + canceled). Resilient.
+    getCustomerRenewalState(userId).catch(() => null),
   ]);
 
   if (!user) {
@@ -220,6 +223,19 @@ export default async function UserDetailPage({
       </div>
     );
   }
+
+  // Subscription state badges. "On trial" comes from the webhook-maintained
+  // `inTrial` flag (in `raw`) + an unexpired trialEndDate; "Canceled" (auto-
+  // renew off) from the live RevenueCat renewal state. Either falls back to
+  // false when its source is unavailable.
+  const onTrial =
+    Boolean(user.raw?.inTrial) &&
+    user.trialEndDate != null &&
+    new Date(user.trialEndDate) > new Date();
+  const isCanceled = renewalState?.isCanceled ?? false;
+  const isPaidTier =
+    user.subscriptionStatus === "premium" ||
+    user.subscriptionStatus === "business";
 
   const isExcluded =
     excluded.userIds.has(user.userId) ||
@@ -345,7 +361,24 @@ export default async function UserDetailPage({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Subscription */}
         <Card title="Subscription">
-          <Row label="Status" value={user.subscriptionStatus} />
+          <div className="flex justify-between items-baseline py-1.5 text-sm border-b border-gray-50">
+            <span className="text-gray-500">Status</span>
+            <span className="text-right flex items-center gap-1.5 flex-wrap justify-end">
+              <span className="text-gray-900 capitalize">
+                {user.subscriptionStatus}
+              </span>
+              {isPaidTier && onTrial && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-rose-50 text-rose-600 border border-rose-200">
+                  FREE TRIAL
+                </span>
+              )}
+              {isPaidTier && isCanceled && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide bg-red-50 text-red-600 border border-red-200">
+                  CANCELED
+                </span>
+              )}
+            </span>
+          </div>
           <Row
             label="Source"
             value={
