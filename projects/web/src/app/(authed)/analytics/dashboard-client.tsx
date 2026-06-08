@@ -686,6 +686,7 @@ export default function AnalyticsDashboardClient({
                   { name: "Trial offer shown", value: trialFunnel.trialOfferShown },
                   { name: "Trial CTA tapped", value: trialFunnel.trialCtaTapped },
                   { name: "Trial started", value: trialFunnel.trialStarted },
+                  { name: "Converted to paid", value: trialState?.converted ?? 0 },
                 ].map((step, i, arr) => {
                   const top = arr[0].value || 1;
                   const pct = Math.round((step.value / top) * 100);
@@ -735,7 +736,11 @@ export default function AnalyticsDashboardClient({
                 <span className="font-medium"> trial_started_server</span> ={" "}
                 {trialFunnel.trialStartedServer.toLocaleString()} (RevenueCat
                 webhook) — these should converge; a persistent gap means client
-                events are dropping.
+                events are dropping. &quot;Converted to paid&quot; counts
+                trials that became paid in the window — trials convert ~7 days
+                after starting, so recently-started trials haven&apos;t had a
+                chance to convert yet; the drop from &quot;Trial started&quot;
+                overstates churn until those mature.
               </p>
             </div>
           </Section>
