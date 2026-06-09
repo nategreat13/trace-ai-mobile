@@ -38,7 +38,7 @@ export interface NotificationTemplate {
 export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   welcome: {
     key: "welcome",
-    title: "Welcome to Trace 👋",
+    title: "Trace",
     body: "We've found {{dealCount}} deals from {{homeAirport}} since you joined.",
     deepLink: "/swipe",
     enabled: false,
@@ -48,7 +48,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   trial_ending_3d: {
     key: "trial_ending_3d",
-    title: "Your trial ends in 3 days",
+    title: "Trace",
     body: "Keep unlimited swipes and every deal from your home airport. Subscribe before it ends.",
     deepLink: "/paywall",
     enabled: false,
@@ -58,7 +58,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   trial_ending_24h: {
     key: "trial_ending_24h",
-    title: "Your trial ends tomorrow",
+    title: "Trace",
     body: "Subscribe to keep unlimited swipes, saves, and deal alerts.",
     deepLink: "/paywall",
     enabled: false,
@@ -78,7 +78,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_3d: {
     key: "inactivity_3d",
-    title: "Trace Flight Deals ✈️",
+    title: "Trace",
     body: "{{destination}} for ${{price}} — your top deal is waiting.",
     deepLink: "/swipe",
     enabled: false,
@@ -88,7 +88,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_7d: {
     key: "inactivity_7d",
-    title: "Trace Flight Deals ✈️",
+    title: "Trace",
     body: "{{destination}} for ${{price}} — one of {{dealCount}} deals waiting from {{homeAirport}}.",
     deepLink: "/swipe",
     enabled: false,
@@ -98,7 +98,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_14d: {
     key: "inactivity_14d",
-    title: "Trace Flight Deals ✈️",
+    title: "Trace",
     body: "{{destination}} for ${{price}} — come back and swipe.",
     deepLink: "/swipe",
     enabled: false,
@@ -108,7 +108,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   hot_deal_alert: {
     key: "hot_deal_alert",
-    title: "🔥 {{discount}}% off to {{destination}}",
+    title: "Trace",
     body: "${{price}} from {{homeAirport}}. Limited time — tap to see it.",
     deepLink: "/swipe",
     enabled: false,
