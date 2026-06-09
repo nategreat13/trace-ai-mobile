@@ -33,6 +33,16 @@ import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+const MONTH_ABBR: Record<string, string> = {
+  january: "Jan", february: "Feb", march: "Mar", april: "Apr",
+  may: "May", june: "Jun", july: "Jul", august: "Aug",
+  september: "Sep", october: "Oct", november: "Nov", december: "Dec",
+};
+function abbreviateMonths(s: string): string {
+  return s.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/gi,
+    (m) => MONTH_ABBR[m.toLowerCase()] ?? m);
+}
+
 export default function ExploreScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
@@ -492,7 +502,7 @@ export default function ExploreScreen() {
                       onPress={() => setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
                       style={{ paddingHorizontal: 12, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 5 }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>{v.travel_window || `Option ${i + 1}`}</Text>
+                      <Text style={{ fontSize: 12, fontWeight: "800", color: "#fff" }}>{v.travel_window ? abbreviateMonths(v.travel_window) : `Option ${i + 1}`}</Text>
                       <View style={{ width: 1, height: 12, backgroundColor: "rgba(255,255,255,0.4)" }} />
                       <Text style={{ fontSize: 12, fontWeight: "900", color: "#fff" }}>${v.price}</Text>
                     </TouchableOpacity>
@@ -503,7 +513,7 @@ export default function ExploreScreen() {
                     onPress={() => setSelectedMonthIndex((prev) => ({ ...prev, [baseDeal.destination]: i }))}
                     style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: theme.muted, flexDirection: "row", alignItems: "center", gap: 5 }}
                   >
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: theme.mutedForeground }}>{v.travel_window || `Option ${i + 1}`}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: theme.mutedForeground }}>{v.travel_window ? abbreviateMonths(v.travel_window) : `Option ${i + 1}`}</Text>
                     <View style={{ width: 1, height: 12, backgroundColor: theme.border }} />
                     <Text style={{ fontSize: 12, fontWeight: "800", color: theme.foreground }}>${v.price}</Text>
                   </TouchableOpacity>

@@ -156,15 +156,14 @@ function DailyLimitView({
       entering={FadeIn.duration(500)}
       style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, borderRadius: 20, overflow: "hidden" }}
     >
-      {/* Gradient fade — deal peeks through the top */}
+      {/* Gradient fade — card peeks through a sliver at the top, then solid */}
       <LinearGradient
         colors={[
           `${bg}0.0)`,
-          `${bg}0.15)`,
-          `${bg}0.7)`,
-          `${bg}0.97)`,
+          `${bg}0.92)`,
+          `${bg}1.0)`,
         ]}
-        locations={[0, 0.28, 0.52, 0.72]}
+        locations={[0, 0.22, 0.40]}
         style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -650,73 +649,90 @@ export default function SwipeDeckScreen() {
           alignItems: "center",
           justifyContent: "space-between",
           paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingVertical: 10,
           borderBottomWidth: 1,
           borderBottomColor: theme.border,
         }}
       >
+        {/* Left: logo + airport pill OR dom/intl toggle */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Image source={require("../../assets/Bluelogo.png")} style={{ width: 28, height: 28, resizeMode: "contain" }} />
-          <Text style={{ fontWeight: "800", fontSize: 16, color: theme.foreground }}>
-            Trace Travel
-          </Text>
-          {profile?.homeAirport && (
+          <Image source={require("../../assets/Bluelogo.png")} style={{ width: 26, height: 26, resizeMode: "contain" }} />
+          {profile?.destinationPreference === "both" ? (
+            // Compact toggle inline in header
             <View
               style={{
+                flexDirection: "row",
                 backgroundColor: theme.muted,
                 borderRadius: 999,
-                paddingHorizontal: 12,
-                paddingVertical: 4,
+                padding: 2,
               }}
             >
-              <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
-                From {profile.homeAirport}
-              </Text>
+              {(["both", "domestic", "international"] as const).map((opt) => {
+                const labels = { both: "Both", domestic: "🇺🇸", international: "🌍" };
+                const isActive = destFilter === opt;
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    onPress={() => setDestFilter(opt)}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderRadius: 999,
+                      backgroundColor: isActive ? theme.card : "transparent",
+                    }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: isActive ? theme.foreground : theme.mutedForeground }}>
+                      {labels[opt]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+          ) : (
+            profile?.homeAirport && (
+              <View
+                style={{
+                  backgroundColor: theme.muted,
+                  borderRadius: 999,
+                  paddingHorizontal: 12,
+                  paddingVertical: 4,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
+                  From {profile.homeAirport}
+                </Text>
+              </View>
+            )
           )}
         </View>
         {!isPremium && (
-          <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_header_crown" })}>
-            <Crown color={colors.brand.amber500} size={24} />
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_header_crown" })}
+            style={{ flexDirection: "row", alignItems: "center" }}
+          >
+            {swipesLeft <= 8 ? (
+              <View style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                backgroundColor: colors.brand.amber50,
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderWidth: 1,
+                borderColor: colors.brand.amber200,
+              }}>
+                <Text style={{ fontSize: 12 }}>⚡</Text>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.brand.amber600 }}>
+                  {swipesLeft} left
+                </Text>
+              </View>
+            ) : (
+              <Crown color={colors.brand.amber500} size={24} />
+            )}
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Domestic / International filter — only for users who chose "both" */}
-      {profile?.destinationPreference === "both" && (
-        <View
-          style={{
-            flexDirection: "row",
-            backgroundColor: theme.muted,
-            borderRadius: 999,
-            padding: 3,
-            marginHorizontal: 16,
-            marginTop: 8,
-            alignSelf: "center",
-          }}
-        >
-          {(["both", "domestic", "international"] as const).map((opt) => {
-            const labels = { both: "🌎 Both", domestic: "🇺🇸 Domestic", international: "🌍 International" };
-            const isActive = destFilter === opt;
-            return (
-              <TouchableOpacity
-                key={opt}
-                onPress={() => setDestFilter(opt)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: isActive ? theme.card : "transparent",
-                }}
-              >
-                <Text style={{ fontSize: 12, fontWeight: "700", color: isActive ? theme.foreground : theme.mutedForeground }}>
-                  {labels[opt]}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
 
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
@@ -896,7 +912,27 @@ export default function SwipeDeckScreen() {
                 </TouchableOpacity>
               </Animated.View>
             ) : (
-              visibleDeals
+              <>
+                {/* Subtle amber strip that peeks below the card when ≤3 free swipes left.
+                    Rendered before the cards so it paints behind them; only the bottom
+                    ~12px are visible since the real card covers the rest. */}
+                {!isPremium && swipesLeft <= 3 && swipesLeft > 0 && (
+                  <Animated.View
+                    entering={FadeIn.duration(600)}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 8,
+                      right: 8,
+                      bottom: -12,
+                      borderRadius: 20,
+                      backgroundColor: colors.brand.amber50,
+                      borderWidth: 1,
+                      borderColor: colors.brand.amber200,
+                    }}
+                  />
+                )}
+              {visibleDeals
                 .slice(currentIndex, currentIndex + 3)
                 .reverse()
                 .map((deal, i, arr) => (
@@ -910,7 +946,8 @@ export default function SwipeDeckScreen() {
                     isSwipeDisabled={!isPremium && swipesLeft <= 0}
                     isUndone={deal.id === undoneDealId}
                   />
-                ))
+                ))}
+              </>
             )}
           </View>
 
@@ -931,48 +968,6 @@ export default function SwipeDeckScreen() {
             )}
           </View>
 
-          {/* Swipes left indicator */}
-          {!isPremium && swipesLeft > 0 && swipesLeft <= 8 && (
-            <Animated.View entering={FadeIn.duration(300)} style={{ alignItems: "center", gap: 6, marginBottom: 8 }}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_low_swipes_warning" })}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  alignSelf: "center",
-                  gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  backgroundColor: colors.brand.amber50,
-                  borderRadius: 999,
-                  borderWidth: 1,
-                  borderColor: colors.brand.amber200,
-                }}
-              >
-                <Text style={{ fontSize: 14 }}>⚡</Text>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.brand.amber600 }}>
-                  {swipesLeft} swipe{swipesLeft !== 1 ? "s" : ""} left today
-                </Text>
-              </TouchableOpacity>
-              {swipesLeft <= 5 && (
-                <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_upgrade_nudge" })}>
-                  <Text style={{ fontSize: 12, color: theme.mutedForeground }}>
-                    {trialAvailable ? (
-                      <>
-                        Try{" "}
-                        <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>free for {trialLabelLong}</Text>
-                      </>
-                    ) : (
-                      <>
-                        Upgrade for{" "}
-                        <Text style={{ color: colors.brand.traceRed, fontWeight: "600" }}>unlimited swipes</Text>
-                      </>
-                    )}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </Animated.View>
-          )}
 
           {/* Action buttons */}
           <View

@@ -107,11 +107,18 @@ export default function SwipeCard({
     }
   }, [triggerSwipe, isTop, translateX, translateY, handleSwipe]);
 
+  // ── Tap scale (declared before panGesture so it can be reset there) ─
+  const tapScale = useSharedValue(1);
+
   // ── Gesture ─────────────────────────────────────────────────────────
   const panGesture = Gesture.Pan()
     .enabled(isTop)
     .onStart(() => {
       isDragging.value = true;
+      // Reset tapScale in case tap.onBegin already shrank the card before
+      // the pan gesture won the Race. Without this, tap's onEnd/onFinalize
+      // never fires and the card snaps back at 0.965 instead of 1.0.
+      tapScale.value = withSpring(1, { damping: 12, stiffness: 300 });
     })
     .onUpdate((event) => {
       translateX.value = event.translationX;
@@ -173,8 +180,6 @@ export default function SwipeCard({
       translateX.value = withTiming(0, { duration: 200 });
       translateY.value = withTiming(0, { duration: 200 });
     });
-
-  const tapScale = useSharedValue(1);
 
   const tapGesture = Gesture.Tap()
     .onBegin(() => {

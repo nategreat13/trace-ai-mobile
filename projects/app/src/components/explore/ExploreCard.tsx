@@ -14,6 +14,17 @@ import Animated, { FadeInUp } from "react-native-reanimated";
 import { colors } from "../../theme/colors";
 import type { Deal } from "@trace/shared";
 
+const MONTH_ABBR: Record<string, string> = {
+  january: "Jan", february: "Feb", march: "Mar", april: "Apr",
+  may: "May", june: "Jun", july: "Jul", august: "Aug",
+  september: "Sep", october: "Oct", november: "Nov", december: "Dec",
+};
+
+function abbreviateMonths(s: string): string {
+  return s.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/gi,
+    (m) => MONTH_ABBR[m.toLowerCase()] ?? m);
+}
+
 const CARD_GAP = 12;
 const SCREEN_PADDING = 16;
 const CARD_WIDTH =
@@ -104,7 +115,7 @@ export default function ExploreCard({
           {/* Travel window */}
           {deal.travel_window ? (
             <View style={[styles.badge, styles.windowBadge]}>
-              <Text style={styles.windowBadgeText}>{deal.travel_window}</Text>
+              <Text style={styles.windowBadgeText}>{abbreviateMonths(deal.travel_window)}</Text>
             </View>
           ) : null}
         </View>
