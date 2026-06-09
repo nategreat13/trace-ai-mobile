@@ -268,13 +268,18 @@ async function runDailyNotifications() {
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        if (deals.length === 0) continue; // no deals at all — skip
         const dealCount = deals.length;
-        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
+        // Prefer a deal matching the user's preferences; fall back to the
+        // overall best deal so we never send with a blank destination or $0 price.
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
+          ?? pickDealForUser(deals, [], "both");
+        if (!best?.destination || !best?.price) continue;
         await sendForTemplate(data.userId, "inactivity_3d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-          destination: best?.destination ?? "",
-          price: best?.price ?? 0,
+          destination: best.destination,
+          price: best.price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_3d: scanned ${snap.size} candidates`);
@@ -300,13 +305,16 @@ async function runDailyNotifications() {
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        if (deals.length === 0) continue;
         const dealCount = deals.length;
-        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
+          ?? pickDealForUser(deals, [], "both");
+        if (!best?.destination || !best?.price) continue;
         await sendForTemplate(data.userId, "inactivity_7d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-          destination: best?.destination ?? "",
-          price: best?.price ?? 0,
+          destination: best.destination,
+          price: best.price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_7d: scanned ${snap.size} candidates`);
@@ -332,13 +340,16 @@ async function runDailyNotifications() {
         };
         if (!data.userId || !data.notificationsEnabled) continue;
         const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+        if (deals.length === 0) continue;
         const dealCount = deals.length;
-        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both");
+        const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
+          ?? pickDealForUser(deals, [], "both");
+        if (!best?.destination || !best?.price) continue;
         await sendForTemplate(data.userId, "inactivity_14d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
-          destination: best?.destination ?? "",
-          price: best?.price ?? 0,
+          destination: best.destination,
+          price: best.price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_14d: scanned ${snap.size} candidates`);

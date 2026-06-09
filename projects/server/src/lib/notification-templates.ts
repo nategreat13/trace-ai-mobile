@@ -78,8 +78,8 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_3d: {
     key: "inactivity_3d",
-    title: "✈️ {{destination}} for ${{price}}",
-    body: "Haven't seen you in a few days — your top deal is waiting.",
+    title: "Trace Flight Deals ✈️",
+    body: "{{destination}} for ${{price}} — your top deal is waiting.",
     deepLink: "/swipe",
     enabled: false,
     description:
@@ -88,7 +88,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_7d: {
     key: "inactivity_7d",
-    title: "We miss you ✈️",
+    title: "Trace Flight Deals ✈️",
     body: "{{destination}} for ${{price}} — one of {{dealCount}} deals waiting from {{homeAirport}}.",
     deepLink: "/swipe",
     enabled: false,
@@ -98,7 +98,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   inactivity_14d: {
     key: "inactivity_14d",
-    title: "Still looking for a deal? ✈️",
+    title: "Trace Flight Deals ✈️",
     body: "{{destination}} for ${{price}} — come back and swipe.",
     deepLink: "/swipe",
     enabled: false,
