@@ -20,7 +20,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
@@ -126,7 +126,7 @@ function DailyLimitView({
   onUpgrade: () => void;
   onExplore: () => void;
 }) {
-  const { available: trialAvailable, label: trialLabel } = useFreeTrial();
+  const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
   const [timeLeft, setTimeLeft] = React.useState(() => {
     const now = new Date();
     const midnight = new Date(now);
@@ -146,11 +146,16 @@ function DailyLimitView({
 
   const hours = Math.floor(timeLeft / 3600);
   const minutes = Math.floor((timeLeft % 3600) / 60);
-  const seconds = timeLeft % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
+  const resetsInLabel = `${pad(hours)}h ${pad(minutes)}m`;
 
   const bg = scheme === "dark" ? "rgba(10,10,18," : "rgba(255,255,255,";
 
+  // Trial-first layout: when the user is intro-eligible, lead with the
+  // trial CTA and demote "come back tomorrow" to small print. The
+  // v1.3.2 cohort showed 15/29 users hitting the cap and only 2 of
+  // them reaching the paywall — the old "Resets in HH:MM:SS" pill read
+  // as the headline answer, so users just left.
   return (
     <Animated.View
       entering={FadeIn.duration(500)}
@@ -169,36 +174,23 @@ function DailyLimitView({
 
       {/* Content anchored to the bottom */}
       <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 20 }}>
-        <View style={{ alignItems: "center", marginBottom: 16 }}>
-          <Text style={{ fontSize: 32, marginBottom: 8 }}>🌙</Text>
-          <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 6 }}>
-            Out of swipes for today
+        <View style={{ alignItems: "center", marginBottom: 18 }}>
+          <Text style={{ fontSize: 32, marginBottom: 8 }}>
+            {trialAvailable ? "✨" : "🌙"}
+          </Text>
+          <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 6 }}>
+            {trialAvailable
+              ? `Keep swiping — free for ${trialLabelLong}`
+              : "Out of swipes for today"}
           </Text>
           <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 18 }}>
-            Free members get {maxSwipes} swipes/day
+            {trialAvailable
+              ? `Unlimited swipes & saves. Cancel anytime.`
+              : `Free members get ${maxSwipes} swipes/day`}
           </Text>
         </View>
 
-        {/* Countdown pill */}
-        <View style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 8,
-          backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
-          borderRadius: 14,
-          paddingVertical: 12,
-          marginBottom: 14,
-          borderWidth: 1,
-          borderColor: theme.border,
-        }}>
-          <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>Resets in</Text>
-          <Text style={{ fontSize: 18, fontWeight: "900", color: theme.foreground, letterSpacing: 1, fontVariant: ["tabular-nums"] }}>
-            {pad(hours)}:{pad(minutes)}:{pad(seconds)}
-          </Text>
-        </View>
-
-        {/* Upgrade CTA */}
+        {/* Primary CTA — trial when available, generic upgrade otherwise */}
         <TouchableOpacity
           onPress={onUpgrade}
           activeOpacity={0.85}
@@ -208,9 +200,9 @@ function DailyLimitView({
             colors={[colors.brand.traceRed, colors.brand.tracePink]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
-            style={{ paddingVertical: 14, alignItems: "center" }}
+            style={{ paddingVertical: 16, alignItems: "center" }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>
               {trialAvailable ? `Start ${trialLabel} free trial` : "Unlock Unlimited Swipes"}
             </Text>
           </LinearGradient>
@@ -226,10 +218,17 @@ function DailyLimitView({
             alignItems: "center",
             borderWidth: 1,
             borderColor: theme.border,
+            marginBottom: 12,
           }}
         >
           <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "600" }}>Browse Explore Instead</Text>
         </TouchableOpacity>
+
+        {/* Reset time — demoted to small print so it reads as a fallback,
+            not as "this is your answer, see you tomorrow". */}
+        <Text style={{ fontSize: 11, color: theme.mutedForeground, textAlign: "center" }}>
+          Or wait — your free swipes reset in {resetsInLabel}
+        </Text>
       </View>
     </Animated.View>
   );
@@ -237,6 +236,7 @@ function DailyLimitView({
 
 export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
+  const isFocused = useIsFocused();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium } = useAuth();
@@ -281,6 +281,13 @@ export default function SwipeDeckScreen() {
   // Track total swipes this session for AI learning modal
   const sessionSwipeCount = useRef(0);
 
+  // Fire `deck_rendered` exactly once per mount, the first time we have
+  // at least one card actually visible. Closes the v1.3.2 blind spot on
+  // why 38% of users finished onboarding but never swiped — paired with
+  // deals_load_failed, the funnel can tell us whether the deck appeared
+  // at all for those users.
+  const deckRenderedFiredRef = useRef(false);
+
   const activeDeals = useMemo(
     () => (deckMode === "business" ? premiumDeals : deals),
     [deckMode, premiumDeals, deals]
@@ -320,6 +327,20 @@ export default function SwipeDeckScreen() {
     prefetchDestinationInfo(visibleDeals[currentIndex + 1] ?? null);
     prefetchDestinationInfo(visibleDeals[currentIndex + 2] ?? null);
   }, [currentIndex, visibleDeals]);
+
+  // Fire deck_rendered once when at least one card actually shows.
+  useEffect(() => {
+    if (deckRenderedFiredRef.current) return;
+    if (loading) return;
+    if (visibleDeals.length === 0) return;
+    deckRenderedFiredRef.current = true;
+    logEvent("deck_rendered", {
+      deals_count: visibleDeals.length,
+      deck_mode: deckMode,
+      dest_filter: destFilter,
+      home_airport: profile?.homeAirport ?? null,
+    });
+  }, [loading, visibleDeals.length, deckMode, destFilter, profile?.homeAirport]);
 
   async function doShare(deal: Deal, name: string) {
     try {
@@ -370,12 +391,18 @@ export default function SwipeDeckScreen() {
     init();
   }, [profile?.id, user?.uid]);
 
-  // Show HowToSwipe modal on mount if not shown before
+  // Show HowToSwipe modal on mount if not shown before.
+  // Gated on `isFocused` so it doesn't try to render while a modal
+  // navigation screen (e.g. the post-onboarding Paywall) is on top —
+  // RN's <Modal> renders to a native overlay that can stack badly with
+  // the native-stack modal presentation, ending up "shown but invisible"
+  // and silently eating taps after the modal above is dismissed.
   useEffect(() => {
+    if (!isFocused) return;
     if (profile && !profile.howToSwipeShown && !loading) {
       setShowHowToSwipe(true);
     }
-  }, [profile?.howToSwipeShown, loading]);
+  }, [profile?.howToSwipeShown, loading, isFocused]);
 
   // Auto-switch to business for business members — and reset to economy
   // when they're no longer on the Business tier
@@ -399,12 +426,30 @@ export default function SwipeDeckScreen() {
     reload();
   }, [visibleDeals.length, activeDeals.length, currentIndex, loading, deckPhase, destFilter]);
 
-  // Transition to daily limit screen when a free user hits 0 swipes
+  // Transition to daily limit screen when a free user hits 0 swipes.
+  // Fires daily_limit_hit here (vs. inside handleSwipe) because the
+  // overlay catches further swipe attempts, so the in-handleSwipe path
+  // never executed in practice — the v1.3.2 cohort had 0 emits for 15
+  // users who hit the cap. On the first cap-hit each day we also auto-
+  // open the paywall (trial-first cohort fix), gated by a per-USER-
+  // per-day key so the same physical device hitting the cap on a
+  // different account still gets the prompt — and so remounting the
+  // deck (tab switch) on the same user doesn't re-pop.
   useEffect(() => {
-    if (!isPremium && swipesLeft <= 0 && deckPhase === "swiping") {
-      setDeckPhase("daily_limit");
-    }
-  }, [swipesLeft, isPremium, deckPhase]);
+    if (isPremium || swipesLeft > 0 || deckPhase !== "swiping") return;
+    if (!user?.uid) return; // can't scope the per-user key yet
+    setDeckPhase("daily_limit");
+    logEvent("daily_limit_hit", { swipes_left: 0 });
+
+    (async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const autoOpenKey = `dailyLimitPaywallAutoOpened.${user.uid}.${today}`;
+      const alreadyOpened = await getItem<string>(autoOpenKey);
+      if (alreadyOpened) return;
+      await setItem(autoOpenKey, new Date().toISOString());
+      navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit_auto" });
+    })();
+  }, [swipesLeft, isPremium, deckPhase, navigation, user?.uid]);
 
   // When isPremium becomes true, unlock swipes and exit the daily limit screen
   useEffect(() => {
@@ -452,7 +497,10 @@ export default function SwipeDeckScreen() {
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
-        logEvent("daily_limit_hit", { swipes_left: 0 });
+        // daily_limit_hit fires from the transition effect below — the
+        // overlay rendered by deckPhase="daily_limit" blocks new swipe
+        // attempts, so emitting here is redundant *and* never fires in
+        // the practical case where the cap is hit by a real swipe.
         setDeckPhase("daily_limit");
         return;
       }
@@ -561,6 +609,13 @@ export default function SwipeDeckScreen() {
         swipeCount: newSwipeCount,
         dailySwipesToday: newDailySwipes,
       };
+
+      // First-save stamp — gates the push soft prompt (see
+      // useTriggerSoftPromptAfterFirstSave). Only stamp once; subsequent
+      // saves leave the original timestamp alone.
+      if (normalizedAction === "right" && !profile.firstSaveAt) {
+        updates.firstSaveAt = new Date();
+      }
 
       // Level up every 25 swipes
       const didLevelUp = newSwipeCount % 25 === 0;

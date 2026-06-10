@@ -38,6 +38,21 @@ export interface UserProfile {
   exploreTutorialShown: boolean;
   dashboardTutorialShown: boolean;
   aiLearningShown: boolean;
+  /**
+   * True after we've auto-opened the paywall once at the end of onboarding.
+   * Drives the "trial as hero" exposure step that follows onboardingComplete
+   * — we open the paywall a single time per user so trial offers are seen by
+   * ~100% of completed signups, not the small fraction who hit the cap or
+   * a blurred Explore deal.
+   */
+  postOnboardingPaywallShown?: boolean;
+  /**
+   * When the user saved their first deal. Set on the first right-swipe (or
+   * the first save from ExpandedDeal). Gates the push-notifications soft
+   * prompt — we hold the ask until the user has demonstrated value, instead
+   * of firing it cold right after onboarding.
+   */
+  firstSaveAt?: Date | null;
   profilePictureUrl: string | null;
   createdAt: Date;
   // Activity / cohort metadata. firstSeenAt, firstPlatform, firstAppVersion,

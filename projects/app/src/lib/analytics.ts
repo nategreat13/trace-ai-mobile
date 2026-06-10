@@ -54,6 +54,13 @@ export type AnalyticsEventName =
   | "ai_learning_shown"
   | "badge_unlocked"
   | "level_up"
+  // Deck readiness — close the blind spot on why ~38% of v1.3.2 cohort
+  // never swiped. `deck_rendered` fires once per SwipeDeck mount when
+  // at least one card actually shows. `deals_load_failed` fires when
+  // the deals fetch errors or comes back empty. With both, the funnel
+  // can distinguish "API broke" from "user bounced before swiping."
+  | "deck_rendered"
+  | "deals_load_failed"
   // Paywall
   | "paywall_viewed"
   | "paywall_tier_selected"

@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
+import { usePostOnboardingPaywall } from "../hooks/usePostOnboardingPaywall";
+import { useTriggerSoftPromptAfterFirstSave } from "../hooks/useTriggerSoftPromptAfterFirstSave";
 import type { TabParamList } from "./types";
 
 import SwipeDeckScreen from "../screens/SwipeDeckScreen";
@@ -21,6 +23,15 @@ export default function TabNavigator() {
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile } = useAuth();
   const isBusinessUser = profile?.subscriptionStatus === "business";
+
+  // Forced trial exposure: open the paywall once at the end of onboarding
+  // for users with no prior paywall view. The hook self-gates on the
+  // trial signal, premium status, and a per-user flag.
+  usePostOnboardingPaywall(true);
+
+  // Push soft prompt fires after the user's first save (moment of
+  // demonstrated value), not cold after onboarding.
+  useTriggerSoftPromptAfterFirstSave();
 
   return (
     <Tab.Navigator

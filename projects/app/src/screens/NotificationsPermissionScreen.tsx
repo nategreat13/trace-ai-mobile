@@ -10,6 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BellRing } from "lucide-react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
@@ -22,11 +24,14 @@ import {
   triggerGateRecheck,
 } from "../hooks/useDeviceNotificationGate";
 import { logEvent } from "../lib/analytics";
+import type { RootStackParamList } from "../navigation/types";
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /**
- * Custom "soft prompt" shown after onboarding completes, before iOS /
- * Android shows their actual permission dialog. Lifts accept rate
- * dramatically vs. firing the OS prompt directly:
+ * Custom "soft prompt" presented as a full-screen modal after the user
+ * saves their first deal. Lifts accept rate dramatically vs. firing the
+ * OS prompt directly:
  *
  *   - If the user taps "Enable", we then trigger the OS dialog. They
  *     arrive primed and almost always accept.
@@ -36,10 +41,12 @@ import { logEvent } from "../lib/analytics";
  *     ever — only Settings can flip it back. So preserving the
  *     ability to re-prompt is the whole point.
  *
- * The screen is gated by `profile.notificationPermissionAsked`: false
- * = show, true = skip and let RootNavigator route to MainTabs.
+ * The trigger lives in MainTabs (see useTriggerSoftPromptAfterFirstSave)
+ * so we only ever present this modal once the user has demonstrated
+ * value by saving a deal.
  */
 export default function NotificationsPermissionScreen() {
+  const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile } = useAuth();
@@ -65,10 +72,8 @@ export default function NotificationsPermissionScreen() {
         notificationPermissionAsked: true,
         notificationsEnabled: status === "granted",
       };
-      // Don't await these — Firestore writes can be slow and we want
-      // the gate to re-resolve and unmount this screen ASAP. Both
-      // functions are fire-and-forget safe (registerPushToken has
-      // internal error handling; updateProfile is just persistence).
+      // Fire-and-forget. Both functions handle their own errors and we
+      // want to dismiss the modal immediately on completion.
       updateProfile(updates).catch(() => {});
       if (status === "granted") {
         registerPushToken(profile.id).catch(() => {});
@@ -86,10 +91,10 @@ export default function NotificationsPermissionScreen() {
       markSoftPromptDismissed().catch(() => {});
     } finally {
       setSubmitting(false);
-      // Force the gate to re-evaluate. AppState foregrounding after
-      // the OS dialog usually triggers it on its own, but firing here
-      // makes the unmount deterministic regardless of dialog timing.
+      // Tell any mounted useShouldShowSoftPrompt to re-resolve so the
+      // trigger hook in MainTabs won't try to re-present.
       triggerGateRecheck();
+      navigation.goBack();
     }
   };
 
@@ -112,6 +117,7 @@ export default function NotificationsPermissionScreen() {
     } finally {
       setSubmitting(false);
       triggerGateRecheck();
+      navigation.goBack();
     }
   };
 

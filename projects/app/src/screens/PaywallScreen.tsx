@@ -8,6 +8,7 @@ import {
   useColorScheme,
   Linking,
 } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -237,24 +238,36 @@ export default function PaywallScreen() {
     businessAnnualPackage ||
     businessMonthlyPackage;
 
+  // GestureHandlerRootView wrap on every return path. The Paywall is
+  // presented as `presentation: "modal"` (iOS sheet) from RootNavigator,
+  // and react-native-screens hosts modal contents in a separate native
+  // window — outside the App.tsx root gesture context. Without a local
+  // gesture root, dismissing the sheet leaves the underlying SwipeDeck's
+  // pan/tap handlers in a stuck state (cards visible, swipes and taps
+  // dead). Per the react-native-gesture-handler docs, every modal screen
+  // needs its own root. The 350ms post-onboarding delay alone wasn't
+  // enough to dodge this — the gesture context isolation is what fixes it.
   if (loading) {
     return (
-      <SafeAreaView
-        style={{
-          flex: 1,
-          backgroundColor: theme.background,
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <ActivityIndicator size="large" color={colors.brand.traceRed} />
-      </SafeAreaView>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView
+          style={{
+            flex: 1,
+            backgroundColor: theme.background,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <ActivityIndicator size="large" color={colors.brand.traceRed} />
+        </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
   if (!hasAnyPackage) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={{
@@ -294,6 +307,7 @@ export default function PaywallScreen() {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+      </GestureHandlerRootView>
     );
   }
 
@@ -318,6 +332,7 @@ export default function PaywallScreen() {
   };
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
       {/* Close button */}
       <TouchableOpacity
@@ -819,5 +834,6 @@ export default function PaywallScreen() {
         })()}
       </View>
     </SafeAreaView>
+    </GestureHandlerRootView>
   );
 }

@@ -2,7 +2,7 @@ import React from "react";
 import { View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
-import { useDeviceNotificationGate } from "../hooks/useDeviceNotificationGate";
+import { useEnsurePushTokenRegistered } from "../hooks/useDeviceNotificationGate";
 import TraceLoader from "../components/TraceLoader";
 import type { RootStackParamList } from "./types";
 
@@ -23,20 +23,13 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
   const { user, profile, loading } = useAuth();
 
-  // Per-device gate for the soft prompt. On every authed launch this
-  // also re-syncs the device's push token to the userProfile if OS
-  // permission is already granted — so logging in on a new device
-  // automatically registers a push token without any user action.
+  // Re-sync this device's push token to the userProfile if OS permission
+  // is already granted — covers users who sign in on a new device after
+  // already going through the soft prompt elsewhere. Idempotent.
   const profileId = profile?.onboardingComplete ? profile.id : null;
-  const { resolved: gateResolved, shouldShowSoftPrompt } =
-    useDeviceNotificationGate(profileId);
+  useEnsurePushTokenRegistered(profileId);
 
-  // Block on the gate only after onboarding is done. Until then we
-  // don't need it (and triggering OS-permission reads pre-onboarding
-  // would be premature).
-  const blockingOnGate = !!user && !!profile?.onboardingComplete && !gateResolved;
-
-  if (loading || blockingOnGate) {
+  if (loading) {
     return (
       <View style={{ flex: 1 }}>
         <TraceLoader />
@@ -68,29 +61,32 @@ export default function RootNavigator() {
             options={{ presentation: "modal" }}
           />
         </>
-      ) : shouldShowSoftPrompt ? (
-        // Show the soft prompt for push notifications. Gating is
-        // per-device (OS permission state + an AsyncStorage dismissal
-        // flag), so a returning user signing in on a new device sees
-        // this even if they already went through it on another device.
-        <>
-          <Stack.Screen
-            name="NotificationsPermission"
-            component={NotificationsPermissionScreen}
-          />
-          <Stack.Screen
-            name="Diagnostics"
-            component={DiagnosticsScreen}
-            options={{ presentation: "modal" }}
-          />
-        </>
       ) : (
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />
+          {/* Paywall: `fullScreenModal` not `modal`. The iOS sheet-style
+              `modal` presentation hosts the screen in a separate native
+              window outside the App.tsx <GestureHandlerRootView>, and on
+              dismiss it leaves an invisible touch-blocking layer over the
+              underlying screen — symptom: "only the tab bar is tappable
+              after closing the paywall." A local GestureHandlerRootView
+              inside PaywallScreen didn't fix it. fullScreenModal pushes
+              the screen as a normal full-cover transition that tears
+              down cleanly on dismiss. */}
           <Stack.Screen
             name="Paywall"
             component={PaywallScreen}
-            options={{ presentation: "modal" }}
+            options={{ presentation: "fullScreenModal" }}
+          />
+          {/* Push soft prompt now fires after the user saves their first
+              deal — moment of demonstrated value, vs. the cold post-
+              onboarding ask that was converting at ~24%. Routing is
+              kicked off by useTriggerSoftPromptAfterFirstSave inside
+              MainTabs. */}
+          <Stack.Screen
+            name="NotificationsPermission"
+            component={NotificationsPermissionScreen}
+            options={{ presentation: "fullScreenModal" }}
           />
           <Stack.Screen
             name="PremiumWelcome"

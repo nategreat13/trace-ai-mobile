@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { fetchDeals, fetchPremiumDeals } from "../services/dealsApi";
 import { dealMatchesType } from "../lib/dealClassifier";
 import { weightedShuffle } from "../lib/dealScorer";
+import { logEvent } from "../lib/analytics";
 import { Deal, UserProfile } from "@trace/shared";
 
 
@@ -53,6 +54,17 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
 
       let apiDeals = await fetchDeals(airportCode);
       console.log("[useDealFetch] got", apiDeals.length, "deals");
+
+      if (apiDeals.length === 0) {
+        // API resolved but with no deals — the user lands on a blank
+        // deck and bounces. We want this distinguishable from a
+        // thrown error so we can tell "API broke" from "API is fine
+        // but returned nothing for this airport".
+        logEvent("deals_load_failed", {
+          reason: "empty_response",
+          airport: airportCode,
+        });
+      }
 
       // Filter by destination preference
       let filteredDeals = apiDeals;
@@ -157,6 +169,12 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       }
     } catch (error) {
       console.error("Failed to fetch deals:", error);
+      const message = error instanceof Error ? error.message : String(error);
+      logEvent("deals_load_failed", {
+        reason: "fetch_error",
+        airport: profile.homeAirport || "LAX",
+        error_message: message.slice(0, 200),
+      });
       setDeals([]);
     } finally {
       setLoading(false);
