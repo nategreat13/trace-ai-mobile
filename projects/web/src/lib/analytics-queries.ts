@@ -1133,10 +1133,25 @@ export async function getCohortData(
     counts[key] = (counts[key] ?? 0) + 1;
   });
 
-  // device -> cohort, via the signup_completed event (carries the new user's
-  // userId + the device_id). The device's guest events (landing_viewed) share
-  // that same stable device_id, so this attributes pre-signup activity to the
-  // cohort the device's user eventually joined on.
+  // device -> cohort. Two-pass derivation:
+  //
+  //   1. signup_completed events (carry the new user's userId + the
+  //      device_id). The device's guest events (landing_viewed) share
+  //      the same stable device_id, so this attributes pre-signup
+  //      activity to the cohort the device's user eventually joined on.
+  //
+  //   2. For devices NOT covered by (1) — guest-only installs that
+  //      never signed up — use the earliest event's `app_version` on
+  //      that device. Without this pass, a v1.3.2 cohort filter
+  //      silently drops every guest install (no signup → no cohort
+  //      key → fails the cohortDeviceIds check in getUniqueDeviceCount
+  //      and the guest stages of getFunnelCounts). That made "unique
+  //      installs" equal "users" under any version filter and hid the
+  //      install→signup drop-off the funnel is meant to show.
+  //
+  // Earliest event = closest to the device's "joined on" version (a
+  // later OTA may flip props.app_version, so we don't trust the most-
+  // recent one). Mirrors userProfiles.firstAppVersion semantics.
   const deviceVersion: Record<string, string> = {};
   const sigSnap = await colRef(env, "events")
     .where("name", "==", "signup_completed")
@@ -1149,6 +1164,31 @@ export async function getCohortData(
     const v = userVersion[uid];
     if (v) deviceVersion[did] = v;
   });
+
+  // Pass 2: derive cohort from earliest event for not-yet-mapped devices.
+  // Single scan over the events collection. We only read three fields so
+  // the .select() keeps the Firestore cost low. Devices already mapped
+  // via signup_completed are left alone (their user's firstAppVersion is
+  // the authoritative cohort key).
+  const earliestByDevice = new Map<string, { ts: number; version: string }>();
+  const evSnap = await colRef(env, "events")
+    .select("props.device_id", "props.app_version", "timestamp")
+    .get();
+  evSnap.forEach((doc) => {
+    const did = doc.get("props.device_id") as string | undefined;
+    const version = doc.get("props.app_version") as string | undefined;
+    if (!did || !version) return;
+    if (deviceVersion[did]) return; // signed-up devices keep their user's cohort
+    const ts =
+      (doc.get("timestamp") as FirebaseFirestore.Timestamp | undefined)
+        ?.toDate?.()
+        ?.getTime?.() ?? Number.POSITIVE_INFINITY;
+    const cur = earliestByDevice.get(did);
+    if (!cur || ts < cur.ts) earliestByDevice.set(did, { ts, version });
+  });
+  for (const [did, { version }] of earliestByDevice) {
+    deviceVersion[did] = version;
+  }
 
   const options = Object.entries(counts)
     .map(([key, count]) => ({
