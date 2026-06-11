@@ -16,6 +16,30 @@ function isInternationalDeal(deal: Deal): boolean | null {
   return null;
 }
 
+// How many "closer to home" (domestic) deals to guarantee at the very front
+// of a new deck, so a user's first cards are recognizable US destinations
+// instead of an obscure international city the weighted shuffle happened to
+// float to the top.
+const LEAD_WITH_NEARBY_COUNT = 2;
+
+/**
+ * Pull the first couple of confidently-domestic deals to the front of the
+ * deck. Skipped for users who explicitly chose international-only (we respect
+ * their choice). Deals whose origin is unknown (isInternationalDeal === null)
+ * are never used as the lead — only deals we're sure are domestic. The rest
+ * of the deck keeps its existing (weighted-shuffled) order.
+ */
+function leadWithNearby(deck: Deal[], destinationPreference?: string): Deal[] {
+  if (destinationPreference === "international") return deck;
+  const leadIdx: number[] = [];
+  for (let i = 0; i < deck.length && leadIdx.length < LEAD_WITH_NEARBY_COUNT; i++) {
+    if (isInternationalDeal(deck[i]) === false) leadIdx.push(i);
+  }
+  if (leadIdx.length === 0) return deck;
+  const picked = new Set(leadIdx);
+  return [...leadIdx.map((i) => deck[i]), ...deck.filter((_, i) => !picked.has(i))];
+}
+
 function dedupeByDestination(arr: Deal[]): Deal[] {
   const seen = new Set<string>();
   return arr.filter((d) => {
@@ -151,7 +175,14 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       // others didn't), one copy slipped through each bucket's individual
       // dedup pass. This catches those cross-bucket duplicates.
       const globalDeduped = dedupeByDestination(finalDeals);
-      const deckDeals = weightedShuffle(globalDeduped);
+      // Weighted-shuffle for variety, then guarantee the first couple of cards
+      // are "closer to home" so a new user isn't greeted by an unfamiliar
+      // international destination. Domestic-only decks are unaffected;
+      // international-only users are exempted inside leadWithNearby.
+      const deckDeals = leadWithNearby(
+        weightedShuffle(globalDeduped),
+        profile.destinationPreference
+      );
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 

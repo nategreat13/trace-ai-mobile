@@ -24,10 +24,14 @@ export default function TabNavigator() {
   const { profile } = useAuth();
   const isBusinessUser = profile?.subscriptionStatus === "business";
 
-  // Forced trial exposure: open the paywall once at the end of onboarding
-  // for users with no prior paywall view. The hook self-gates on the
-  // trial signal, premium status, and a per-user flag.
-  usePostOnboardingPaywall(true);
+  // Forced trial exposure DISABLED (v1.3.3 cohort): opening the paywall
+  // immediately after onboarding put the annual offer in front of users
+  // before they'd swiped a single deal — 100% saw it, but every purchase
+  // attempt was canceled at Apple's sheet and core swipe/save engagement
+  // collapsed (0 saves). Trial exposure now happens only after the user
+  // hits the 5-swipe daily limit (auto-opens the paywall in SwipeDeckScreen),
+  // i.e. after they've felt the value. Pass `true` to re-enable.
+  usePostOnboardingPaywall(false);
 
   // Push soft prompt fires after the user's first save (moment of
   // demonstrated value), not cold after onboarding.

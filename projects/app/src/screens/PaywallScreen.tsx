@@ -80,7 +80,11 @@ export default function PaywallScreen() {
   const hasBusiness = currentTier === "business";
 
   const [selected, setSelected] = useState<Tier>(hasPremium ? "business" : "premium");
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("annual");
+  // Default to MONTHLY (v1.3.3 cohort): the trial defaulted to annual, so
+  // Apple's sheet showed "$X/year" to users who'd just signed up — every
+  // purchase attempt was canceled there. A monthly trial shows a far smaller
+  // commitment ($X/month) and is the standard trial-conversion default.
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   useEffect(() => {
     logEvent("paywall_viewed", {
@@ -412,18 +416,22 @@ export default function PaywallScreen() {
                 >
                   Start your {trialLengthLabel} free trial
                 </Text>
-                <Text
-                  style={{
-                    fontSize: 12,
-                    color: theme.mutedForeground,
-                    marginTop: 2,
-                  }}
-                >
-                  Free for {trialDurationLabel}
-                  {priceString
-                    ? `, then ${priceString}/${periodSuffix}. Cancel anytime.`
-                    : ". Cancel anytime."}
-                </Text>
+                <View style={{ marginTop: 4, gap: 1 }}>
+                  {[
+                    `Free for ${trialDurationLabel}`,
+                    priceString ? `Then just ${priceString}/${periodSuffix}` : null,
+                    "Cancel anytime, no charge",
+                  ]
+                    .filter((line): line is string => Boolean(line))
+                    .map((line) => (
+                      <Text
+                        key={line}
+                        style={{ fontSize: 12, color: theme.mutedForeground }}
+                      >
+                        {`•  ${line}`}
+                      </Text>
+                    ))}
+                </View>
               </View>
             </View>
           </View>

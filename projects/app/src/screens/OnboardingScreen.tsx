@@ -58,9 +58,14 @@ export default function OnboardingScreen() {
     firstName: "",
     lastName: "",
     homeAirport: "",
-    destinationPreference: "both" as "domestic" | "international" | "both",
-    dealTypes: ["surprise"] as string[],
-    travelTimeframe: ["no_preference"] as string[],
+    // No pre-selection: each preference starts empty so the user makes a real
+    // choice. The per-step `canProceed` gates already require a selection, so
+    // empty defaults turn "passively accepted" into "actively chosen" — the
+    // v1.3.3 cohort showed the pre-checked catch-alls ("both"/"surprise"/
+    // "no_preference") were rarely removed, polluting the targeting signal.
+    destinationPreference: "" as "" | "domestic" | "international" | "both",
+    dealTypes: [] as string[],
+    travelTimeframe: [] as string[],
   });
 
   useEffect(() => {
@@ -75,7 +80,7 @@ export default function OnboardingScreen() {
         firstName: nameParts[0] || "",
         lastName: nameParts.slice(1).join(" ") || "",
         homeAirport: profile.homeAirport || "LAX",
-        destinationPreference: profile.destinationPreference || "both",
+        destinationPreference: profile.destinationPreference || "",
         dealTypes: profile.dealTypes || [],
         travelTimeframe: profile.travelTimeframe || [],
       }));
@@ -187,7 +192,10 @@ export default function OnboardingScreen() {
             ? capitalizeName(data.lastName)
             : undefined,
           homeAirport: data.homeAirport,
-          destinationPreference: data.destinationPreference,
+          // Non-empty by here — the destination step's `canProceed` gate
+          // blocks finishing onboarding until a choice is made.
+          destinationPreference:
+            data.destinationPreference as "domestic" | "international" | "both",
           dealTypes: data.dealTypes,
           travelTimeframe: data.travelTimeframe,
           travelPersonality: generatedPersonality,
