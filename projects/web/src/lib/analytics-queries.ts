@@ -461,6 +461,45 @@ export async function getUserCount(
   return n;
 }
 
+export type PlatformMix = {
+  ios: number;
+  android: number;
+  web: number;
+  unknown: number;
+  total: number;
+};
+
+/**
+ * Breakdown of userProfiles by firstPlatform (the OS the user signed up on).
+ * Honors the same exclusions and cohort population the rest of the
+ * dashboard uses so the card moves with the cohort filter.
+ */
+export async function getPlatformMix(
+  env: TraceEnv,
+  excluded?: ExcludedSets,
+  validUserIds?: Set<string>
+): Promise<PlatformMix> {
+  const snap = await colRef(env, "userProfiles")
+    .select("userId", "email", "firstPlatform")
+    .get();
+  const out: PlatformMix = { ios: 0, android: 0, web: 0, unknown: 0, total: 0 };
+  snap.forEach((doc) => {
+    const data = doc.data();
+    const uid = data.userId as string | undefined;
+    const email = (data.email as string | undefined)?.toLowerCase();
+    if (validUserIds && (!uid || !validUserIds.has(uid))) return;
+    if (uid && excluded?.userIds.has(uid)) return;
+    if (email && excluded?.emails.has(email)) return;
+    const platform = (data.firstPlatform as string | undefined)?.toLowerCase();
+    if (platform === "ios") out.ios++;
+    else if (platform === "android") out.android++;
+    else if (platform === "web") out.web++;
+    else out.unknown++;
+    out.total++;
+  });
+  return out;
+}
+
 /**
  * Distinct device_id values seen in the events collection, excluding
  * devices that have ever logged an event under an excluded user's UID

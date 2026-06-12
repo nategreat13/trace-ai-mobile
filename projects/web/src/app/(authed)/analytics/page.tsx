@@ -15,6 +15,7 @@ import {
   getSubscriptionLifecycle,
   getPurchaseFailuresByDay,
   getCohortData,
+  getPlatformMix,
   NO_VERSION_COHORT,
 } from "@/lib/analytics-queries";
 import {
@@ -107,6 +108,7 @@ export default async function AnalyticsPage() {
     loginCount,
     subscriptionLifecycle,
     purchaseFailuresByDay,
+    platformMix,
   ] = await Promise.all([
     getSubscriptionSummary().catch((e) => {
       console.error("[analytics] RC summary failed:", e);
@@ -133,6 +135,10 @@ export default async function AnalyticsPage() {
     getLoginCount(env, 30, excluded, populationUserIds).catch(() => 0),
     getSubscriptionLifecycle(env, 30, excluded, populationUserIds).catch(() => null),
     getPurchaseFailuresByDay(env, 30, excluded, populationUserIds).catch(() => []),
+    getPlatformMix(env, excluded, populationUserIds).catch((e) => {
+      console.error("[analytics] getPlatformMix failed:", e);
+      return { ios: 0, android: 0, web: 0, unknown: 0, total: 0 };
+    }),
   ]);
 
   return (
@@ -152,6 +158,7 @@ export default async function AnalyticsPage() {
       loginCount={loginCount}
       subscriptionLifecycle={subscriptionLifecycle}
       purchaseFailuresByDay={purchaseFailuresByDay}
+      platformMix={platformMix}
       excludedCount={excludedCount}
       cohortOptions={cohortData.options}
       selectedCohorts={selectedCohorts}

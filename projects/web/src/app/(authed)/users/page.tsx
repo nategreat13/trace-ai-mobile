@@ -28,13 +28,47 @@ function tierClass(status: string): string {
   }
 }
 
+function platformLabel(p: string | null): string {
+  switch ((p ?? "").toLowerCase()) {
+    case "ios":
+      return "iOS";
+    case "android":
+      return "Android";
+    case "web":
+      return "Web";
+    default:
+      return "—";
+  }
+}
+
+function platformClass(p: string | null): string {
+  switch ((p ?? "").toLowerCase()) {
+    case "ios":
+      return "bg-slate-100 text-slate-700";
+    case "android":
+      return "bg-emerald-50 text-emerald-700";
+    case "web":
+      return "bg-indigo-50 text-indigo-700";
+    default:
+      return "bg-gray-50 text-gray-400";
+  }
+}
+
+const PLATFORM_FILTERS: Array<{ key: string; label: string }> = [
+  { key: "", label: "All" },
+  { key: "ios", label: "iOS" },
+  { key: "android", label: "Android" },
+  { key: "web", label: "Web" },
+];
+
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; platform?: string }>;
 }) {
   const params = await searchParams;
   const search = params?.q?.trim() ?? "";
+  const platform = params?.platform?.trim().toLowerCase() ?? "";
   const env = await getAdminEnv();
 
   const [excluded, { rows, total }] = await Promise.all([
@@ -42,7 +76,7 @@ export default async function UsersPage({
       userIds: new Set<string>(),
       emails: new Set<string>(),
     })),
-    listUsers(env, { search, limit: 200 }),
+    listUsers(env, { search, platform: platform || undefined, limit: 200 }),
   ]);
 
   // Annotate excluded flag (listUsers received excluded but we recompute
@@ -75,13 +109,16 @@ export default async function UsersPage({
             placeholder="Search email, name, UID…"
             className="w-64 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 text-sm"
           />
+          {platform && (
+            <input type="hidden" name="platform" value={platform} />
+          )}
           <button
             type="submit"
             className="px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-lg"
           >
             Search
           </button>
-          {search && (
+          {(search || platform) && (
             <Link
               href="/users"
               className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
@@ -91,6 +128,31 @@ export default async function UsersPage({
           )}
         </form>
       </header>
+
+      <div className="mb-4 flex items-center gap-2 text-xs">
+        <span className="text-gray-500 mr-1">Platform:</span>
+        {PLATFORM_FILTERS.map((f) => {
+          const isActive = (platform || "") === f.key;
+          const qs = new URLSearchParams();
+          if (search) qs.set("q", search);
+          if (f.key) qs.set("platform", f.key);
+          const href = qs.toString() ? `/users?${qs.toString()}` : "/users";
+          return (
+            <Link
+              key={f.key || "all"}
+              href={href}
+              className={
+                "px-2.5 py-1 rounded-full border " +
+                (isActive
+                  ? "bg-rose-500 text-white border-rose-500"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50")
+              }
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {rows.length === 0 ? (
@@ -103,6 +165,7 @@ export default async function UsersPage({
               <tr>
                 <th className="px-6 py-3 text-left font-medium">User</th>
                 <th className="px-4 py-3 text-left font-medium">Tier</th>
+                <th className="px-4 py-3 text-left font-medium">Platform</th>
                 <th className="px-4 py-3 text-left font-medium">Home</th>
                 <th className="px-4 py-3 text-right font-medium">LTV</th>
                 <th className="px-4 py-3 text-right font-medium">Created</th>
@@ -146,6 +209,16 @@ export default async function UsersPage({
                       }
                     >
                       {row.subscriptionStatus}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={
+                        "inline-block px-2 py-0.5 rounded text-xs font-semibold " +
+                        platformClass(row.firstPlatform)
+                      }
+                    >
+                      {platformLabel(row.firstPlatform)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-700 font-mono text-xs">

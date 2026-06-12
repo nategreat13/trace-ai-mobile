@@ -402,7 +402,7 @@ export default async function UserDetailPage({
         {/* Cohort metadata */}
         <Card title="Cohort">
           <Row label="First seen" value={formatDate(user.firstSeenAt, true)} />
-          <Row label="First platform" value={user.firstPlatform ?? "—"} />
+          <Row label="Platform" value={user.firstPlatform ?? "—"} />
           <Row label="First app version" value={user.firstAppVersion ?? "—"} />
           <Row label="Country" value={user.country ?? "—"} />
           <Row label="Home airport" value={user.homeAirport ?? "—"} />

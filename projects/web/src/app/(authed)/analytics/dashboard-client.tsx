@@ -84,6 +84,13 @@ type RetentionRow = {
   d30: number;
 };
 type AdSpendRow = { platform: string; month: string; spendCents: number };
+type PlatformMixData = {
+  ios: number;
+  android: number;
+  web: number;
+  unknown: number;
+  total: number;
+};
 
 interface Props {
   summary: SubscriptionSummary | null;
@@ -101,6 +108,7 @@ interface Props {
   loginCount: number;
   subscriptionLifecycle: SubscriptionLifecycleData | null;
   purchaseFailuresByDay: FailureDayRow[];
+  platformMix: PlatformMixData;
   excludedCount: number;
   cohortOptions: Array<{ key: string; label: string; count: number }>;
   selectedCohorts: string[] | null;
@@ -219,6 +227,7 @@ export default function AnalyticsDashboardClient({
   loginCount,
   subscriptionLifecycle,
   purchaseFailuresByDay,
+  platformMix,
   excludedCount,
   cohortOptions,
   selectedCohorts,
@@ -287,6 +296,74 @@ export default function AnalyticsDashboardClient({
               sub={`${summary?.trialStartedLast30Days ?? 0} trials started`}
             />
           </div>
+        </Section>
+
+        {/* Platform mix — firstPlatform (signup-time) split */}
+        <Section title="Platform mix">
+          {(() => {
+            const total = platformMix.total;
+            const pct = (n: number) =>
+              total > 0 ? `${Math.round((n / total) * 100)}%` : "—";
+            return (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <StatCard
+                    label="iOS"
+                    value={platformMix.ios.toLocaleString()}
+                    sub={pct(platformMix.ios) + " of signups"}
+                  />
+                  <StatCard
+                    label="Android"
+                    value={platformMix.android.toLocaleString()}
+                    sub={pct(platformMix.android) + " of signups"}
+                  />
+                  <StatCard
+                    label="Web"
+                    value={platformMix.web.toLocaleString()}
+                    sub={pct(platformMix.web) + " of signups"}
+                  />
+                  <StatCard
+                    label="Unknown"
+                    value={platformMix.unknown.toLocaleString()}
+                    sub={
+                      platformMix.unknown > 0
+                        ? "Older users — no platform recorded"
+                        : "—"
+                    }
+                  />
+                </div>
+                {total > 0 && (
+                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-gray-100 flex">
+                    <div
+                      className="bg-slate-500"
+                      style={{ width: `${(platformMix.ios / total) * 100}%` }}
+                      title={`iOS · ${pct(platformMix.ios)}`}
+                    />
+                    <div
+                      className="bg-emerald-500"
+                      style={{ width: `${(platformMix.android / total) * 100}%` }}
+                      title={`Android · ${pct(platformMix.android)}`}
+                    />
+                    <div
+                      className="bg-indigo-500"
+                      style={{ width: `${(platformMix.web / total) * 100}%` }}
+                      title={`Web · ${pct(platformMix.web)}`}
+                    />
+                    <div
+                      className="bg-gray-300"
+                      style={{ width: `${(platformMix.unknown / total) * 100}%` }}
+                      title={`Unknown · ${pct(platformMix.unknown)}`}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  Based on the platform a user signed up on (firstPlatform). A
+                  user who later switched devices still counts under their
+                  original platform.
+                </p>
+              </>
+            );
+          })()}
         </Section>
 
         {/* Subscription mix */}

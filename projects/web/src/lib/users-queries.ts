@@ -35,10 +35,13 @@ export async function listUsers(
     search?: string;
     limit?: number;
     excluded?: ExcludedSets;
+    /** Filter to users whose firstPlatform matches. "ios" | "android" | "web". */
+    platform?: string;
   } = {}
 ): Promise<{ rows: UserRow[]; total: number }> {
   const limit = opts.limit ?? 200;
   const search = opts.search?.trim().toLowerCase();
+  const platform = opts.platform?.trim().toLowerCase();
 
   const snap = await colRef(env, "userProfiles")
     .select(
@@ -88,7 +91,7 @@ export async function listUsers(
     });
   });
 
-  const filtered = search
+  const searched = search
     ? all.filter(
         (r) =>
           r.email.toLowerCase().includes(search) ||
@@ -97,6 +100,10 @@ export async function listUsers(
           r.id.toLowerCase().includes(search)
       )
     : all;
+
+  const filtered = platform
+    ? searched.filter((r) => (r.firstPlatform ?? "").toLowerCase() === platform)
+    : searched;
 
   // Sort by createdAt desc (newest first)
   filtered.sort((a, b) => {
