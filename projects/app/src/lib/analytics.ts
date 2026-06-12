@@ -110,6 +110,9 @@ export type AnalyticsEventName =
   | "push_token_register_failed"
   | "notification_received"
   | "notification_opened"
+  // Daily-swipe cap return hook (client-side)
+  | "daily_limit_remind_tapped"
+  | "swipe_reset_reminder_scheduled"
   // Deep linking — diagnostics for the cold-launch routing flow.
   // received: a URL came in via Linking.getInitialURL or addEventListener.
   // routed: the URL was successfully dispatched to a screen.

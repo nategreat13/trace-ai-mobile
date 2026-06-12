@@ -378,10 +378,24 @@ export default function PaywallScreen() {
               lineHeight: 32,
             }}
           >
-            {selected === "business"
+            {hasFreeTrial
+              ? `Try Trace ${selected === "business" ? "Business" : "Premium"} free`
+              : selected === "business"
               ? "Fly business. Pay economy."
               : "Unlock the full Trace experience"}
           </Text>
+          {hasFreeTrial && (
+            <Text
+              style={{
+                fontSize: 14,
+                color: theme.mutedForeground,
+                marginTop: 8,
+                lineHeight: 19,
+              }}
+            >
+              {`Unlimited swipes, saves, and every deal — free for ${trialDurationLabel}.`}
+            </Text>
+          )}
         </View>
 
         {/* Free-trial callout — prominent, above the fold */}

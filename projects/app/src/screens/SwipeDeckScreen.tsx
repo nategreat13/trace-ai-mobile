@@ -43,6 +43,7 @@ import {
   ALL_BADGES,
 } from "../lib/constants";
 import { getItem, setItem } from "../lib/storage";
+import { scheduleSwipeResetReminder, registerPushToken } from "../services/push";
 import SwipeCard from "../components/swipe/SwipeCard";
 import SwipeTutorial from "../components/swipe/SwipeTutorial";
 import HowToSwipeModal from "../components/swipe/HowToSwipeModal";
@@ -117,16 +118,34 @@ function DailyLimitView({
   theme,
   scheme,
   maxSwipes,
+  dealsWaiting,
+  homeAirport,
   onUpgrade,
   onExplore,
+  onRemindMe,
 }: {
   theme: typeof colors.light | typeof colors.dark;
   scheme: "light" | "dark" | null | undefined;
   maxSwipes: number;
+  dealsWaiting: number;
+  homeAirport?: string | null;
   onUpgrade: () => void;
   onExplore: () => void;
+  onRemindMe: () => Promise<boolean>;
 }) {
   const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
+  // Return-hook state: tapping "remind me" requests notification permission
+  // and schedules a local reset reminder.
+  const [remindState, setRemindState] = React.useState<
+    "idle" | "working" | "done" | "denied"
+  >("idle");
+  const handleRemind = async () => {
+    if (remindState === "working" || remindState === "done") return;
+    setRemindState("working");
+    const ok = await onRemindMe();
+    setRemindState(ok ? "done" : "denied");
+  };
+  const fromAirport = homeAirport ? ` from ${homeAirport}` : "";
   const [timeLeft, setTimeLeft] = React.useState(() => {
     const now = new Date();
     const midnight = new Date(now);
@@ -184,9 +203,13 @@ function DailyLimitView({
               : "Out of swipes for today"}
           </Text>
           <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 18 }}>
-            {trialAvailable
-              ? `Unlimited swipes & saves. Cancel anytime.`
-              : `Free members get ${maxSwipes} swipes/day`}
+            {dealsWaiting > 0
+              ? trialAvailable
+                ? `${dealsWaiting} more deals${fromAirport} waiting — unlock them all now`
+                : `${dealsWaiting} more deals${fromAirport} waiting`
+              : trialAvailable
+                ? `Unlimited swipes & saves. Cancel anytime.`
+                : `Free members get ${maxSwipes} swipes/day`}
           </Text>
         </View>
 
@@ -208,26 +231,51 @@ function DailyLimitView({
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Secondary */}
+        {/* Return hook — for users who won't start a trial, give them a
+            concrete reason (and reminder) to come back tomorrow. Requests
+            push permission and schedules a local reset reminder; also grows
+            our push channel so server re-engagement can reach them. */}
         <TouchableOpacity
-          onPress={onExplore}
+          onPress={handleRemind}
+          disabled={remindState === "working" || remindState === "done"}
+          activeOpacity={0.85}
           style={{
-            backgroundColor: scheme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
+            backgroundColor:
+              remindState === "done"
+                ? scheme === "dark"
+                  ? "rgba(34,197,94,0.15)"
+                  : "rgba(34,197,94,0.10)"
+                : scheme === "dark"
+                ? "rgba(255,255,255,0.08)"
+                : "rgba(0,0,0,0.05)",
             borderRadius: 14,
             paddingVertical: 13,
             alignItems: "center",
             borderWidth: 1,
-            borderColor: theme.border,
-            marginBottom: 12,
+            borderColor:
+              remindState === "done" ? "rgba(34,197,94,0.45)" : theme.border,
+            marginBottom: 10,
           }}
         >
-          <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "600" }}>Browse Explore Instead</Text>
+          <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "700" }}>
+            {remindState === "done"
+              ? "✓ We'll remind you when they reset"
+              : remindState === "working"
+              ? "Setting reminder…"
+              : remindState === "denied"
+              ? "Enable notifications to get reminded"
+              : "🔔 Remind me when my swipes reset"}
+          </Text>
         </TouchableOpacity>
 
-        {/* Reset time — demoted to small print so it reads as a fallback,
-            not as "this is your answer, see you tomorrow". */}
+        {/* Tertiary */}
+        <TouchableOpacity onPress={onExplore} style={{ paddingVertical: 8, alignItems: "center", marginBottom: 4 }}>
+          <Text style={{ color: theme.mutedForeground, fontSize: 13, fontWeight: "600" }}>Browse Explore instead</Text>
+        </TouchableOpacity>
+
+        {/* Reset time — small print; the reminder above fires at this moment. */}
         <Text style={{ fontSize: 11, color: theme.mutedForeground, textAlign: "center" }}>
-          Or wait — your free swipes reset in {resetsInLabel}
+          Your free swipes reset in {resetsInLabel}
         </Text>
       </View>
     </Animated.View>
@@ -545,9 +593,11 @@ export default function SwipeDeckScreen() {
 
       if (!user) return;
 
-      // Track session swipe count for AI learning modal
+      // Track session swipe count for AI learning modal. Fire on the 4th
+      // swipe (not the 5th) so it doesn't collide with the daily-limit
+      // paywall, which auto-opens the instant the 5th swipe exhausts the cap.
       sessionSwipeCount.current += 1;
-      if (sessionSwipeCount.current === 5 && !profile.aiLearningShown) {
+      if (sessionSwipeCount.current === 4 && !profile.aiLearningShown) {
         setShowAILearning(true);
       }
 
@@ -789,6 +839,19 @@ export default function SwipeDeckScreen() {
         )}
       </View>
 
+      {/* Freshness / abundance signal — the count is how many deals are left
+          in the current deck (airport + filter), so it ticks down as the
+          user swipes and reinforces there's more to come back for. */}
+      {deckPhase === "swiping" && visibleDeals.length - currentIndex > 0 && (
+        <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
+          <Text style={{ fontSize: 11, fontWeight: "700", color: theme.mutedForeground }}>
+            {`✨ ${visibleDeals.length - currentIndex} ${
+              visibleDeals.length - currentIndex === 1 ? "deal" : "deals"
+            } left${profile?.homeAirport ? ` from ${profile.homeAirport}` : ""}`}
+          </Text>
+        </View>
+      )}
+
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
         <View
@@ -919,8 +982,25 @@ export default function SwipeDeckScreen() {
                 theme={theme}
                 scheme={scheme}
                 maxSwipes={MAX_DAILY_SWIPES}
+                dealsWaiting={Math.max(0, visibleDeals.length - currentIndex)}
+                homeAirport={profile?.homeAirport}
                 onUpgrade={() => navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit" })}
                 onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
+                onRemindMe={async () => {
+                  logEvent("daily_limit_remind_tapped", {});
+                  const status = await scheduleSwipeResetReminder({
+                    homeAirport: profile?.homeAirport,
+                    dealsWaiting: Math.max(0, visibleDeals.length - currentIndex),
+                  });
+                  if (status === "granted") {
+                    updateProfile({
+                      notificationsEnabled: true,
+                      notificationPermissionAsked: true,
+                    }).catch(() => {});
+                    if (profile?.id) registerPushToken(profile.id).catch(() => {});
+                  }
+                  return status === "granted";
+                }}
               />
             )}
             {deckMode === "business" && (
