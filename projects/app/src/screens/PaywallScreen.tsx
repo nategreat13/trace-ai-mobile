@@ -354,9 +354,9 @@ export default function PaywallScreen() {
         <X color={theme.foreground} size={20} />
       </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 140 }} scrollEnabled={false}>
         {/* Compact header */}
-        <View style={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 20 }}>
+        <View style={{ paddingHorizontal: 24, paddingTop: 56, paddingBottom: 20 }}>
           <Text style={{ fontSize: 14, fontWeight: "700", color: accent, marginBottom: 6 }}>
             {heroContent.eyebrow}
           </Text>
