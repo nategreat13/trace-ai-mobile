@@ -31,7 +31,7 @@ export interface UserProfile {
   dealHunterLevel: number;
   badges: string[];
   dailySwipesToday: number;
-  dailySwipeDate: string;
+  dailySwipeWindowStart: string;
   travelPersonality: string;
   onboardingComplete: boolean;
   howToSwipeShown: boolean;

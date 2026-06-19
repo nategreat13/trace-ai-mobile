@@ -46,6 +46,7 @@ import { getItem, setItem } from "../lib/storage";
 import { scheduleSwipeResetReminder, registerPushToken } from "../services/push";
 import SwipeCard from "../components/swipe/SwipeCard";
 import SwipeTutorial from "../components/swipe/SwipeTutorial";
+import DashboardTooltip from "../components/swipe/DashboardTooltip";
 import HowToSwipeModal from "../components/swipe/HowToSwipeModal";
 import AILearningModal from "../components/swipe/AILearningModal";
 import BadgeUnlockNotification from "../components/BadgeUnlockNotification";
@@ -120,6 +121,7 @@ function DailyLimitView({
   maxSwipes,
   dealsWaiting,
   homeAirport,
+  windowStart,
   onUpgrade,
   onExplore,
   onRemindMe,
@@ -129,6 +131,7 @@ function DailyLimitView({
   maxSwipes: number;
   dealsWaiting: number;
   homeAirport?: string | null;
+  windowStart?: string | null;
   onUpgrade: () => void;
   onExplore: () => void;
   onRemindMe: () => Promise<boolean>;
@@ -146,22 +149,19 @@ function DailyLimitView({
     setRemindState(ok ? "done" : "denied");
   };
   const fromAirport = homeAirport ? ` from ${homeAirport}` : "";
-  const [timeLeft, setTimeLeft] = React.useState(() => {
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000));
-  });
+  const getSecondsLeft = React.useCallback(() => {
+    const resetAt = windowStart
+      ? new Date(windowStart).getTime() + 24 * 60 * 60 * 1000
+      : Date.now() + 24 * 60 * 60 * 1000;
+    return Math.max(0, Math.floor((resetAt - Date.now()) / 1000));
+  }, [windowStart]);
+
+  const [timeLeft, setTimeLeft] = React.useState(getSecondsLeft);
 
   React.useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      const midnight = new Date(now);
-      midnight.setHours(24, 0, 0, 0);
-      setTimeLeft(Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 1000)));
-    }, 1000);
+    const timer = setInterval(() => setTimeLeft(getSecondsLeft()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [getSecondsLeft]);
 
   const hours = Math.floor(timeLeft / 3600);
   const minutes = Math.floor((timeLeft % 3600) / 60);
@@ -329,6 +329,9 @@ export default function SwipeDeckScreen() {
   // Track total swipes this session for AI learning modal
   const sessionSwipeCount = useRef(0);
 
+  // Dashboard tooltip — shown once after user's first-ever save
+  const [showDashboardTooltip, setShowDashboardTooltip] = useState(false);
+
   // Fire `deck_rendered` exactly once per mount, the first time we have
   // at least one card actually visible. Closes the v1.3.2 blind spot on
   // why 38% of users finished onboarding but never swiped — paired with
@@ -416,12 +419,17 @@ export default function SwipeDeckScreen() {
     if (!profile || !user) return;
     const init = async () => {
       const today = new Date().toISOString().split("T")[0];
+      const now = Date.now();
+      const windowStart = profile.dailySwipeWindowStart
+        ? new Date(profile.dailySwipeWindowStart).getTime()
+        : 0;
+      const windowExpired = now - windowStart >= 24 * 60 * 60 * 1000;
       let dailySwipes = profile.dailySwipesToday || 0;
-      if (profile.dailySwipeDate !== today) {
+      if (windowExpired) {
         dailySwipes = 0;
         await updateProfile({
           dailySwipesToday: 0,
-          dailySwipeDate: today,
+          dailySwipeWindowStart: new Date(now).toISOString(),
         });
       }
       setSwipesLeft(isPremium ? UNLIMITED_SWIPES : MAX_DAILY_SWIPES - dailySwipes);
@@ -659,12 +667,19 @@ export default function SwipeDeckScreen() {
         swipeCount: newSwipeCount,
         dailySwipesToday: newDailySwipes,
       };
+      // Stamp window start on the first swipe of a new window (so the 24h clock starts now)
+      if (newDailySwipes === 1) {
+        updates.dailySwipeWindowStart = new Date().toISOString();
+      }
 
       // First-save stamp — gates the push soft prompt (see
       // useTriggerSoftPromptAfterFirstSave). Only stamp once; subsequent
       // saves leave the original timestamp alone.
       if (normalizedAction === "right" && !profile.firstSaveAt) {
         updates.firstSaveAt = new Date();
+        // Show the one-time tooltip pointing at the Dashboard tab
+        setShowDashboardTooltip(true);
+        setTimeout(() => setShowDashboardTooltip(false), 4000);
       }
 
       // Level up every 25 swipes
@@ -839,18 +854,29 @@ export default function SwipeDeckScreen() {
         )}
       </View>
 
-      {/* Freshness / abundance signal — the count is how many deals are left
-          in the current deck (airport + filter), so it ticks down as the
-          user swipes and reinforces there's more to come back for. */}
-      {deckPhase === "swiping" && visibleDeals.length - currentIndex > 0 && (
-        <View style={{ alignItems: "center", paddingTop: 6, paddingBottom: 2 }}>
-          <Text style={{ fontSize: 11, fontWeight: "700", color: theme.mutedForeground }}>
-            {`✨ ${visibleDeals.length - currentIndex} ${
-              visibleDeals.length - currentIndex === 1 ? "deal" : "deals"
-            } left${profile?.homeAirport ? ` from ${profile.homeAirport}` : ""}`}
-          </Text>
-        </View>
-      )}
+
+      {/* Search destination chip */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate("MainTabs", { screen: "Explore" })}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          alignSelf: "center",
+          marginTop: 8,
+          backgroundColor: theme.muted,
+          borderRadius: 999,
+          paddingHorizontal: 14,
+          paddingVertical: 7,
+          borderWidth: 1,
+          borderColor: theme.border,
+        }}
+      >
+        <Text style={{ fontSize: 13 }}>🔍</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: theme.mutedForeground }}>
+          Search a destination
+        </Text>
+      </TouchableOpacity>
 
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
@@ -984,6 +1010,7 @@ export default function SwipeDeckScreen() {
                 maxSwipes={MAX_DAILY_SWIPES}
                 dealsWaiting={Math.max(0, visibleDeals.length - currentIndex)}
                 homeAirport={profile?.homeAirport}
+                windowStart={profile?.dailySwipeWindowStart}
                 onUpgrade={() => navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit" })}
                 onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
                 onRemindMe={async () => {
@@ -1239,6 +1266,13 @@ export default function SwipeDeckScreen() {
           }}
         />
       )}
+
+      {/* First-save tooltip pointing at the Dashboard tab */}
+      <DashboardTooltip
+        visible={showDashboardTooltip}
+        tabCount={isBusinessMember ? 4 : 5}
+        dashboardTabIndex={2}
+      />
 
     </SafeAreaView>
   );

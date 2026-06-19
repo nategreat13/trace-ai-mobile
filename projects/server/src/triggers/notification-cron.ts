@@ -17,10 +17,14 @@ const DEALS_API_KEY = process.env.DEALS_API_KEY || "web-api-key";
 
 type RawDeal = {
   discount_pct?: number;
+  percentOff?: number;
   destination?: string;
   price?: number;
+  dealPriceUSD?: number;
   domestic_or_international?: string;
+  domesticOrInternational?: string;
   deal_type?: string | null;
+  type?: string | null;
 };
 
 /**
@@ -30,9 +34,9 @@ type RawDeal = {
 function classifyDeal(deal: RawDeal): string[] {
   const types = new Set<string>();
   const dest = (deal.destination || "").toLowerCase();
-  const price = deal.price || 0;
-  const discount = deal.discount_pct || 0;
-  const apiType = (deal.deal_type || "").toLowerCase();
+  const price = deal.dealPriceUSD ?? deal.price ?? 0;
+  const discount = deal.percentOff ?? deal.discount_pct ?? 0;
+  const apiType = (deal.type ?? deal.deal_type ?? "").toLowerCase();
 
   if (apiType) types.add(apiType);
   if (price > 0 && price <= 350) types.add("budget");
@@ -62,7 +66,7 @@ function pickDealForUser(
   const filtered = deals.filter((d) => {
     // Domestic / international filter
     if (destinationPreference !== "both") {
-      const isdom = (d.domestic_or_international ?? "").toLowerCase() === "domestic";
+      const isdom = (d.domesticOrInternational ?? d.domestic_or_international ?? "").toLowerCase() === "domestic";
       if (destinationPreference === "domestic" && !isdom) return false;
       if (destinationPreference === "international" && isdom) return false;
     }
@@ -73,7 +77,7 @@ function pickDealForUser(
   });
 
   if (filtered.length === 0) return null;
-  return filtered.reduce((a, b) => (a.discount_pct ?? 0) >= (b.discount_pct ?? 0) ? a : b);
+  return filtered.reduce((a, b) => (a.percentOff ?? a.discount_pct ?? 0) >= (b.percentOff ?? b.discount_pct ?? 0) ? a : b);
 }
 
 /**
@@ -403,7 +407,7 @@ async function runDailyNotifications() {
             const allDeals: RawDeal[] =
               Array.isArray(raw) ? raw : ((raw as Record<string, unknown>).deals as RawDeal[] ?? []);
 
-            const hotDeals = allDeals.filter((d) => (d.discount_pct ?? 0) >= 60);
+            const hotDeals = allDeals.filter((d) => (d.percentOff ?? d.discount_pct ?? 0) >= 60);
             if (hotDeals.length === 0) continue;
 
             for (const user of users) {
@@ -430,9 +434,9 @@ async function runDailyNotifications() {
               await cacheRef.set({ sentLog });
 
               await sendForTemplate(user.userId, "hot_deal_alert", {
-                discount: Math.round(best.discount_pct ?? 60),
+                discount: Math.round(best.percentOff ?? best.discount_pct ?? 60),
                 destination: best.destination ?? airport,
-                price: best.price ?? 0,
+                price: best.dealPriceUSD ?? best.price ?? 0,
                 homeAirport: airport,
               }, user.prefs);
               sent++;
@@ -649,7 +653,7 @@ async function runDailyNotifications() {
 
       if (!alertsSnap.empty) {
         type AlertRecord = { id: string; destination: string; month: string | null };
-        type DealRecord = { destination?: string; price?: number; discount_pct?: number; travel_window?: string };
+        type DealRecord = { destination?: string; dealPriceUSD?: number; price?: number; percentOff?: number; discount_pct?: number; travel_window?: string; dateString?: string; monthType?: string };
 
         // Group active alerts by userId.
         const alertsByUser = new Map<string, AlertRecord[]>();
@@ -708,14 +712,15 @@ async function runDailyNotifications() {
               const destMatch = dealDest.includes(alertDest) || alertDest.includes(dealDest);
               if (!destMatch) return false;
               if (!alert.month) return true;
-              return (d.travel_window ?? "").toLowerCase().includes(alert.month.toLowerCase());
+              const travelWindow = d.dateString ?? d.monthType ?? d.travel_window ?? "";
+              return travelWindow.toLowerCase().includes(alert.month.toLowerCase());
             });
             if (!match) continue;
 
             await sendForTemplate(userId, "deal_alert_match", {
               destination: alert.destination,
-              price: match.price ?? 0,
-              discount: Math.round(match.discount_pct ?? 0),
+              price: match.dealPriceUSD ?? match.price ?? 0,
+              discount: Math.round(match.percentOff ?? match.discount_pct ?? 0),
             }, profile.notificationPreferences);
             // Mark matched so this alert never fires again.
             await colRef("dealAlerts").doc(alert.id).update({ status: "matched" });

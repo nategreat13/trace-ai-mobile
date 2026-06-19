@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import { getEnv } from "./env";
 
-export const MAX_DAILY_SWIPES = 5;
+export const MAX_DAILY_SWIPES = 8;
 export const MAX_SAVES = 5;
 export const UNLIMITED_SWIPES = 999999;
 
@@ -80,17 +80,17 @@ const US_STATES = [
 
 export const ALL_BADGES: Badge[] = [
   {
-    id: "first_swipe",
-    emoji: "\u{1F446}",
-    name: "First Swipe",
-    desc: "Started the journey",
-    requirement: (p) => (p.swipeCount || 0) >= 1,
+    id: "first_5_swipes",
+    emoji: "✈️",
+    name: "First 5 Swipes",
+    desc: "You're officially a deal hunter",
+    requirement: (p) => (p.swipeCount || 0) >= 5,
   },
   {
     id: "international",
     emoji: "\u{1F30D}",
     name: "Globe Trotter",
-    desc: "Swipe on 3 international deals",
+    desc: "Swipe on 5 international deals",
     requirement: (_, swipes) => {
       const intlSwipes = swipes.filter((s: any) => {
         if (s.domesticOrInternational) {
@@ -106,7 +106,7 @@ export const ALL_BADGES: Badge[] = [
         }
         return false;
       });
-      return intlSwipes.length >= 3;
+      return intlSwipes.length >= 5;
     },
   },
   {

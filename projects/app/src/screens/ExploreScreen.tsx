@@ -636,6 +636,10 @@ export default function ExploreScreen() {
               onChangeText={(val) => { setSearchTerm(val); setPendingAlertDest(null); }}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              autoCorrect={false}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
               style={{ flex: 1, paddingVertical: 12, fontSize: 14, color: theme.foreground }}
             />
             {searchTerm.length > 0 && (
@@ -681,7 +685,7 @@ export default function ExploreScreen() {
             .filter((dest) => dest.toLowerCase().includes(q));
 
           // Build unified suggestion list: airport entries first, then pure deal dest strings not already covered
-          type Suggestion = { label: string; sub?: string; isAirport: boolean; isHome: boolean };
+          type Suggestion = { label: string; sub?: string; code?: string; isAirport: boolean; isHome: boolean };
           const seen = new Set<string>();
           const suggestions: Suggestion[] = [];
 
@@ -689,7 +693,7 @@ export default function ExploreScreen() {
             const label = `${a.city}, ${a.state}`;
             if (!seen.has(label)) {
               seen.add(label);
-              suggestions.push({ label, sub: `${a.code} · ${a.name.split(" ").slice(0, 3).join(" ")}`, isAirport: true, isHome: a.code === homeCode });
+              suggestions.push({ label, sub: `${a.code} · ${a.name.split(" ").slice(0, 3).join(" ")}`, code: a.code, isAirport: true, isHome: a.code === homeCode });
             }
           });
 
@@ -725,7 +729,7 @@ export default function ExploreScreen() {
               {visible.map((s, index) => (
                 <TouchableOpacity
                   key={s.label}
-                  onPress={() => { setSearchTerm(s.label); setSearchFocused(false); setPendingAlertDest({ label: s.label }); }}
+                  onPress={() => { setSearchTerm(s.label); setSearchFocused(false); setPendingAlertDest({ label: s.label, code: s.code }); }}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
@@ -963,7 +967,7 @@ export default function ExploreScreen() {
                   >
                     <BellRing size={16} color="#fff" />
                     <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-                      {isPremium ? `Alert me for ${pendingAlertDest.label}` : "Upgrade to get alerts"}
+                      {isPremium ? `Alert me for ${pendingAlertDest.label}` : `Upgrade to get alerts${pendingAlertDest.code ? ` · ${pendingAlertDest.code}` : ""}`}
                     </Text>
                   </TouchableOpacity>
                 </LinearGradient>

@@ -207,7 +207,7 @@ export default function OnboardingScreen() {
           dealHunterLevel: 1,
           badges: [],
           dailySwipesToday: 0,
-          dailySwipeDate: new Date().toISOString().split("T")[0],
+          dailySwipeWindowStart: new Date().toISOString(),
           howToSwipeShown: false,
           exploreTutorialShown: false,
           dashboardTutorialShown: false,

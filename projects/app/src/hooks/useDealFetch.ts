@@ -16,28 +16,23 @@ function isInternationalDeal(deal: Deal): boolean | null {
   return null;
 }
 
-// How many "closer to home" (domestic) deals to guarantee at the very front
-// of a new deck, so a user's first cards are recognizable US destinations
-// instead of an obscure international city the weighted shuffle happened to
-// float to the top.
-const LEAD_WITH_NEARBY_COUNT = 2;
-
 /**
- * Pull the first couple of confidently-domestic deals to the front of the
- * deck. Skipped for users who explicitly chose international-only (we respect
- * their choice). Deals whose origin is unknown (isInternationalDeal === null)
- * are never used as the lead — only deals we're sure are domestic. The rest
- * of the deck keeps its existing (weighted-shuffled) order.
+ * Pulls 2 randomly-selected domestic deals to the front, chosen from the
+ * top half by discount so they're always decent but vary each session.
+ * Skipped for international-only users.
  */
-function leadWithNearby(deck: Deal[], destinationPreference?: string): Deal[] {
+function leadWithTopDomestic(deck: Deal[], destinationPreference?: string): Deal[] {
   if (destinationPreference === "international") return deck;
-  const leadIdx: number[] = [];
-  for (let i = 0; i < deck.length && leadIdx.length < LEAD_WITH_NEARBY_COUNT; i++) {
-    if (isInternationalDeal(deck[i]) === false) leadIdx.push(i);
-  }
-  if (leadIdx.length === 0) return deck;
-  const picked = new Set(leadIdx);
-  return [...leadIdx.map((i) => deck[i]), ...deck.filter((_, i) => !picked.has(i))];
+  const domestic = deck
+    .filter((d) => isInternationalDeal(d) === false)
+    .sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0));
+  if (domestic.length === 0) return deck;
+  // Pick randomly from the top half so the first cards vary each session
+  const pool = domestic.slice(0, Math.max(2, Math.ceil(domestic.length / 2)));
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  const picked = shuffled.slice(0, 2);
+  const pickedIds = new Set(picked.map((d) => d.id));
+  return [...picked, ...deck.filter((d) => !pickedIds.has(d.id))];
 }
 
 function dedupeByDestination(arr: Deal[]): Deal[] {
@@ -179,7 +174,7 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       // are "closer to home" so a new user isn't greeted by an unfamiliar
       // international destination. Domestic-only decks are unaffected;
       // international-only users are exempted inside leadWithNearby.
-      const deckDeals = leadWithNearby(
+      const deckDeals = leadWithTopDomestic(
         weightedShuffle(globalDeduped),
         profile.destinationPreference
       );

@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { X, Zap, TrendingDown, Clock, Users, Crown, Briefcase, Sparkles } from "lucide-react-native";
+import { X, Zap, TrendingDown, Bell, Users, Crown, Clock, Sparkles } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -32,7 +32,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const PRIVACY_URL = "https://subscribe.tracetravel.co/privacy";
 const TERMS_URL = "https://subscribe.tracetravel.co/terms";
 
-type Tier = "premium" | "business";
 type BillingPeriod = "annual" | "monthly";
 
 /**
@@ -57,6 +56,8 @@ export default function PaywallScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<RouteProp<RootStackParamList, "Paywall">>();
   const entryPoint = route.params?.entryPoint ?? "unknown";
+  const tierParam = route.params?.tier ?? "premium";
+  const isBusinessPaywall = tierParam === "business";
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
@@ -75,15 +76,12 @@ export default function PaywallScreen() {
     restore,
   } = useIAP();
 
-  const currentTier = profile?.subscriptionStatus; // "free" | "trial" | "premium" | "business"
-  const hasPremium = currentTier === "premium";
+  const currentTier = profile?.subscriptionStatus;
+  const hasPremium = currentTier === "premium" || currentTier === "business";
   const hasBusiness = currentTier === "business";
 
-  const [selected, setSelected] = useState<Tier>(hasPremium ? "business" : "premium");
-  // Default to MONTHLY (v1.3.3 cohort): the trial defaulted to annual, so
-  // Apple's sheet showed "$X/year" to users who'd just signed up — every
-  // purchase attempt was canceled there. A monthly trial shows a far smaller
-  // commitment ($X/month) and is the standard trial-conversion default.
+  // Default to MONTHLY — monthly trial shows a smaller commitment ($X/month)
+  // vs annual and is the standard trial-conversion default.
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   useEffect(() => {
@@ -94,35 +92,19 @@ export default function PaywallScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resolve the package the user is about to purchase based on tier + billing
-  const selectedPkg: PurchasesPackage | null = (() => {
-    if (selected === "premium") {
-      return billingPeriod === "annual" ? premiumAnnualPackage : premiumMonthlyPackage;
-    }
-    return billingPeriod === "annual" ? businessAnnualPackage : businessMonthlyPackage;
-  })();
+  const selectedPkg: PurchasesPackage | null = isBusinessPaywall
+    ? (billingPeriod === "annual" ? businessAnnualPackage : businessMonthlyPackage)
+    : (billingPeriod === "annual" ? premiumAnnualPackage : premiumMonthlyPackage);
 
-  // Resolve the two packages that correspond to the currently-chosen billing
-  // period for display in the plan cards.
-  const premiumDisplayPkg =
-    billingPeriod === "annual" ? premiumAnnualPackage : premiumMonthlyPackage;
-  const businessDisplayPkg =
-    billingPeriod === "annual" ? businessAnnualPackage : businessMonthlyPackage;
+  const premiumDisplayPkg = isBusinessPaywall
+    ? (billingPeriod === "annual" ? businessAnnualPackage : businessMonthlyPackage)
+    : (billingPeriod === "annual" ? premiumAnnualPackage : premiumMonthlyPackage);
 
-  // Compute annual savings per tier (used for the SAVE X% badge on the toggle)
-  const premiumSavings = computeAnnualSavings(premiumMonthlyPackage, premiumAnnualPackage);
-  const businessSavings = computeAnnualSavings(businessMonthlyPackage, businessAnnualPackage);
-  // Show the bigger of the two as the headline savings on the annual toggle
-  const annualSavings =
-    premiumSavings != null && businessSavings != null
-      ? Math.max(premiumSavings, businessSavings)
-      : premiumSavings ?? businessSavings;
+  const annualSavings = isBusinessPaywall
+    ? computeAnnualSavings(businessMonthlyPackage, businessAnnualPackage)
+    : computeAnnualSavings(premiumMonthlyPackage, premiumAnnualPackage);
 
-  const isSelectedCurrent =
-    (selected === "premium" && hasPremium) ||
-    (selected === "business" && hasBusiness);
-  const isSelectedDowngrade = selected === "premium" && hasBusiness;
-  const subscribeDisabled = isSelectedCurrent || isSelectedDowngrade;
+  const subscribeDisabled = isBusinessPaywall ? hasBusiness : hasPremium;
 
   // Free-trial detection — data-driven from the selected package's intro
   // offer. `introPrice.price === 0` means a *free* trial (vs. a paid intro
@@ -146,60 +128,44 @@ export default function PaywallScreen() {
   const trialLengthLabel = introPrice ? formatTrialLength(introPrice) : "";
   const trialDurationLabel = introPrice ? formatTrialDuration(introPrice) : "";
 
-  // Log `trial_offer_shown` once per paywall session, the first time a free
-  // trial actually becomes offerable to this user. Trial eligibility resolves
-  // asynchronously (offerings load + RevenueCat eligibility check), so this
-  // can't be folded into the on-mount `paywall_viewed` event — it would
-  // always read false there. This is the real top-of-funnel signal for the
-  // trial flow ("of users shown a trial, how many started one?").
   const trialOfferLoggedRef = useRef(false);
   useEffect(() => {
     if (hasFreeTrial && !trialOfferLoggedRef.current) {
       trialOfferLoggedRef.current = true;
       logEvent("trial_offer_shown", {
-        tier: selected,
+        tier: "premium",
         billing: billingPeriod,
         trial_length: trialLengthLabel,
         entry_point: entryPoint,
       });
     }
-  }, [hasFreeTrial, selected, billingPeriod, trialLengthLabel, entryPoint]);
+  }, [hasFreeTrial, billingPeriod, trialLengthLabel, entryPoint]);
 
   const handlePurchase = async () => {
     if (!selectedPkg) return;
 
     logEvent("paywall_cta_tapped", {
-      tier: selected,
+      tier: isBusinessPaywall ? "business" : "premium",
       billing: billingPeriod,
       product_id: selectedPkg.product.identifier,
       is_trial: hasFreeTrial,
       trial_length: hasFreeTrial ? trialLengthLabel : null,
     });
     logEvent("purchase_initiated", {
-      tier: selected,
+      tier: isBusinessPaywall ? "business" : "premium",
       billing: billingPeriod,
       product_id: selectedPkg.product.identifier,
       is_trial: hasFreeTrial,
       trial_length: hasFreeTrial ? trialLengthLabel : null,
     });
 
+    const purchasedTier = isBusinessPaywall ? "business" : "premium";
     const info = await purchase(selectedPkg, {
-      tier: selected,
+      tier: purchasedTier,
       billing: billingPeriod,
     });
     if (!info) return;
 
-    // Derive the welcome screen from the tier the user just bought, NOT from
-    // their current entitlements. In sandbox (and occasionally production),
-    // a user can hold a higher-tier entitlement from a prior subscription
-    // that hasn't expired yet when they purchase a different tier, which
-    // would otherwise send them to the wrong welcome screen.
-    const purchasedTier: "premium" | "business" = selected;
-
-    // Still use RC's CustomerInfo to decide whether to update the local
-    // subscription status optimistically. If neither entitlement is active
-    // (e.g. downgrade queued for end of period), prefer the higher of
-    // current vs purchased tier so the UI doesn't regress.
     const nowHasBusiness = hasEntitlement(info, "business");
     const nowHasPremium = hasEntitlement(info, "premium");
     const statusAfter: "premium" | "business" = nowHasBusiness
@@ -212,12 +178,9 @@ export default function PaywallScreen() {
       prev ? { ...prev, subscriptionStatus: statusAfter } : prev
     );
 
-    // Always navigate — purchase succeeded as far as Apple is concerned
     navigation.goBack();
     setTimeout(() => {
-      navigation.navigate(
-        purchasedTier === "business" ? "BusinessWelcome" : "PremiumWelcome"
-      );
+      navigation.navigate(purchasedTier === "business" ? "BusinessWelcome" : "PremiumWelcome");
     }, 100);
   };
 
@@ -236,11 +199,9 @@ export default function PaywallScreen() {
     }
   };
 
-  const hasAnyPackage =
-    premiumAnnualPackage ||
-    premiumMonthlyPackage ||
-    businessAnnualPackage ||
-    businessMonthlyPackage;
+  const hasAnyPackage = isBusinessPaywall
+    ? (businessAnnualPackage || businessMonthlyPackage)
+    : (premiumAnnualPackage || premiumMonthlyPackage);
 
   // GestureHandlerRootView wrap on every return path. The Paywall is
   // presented as `presentation: "modal"` (iOS sheet) from RootNavigator,
@@ -315,8 +276,44 @@ export default function PaywallScreen() {
     );
   }
 
-  const accent = selected === "business" ? colors.brand.amber500 : colors.brand.traceRed;
+  const accent = isBusinessPaywall ? colors.brand.amber500 : colors.brand.traceRed;
   const periodSuffix = billingPeriod === "annual" ? "year" : "month";
+
+  // Entry-point-aware hero messaging
+  const heroContent = (() => {
+    if (isBusinessPaywall) return {
+      eyebrow: "TRACE BUSINESS",
+      headline: "Fly business.\nPay economy.",
+      sub: null,
+    };
+    switch (entryPoint) {
+      case "swipe_daily_limit":
+        return {
+          eyebrow: "YOU'VE HIT YOUR LIMIT",
+          headline: "Unlimited swipes,\nevery day",
+          sub: null,
+        };
+      case "swipe_header_crown":
+        return {
+          eyebrow: "TRACE PREMIUM",
+          headline: "Swipe without limits",
+          sub: null,
+        };
+      case "explore_upgrade":
+      case "deal_alert_match":
+        return {
+          eyebrow: "DEAL ALERTS",
+          headline: "Get notified the\nmoment deals drop",
+          sub: null,
+        };
+      default:
+        return {
+          eyebrow: "TRACE PREMIUM",
+          headline: "Unlock the full\nTrace experience",
+          sub: null,
+        };
+    }
+  })();
 
   // Price label + per-period label for the CTA
   const priceString = selectedPkg?.product.priceString ?? "";
@@ -360,221 +357,98 @@ export default function PaywallScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
         {/* Compact header */}
         <View style={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 20 }}>
-          <Text
-            style={{
-              fontSize: 14,
-              fontWeight: "700",
-              color: accent,
-              marginBottom: 6,
-            }}
-          >
-            {selected === "business" ? "TRACE BUSINESS" : "TRACE PREMIUM"}
+          <Text style={{ fontSize: 14, fontWeight: "700", color: accent, marginBottom: 6 }}>
+            {heroContent.eyebrow}
           </Text>
-          <Text
-            style={{
-              fontSize: 26,
-              fontWeight: "900",
-              color: theme.foreground,
-              lineHeight: 32,
-            }}
-          >
-            {hasFreeTrial
-              ? `Try Trace ${selected === "business" ? "Business" : "Premium"} free`
-              : selected === "business"
-              ? "Fly business. Pay economy."
-              : "Unlock the full Trace experience"}
+          <Text style={{ fontSize: 26, fontWeight: "900", color: theme.foreground, lineHeight: 32 }}>
+            {heroContent.headline}
           </Text>
-          {hasFreeTrial && (
-            <Text
-              style={{
-                fontSize: 14,
-                color: theme.mutedForeground,
-                marginTop: 8,
-                lineHeight: 19,
-              }}
-            >
-              {`Unlimited swipes, saves, and every deal — free for ${trialDurationLabel}.`}
-            </Text>
-          )}
         </View>
 
-        {/* Free-trial callout — prominent, above the fold */}
+        {/* Free-trial callout — tappable CTA */}
         {hasFreeTrial && (
           <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-                backgroundColor:
-                  scheme === "dark"
-                    ? "rgba(244,63,94,0.14)"
-                    : "rgba(244,63,94,0.08)",
-                borderColor:
-                  scheme === "dark"
-                    ? "rgba(244,63,94,0.40)"
-                    : "rgba(244,63,94,0.25)",
-                borderWidth: 1,
-                borderRadius: 16,
-                padding: 16,
-              }}
-            >
-              <Text style={{ fontSize: 24 }}>✨</Text>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "800",
-                    color: theme.foreground,
-                  }}
-                >
-                  Start your {trialLengthLabel} free trial
-                </Text>
-                <View style={{ marginTop: 4, gap: 1 }}>
-                  {[
-                    `Free for ${trialDurationLabel}`,
-                    priceString ? `Then just ${priceString}/${periodSuffix}` : null,
-                    "Cancel anytime, no charge",
-                  ]
-                    .filter((line): line is string => Boolean(line))
-                    .map((line) => (
-                      <Text
-                        key={line}
-                        style={{ fontSize: 12, color: theme.mutedForeground }}
-                      >
-                        {`•  ${line}`}
-                      </Text>
-                    ))}
-                </View>
-              </View>
-            </View>
+            <TouchableOpacity onPress={handlePurchase} disabled={purchasing} activeOpacity={0.85} style={{ borderRadius: 16, overflow: "hidden" }}>
+              <LinearGradient
+                colors={isBusinessPaywall
+                  ? [colors.brand.amber400, colors.brand.orange500]
+                  : [colors.brand.traceRed, colors.brand.tracePink]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ paddingVertical: 14, paddingHorizontal: 20, alignItems: "center" }}
+              >
+                {purchasing ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff" }}>
+                      ✨ Try for Free
+                    </Text>
+                    <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 4, textAlign: "center" }}>
+                      7 days free — cancel anytime
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Billing period toggle */}
         <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              backgroundColor: theme.muted,
-              borderRadius: 14,
-              padding: 4,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => setBillingPeriod("monthly")}
-              activeOpacity={0.85}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 10,
-                alignItems: "center",
-                backgroundColor: billingPeriod === "monthly" ? theme.card : "transparent",
-              }}
-            >
-              <Text
+          <View style={{ flexDirection: "row", backgroundColor: theme.muted, borderRadius: 14, padding: 4 }}>
+            {(["monthly", "annual"] as BillingPeriod[]).map((period) => (
+              <TouchableOpacity
+                key={period}
+                onPress={() => setBillingPeriod(period)}
+                activeOpacity={0.85}
                 style={{
-                  fontSize: 14,
-                  fontWeight: "700",
-                  color:
-                    billingPeriod === "monthly" ? theme.foreground : theme.mutedForeground,
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  backgroundColor: billingPeriod === period ? theme.card : "transparent",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 6,
                 }}
               >
-                Monthly
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => setBillingPeriod("annual")}
-              activeOpacity={0.85}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 10,
-                alignItems: "center",
-                backgroundColor: billingPeriod === "annual" ? theme.card : "transparent",
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: 6,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: "700",
-                  color: billingPeriod === "annual" ? theme.foreground : theme.mutedForeground,
-                }}
-              >
-                Annual
-              </Text>
-              {annualSavings != null && (
-                <View
-                  style={{
-                    backgroundColor: colors.brand.traceGreen,
-                    borderRadius: 6,
-                    paddingHorizontal: 6,
-                    paddingVertical: 2,
-                  }}
-                >
-                  <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>
-                    SAVE {annualSavings}%
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: billingPeriod === period ? theme.foreground : theme.mutedForeground }}>
+                  {period === "monthly" ? "Monthly" : "Annual"}
+                </Text>
+                {period === "annual" && annualSavings != null && (
+                  <View style={{ backgroundColor: colors.brand.traceGreen, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                    <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>SAVE {annualSavings}%</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        {/* Plan cards */}
-        <View style={{ paddingHorizontal: 24, gap: 12, marginBottom: 24 }}>
-          {/* Premium */}
-          {premiumDisplayPkg && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setSelected("premium")}
-              style={{
-                borderWidth: 2,
-                borderColor: selected === "premium" ? colors.brand.traceRed : theme.border,
-                borderRadius: 16,
-                padding: 18,
-                backgroundColor: theme.card,
-                opacity: hasBusiness ? 0.6 : 1,
-              }}
-            >
+        {/* Premium plan card */}
+        {premiumDisplayPkg && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
+            <View style={{ borderWidth: 2, borderColor: accent, borderRadius: 16, padding: 18, backgroundColor: theme.card }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <Text style={{ fontSize: 17, fontWeight: "800", color: theme.foreground }}>
-                      Premium
+                      {isBusinessPaywall ? "Business" : "Premium"}
                     </Text>
-                    {hasPremium && (
-                      <View
-                        style={{
-                          backgroundColor: colors.brand.traceRed,
-                          borderRadius: 6,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                      >
+                    {(isBusinessPaywall ? hasBusiness : hasPremium) && (
+                      <View style={{ backgroundColor: accent, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                         <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>CURRENT PLAN</Text>
                       </View>
                     )}
-                    {billingPeriod === "annual" && premiumSavings != null && !hasPremium && (
-                      <View
-                        style={{
-                          backgroundColor: colors.brand.traceGreen,
-                          borderRadius: 6,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>
-                          {premiumSavings}% OFF
-                        </Text>
+                    {billingPeriod === "annual" && annualSavings != null && !(isBusinessPaywall ? hasBusiness : hasPremium) && (
+                      <View style={{ backgroundColor: colors.brand.traceGreen, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>{annualSavings}% OFF</Text>
                       </View>
                     )}
                   </View>
                   <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 2 }}>
-                    Unlimited swipes & saves
+                    {isBusinessPaywall ? "Business class deals + everything in Premium" : "Unlimited swipes & saves"}
                   </Text>
                   {hasFreeTrial && (
                     <Text style={{ fontSize: 11, fontWeight: "700", color: colors.brand.traceRed, marginTop: 4 }}>
@@ -588,148 +462,55 @@ export default function PaywallScreen() {
                   )}
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {premiumDisplayPkg.product.priceString}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
-                    /{billingPeriod === "annual" ? "year" : "month"}
+                  <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
+                    {premiumDisplayPkg.product.priceString}/{billingPeriod === "annual" ? "yr" : "mo"}
                   </Text>
                 </View>
               </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Business */}
-          {businessDisplayPkg && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setSelected("business")}
-              style={{
-                borderWidth: 2,
-                borderColor: selected === "business" ? colors.brand.amber500 : theme.border,
-                borderRadius: 16,
-                padding: 18,
-                backgroundColor: theme.card,
-              }}
-            >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <Text style={{ fontSize: 17, fontWeight: "800", color: theme.foreground }}>
-                      Business
-                    </Text>
-                    {hasBusiness ? (
-                      <View
-                        style={{
-                          backgroundColor: colors.brand.amber500,
-                          borderRadius: 6,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>CURRENT PLAN</Text>
-                      </View>
-                    ) : (
-                      <View
-                        style={{
-                          backgroundColor: colors.brand.amber500,
-                          borderRadius: 6,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>
-                          {hasPremium ? "UPGRADE" : "BEST VALUE"}
-                        </Text>
-                      </View>
-                    )}
-                    {billingPeriod === "annual" && businessSavings != null && !hasBusiness && (
-                      <View
-                        style={{
-                          backgroundColor: colors.brand.traceGreen,
-                          borderRadius: 6,
-                          paddingHorizontal: 6,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>
-                          {businessSavings}% OFF
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 2 }}>
-                    Business class deals + everything in Premium
-                  </Text>
-                  {billingPeriod === "annual" && (
-                    <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 4 }}>
-                      {getPerMonthFromAnnual(businessDisplayPkg)} billed annually
-                    </Text>
-                  )}
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 20, fontWeight: "900", color: theme.foreground }}>
-                    {businessDisplayPkg?.product.priceString ?? ""}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: theme.mutedForeground }}>
-                    /{billingPeriod === "annual" ? "year" : "month"}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          )}
-        </View>
+            </View>
+          </View>
+        )}
 
         {/* Features */}
         <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: "700",
               color: theme.mutedForeground,
               textTransform: "uppercase",
               letterSpacing: 1,
-              marginBottom: 8,
+              marginBottom: 12,
             }}
           >
             What's included
           </Text>
-          {(selected === "business"
-            ? [
-                { icon: Crown, title: "Business class deals", desc: "Lie-flat seats at economy prices" },
-                { icon: Clock, title: "48-hour early access", desc: "Before regular users see them" },
-                { icon: Briefcase, title: "Curated by experts", desc: "Handpicked premium cabin deals" },
-                { icon: Sparkles, title: "Everything in Premium", desc: "Unlimited swipes, saves & alerts" },
-              ]
-            : [
-                { icon: Zap, title: "Unlimited swipes", desc: "No daily cap on deals" },
-                { icon: TrendingDown, title: "Unlimited saves", desc: "Save as many deals as you want" },
-                { icon: Clock, title: "Full Explore access", desc: "Browse and filter all deals" },
-                { icon: Users, title: "Priority deal alerts", desc: "Be first to know about price drops" },
-              ]
-          ).map((f, i) => (
+          {(() => {
+            if (isBusinessPaywall) return [
+              { icon: Crown, title: "Business class deals — lie-flat at economy prices" },
+              { icon: Clock, title: "48-hour early access before anyone else" },
+              { icon: Sparkles, title: "Everything in Premium" },
+            ];
+            let features = [
+              { icon: Zap, title: "Unlimited swipes — no daily cap" },
+              { icon: TrendingDown, title: "Unlimited saves" },
+              { icon: Bell, title: "Deal alerts for any destination" },
+              { icon: Users, title: "Full Explore access" },
+            ];
+            if (entryPoint === "explore_upgrade" || entryPoint === "deal_alert_match") {
+              const alerts = features.find((f) => f.title.startsWith("Deal alerts"))!;
+              features = [alerts, ...features.filter((f) => !f.title.startsWith("Deal alerts"))];
+            }
+            return features;
+          })().map((f, i) => (
             <View
               key={i}
-              style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 10 }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
             >
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 12,
-                  backgroundColor: accent + "15",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <f.icon color={accent} size={20} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 15, fontWeight: "700", color: theme.foreground }}>
-                  {f.title}
-                </Text>
-                <Text style={{ fontSize: 13, color: theme.mutedForeground }}>{f.desc}</Text>
-              </View>
+              <f.icon color={accent} size={18} />
+              <Text style={{ fontSize: 15, color: theme.foreground, flex: 1 }}>
+                {f.title}
+              </Text>
             </View>
           ))}
         </View>
@@ -757,8 +538,8 @@ export default function PaywallScreen() {
         >
           <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>
             Already subscribed?{" "}
-            <Text style={{ color: colors.brand.traceRed, fontWeight: "700" }}>
-              Restore Purchases
+            <Text style={{ color: accent, fontWeight: "700" }}>
+              Restore
             </Text>
           </Text>
         </TouchableOpacity>
@@ -798,12 +579,8 @@ export default function PaywallScreen() {
       >
         {(() => {
           let ctaLabel: string;
-          if (isSelectedCurrent) {
-            ctaLabel = "This is your current plan";
-          } else if (isSelectedDowngrade) {
-            ctaLabel = "You already have Business";
-          } else if (hasPremium && selected === "business") {
-            ctaLabel = `Upgrade to Business — ${priceString}/${periodSuffix}`;
+          if (subscribeDisabled) {
+            ctaLabel = isBusinessPaywall ? "You're already on Business" : "You're already on Premium";
           } else if (hasFreeTrial) {
             ctaLabel = `Start ${trialLengthLabel} free trial`;
           } else {
@@ -821,11 +598,9 @@ export default function PaywallScreen() {
                 style={{ borderRadius: 16, overflow: "hidden", opacity: isDisabled ? 0.5 : 1 }}
               >
                 <LinearGradient
-                  colors={
-                    selected === "business"
-                      ? [colors.brand.amber400, colors.brand.orange500]
-                      : [colors.brand.traceRed, colors.brand.tracePink]
-                  }
+                  colors={isBusinessPaywall
+                    ? [colors.brand.amber400, colors.brand.orange500]
+                    : [colors.brand.traceRed, colors.brand.tracePink]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={{ paddingVertical: 16, alignItems: "center", justifyContent: "center" }}

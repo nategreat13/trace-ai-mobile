@@ -14,7 +14,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   NotificationsPermission: undefined;
   MainTabs: NavigatorScreenParams<TabParamList>;
-  Paywall: { entryPoint?: string } | undefined;
+  Paywall: { entryPoint?: string; tier?: "premium" | "business" } | undefined;
   PremiumWelcome: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;

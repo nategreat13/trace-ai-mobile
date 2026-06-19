@@ -101,10 +101,8 @@ export async function scheduleSwipeResetReminder(opts: {
   const status = await requestNotificationPermission();
   if (status !== "granted") return status;
 
-  // Next local midnight — the daily swipe counter resets at the start of the
-  // device's calendar day (mirrors the per-day key used in SwipeDeckScreen).
-  const resetAt = new Date();
-  resetAt.setHours(24, 0, 0, 0);
+  // 24 hours from now — mirrors the rolling window reset in SwipeDeckScreen.
+  const resetAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
   const where = opts.homeAirport ? ` from ${opts.homeAirport}` : "";
   const body =
