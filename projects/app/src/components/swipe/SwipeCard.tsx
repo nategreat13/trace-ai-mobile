@@ -238,6 +238,25 @@ export default function SwipeCard({
   // ── Derived display values ──────────────────────────────────────────
   const formattedPrice = `$${deal.price}`;
 
+  const isHotDeal = deal.discount_pct >= 40;
+
+  const isBookSoon = (() => {
+    if (!deal.dateString) return false;
+    const months = ["january","february","march","april","may","june","july","august","september","october","november","december"];
+    const now = new Date();
+    let dealDate: Date;
+    if (deal.dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+      dealDate = new Date(deal.dateString);
+    } else {
+      const month = months.indexOf(deal.dateString.toLowerCase().trim());
+      if (month === -1) return false;
+      dealDate = new Date(now.getFullYear(), month, 1);
+      if (dealDate < now) dealDate = new Date(now.getFullYear() + 1, month, 1);
+    }
+    const diffDays = (dealDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 60;
+  })();
+
   // ── Render ──────────────────────────────────────────────────────────
   return (
     <GestureDetector gesture={composedGesture}>
@@ -267,11 +286,16 @@ export default function SwipeCard({
           style={styles.gradient}
         />
 
-        {/* ── Top row: route pill ──────────────────────────────────── */}
+        {/* ── Top row: route pill + urgency badges ─────────────────── */}
         <View style={styles.topRow}>
           {deal.origin && (
             <View style={styles.originPill}>
               <Text style={styles.originText}>✈️  {deal.origin} → {deal.destination_code || deal.destination}</Text>
+            </View>
+          )}
+          {(isHotDeal || isBookSoon) && (
+            <View style={styles.urgencyBadge}>
+              <Text style={styles.urgencyText}>{isHotDeal ? "🔥 Hot deal" : "⏰ Book soon"}</Text>
             </View>
           )}
         </View>
@@ -393,6 +417,17 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
     letterSpacing: 0.3,
+  },
+  urgencyBadge: {
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  urgencyText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
   },
 
   // ── Swipe stamp indicators ─────────────────────────────────────────
