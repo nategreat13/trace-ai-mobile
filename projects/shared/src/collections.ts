@@ -50,6 +50,7 @@ export const COLLECTION_NAMES = [
   "sharedDeals",
   "adSpend",
   "hotDealCache",
+  "dotdCache",
   "webhookEvents",
 ] as const;
 

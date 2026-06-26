@@ -216,6 +216,16 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
       "Sent to premium/business users when a deal appears matching one of their saved alerts. Fires once per alert then marks it matched.",
     variables: ["destination", "price", "discount"],
   },
+  deal_of_the_day: {
+    key: "deal_of_the_day",
+    title: "✈️ Deal of the day",
+    body: "${{price}} to {{destination}} — {{discount}}% off. Today only.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Sent once daily to all users with notifications enabled. Picks the best deal from their home airport matching their preferences. Deduped so the same destination isn't sent within 3 days.",
+    variables: ["destination", "price", "discount"],
+  },
 };
 
 const KNOWN_KEYS = Object.keys(TEMPLATE_DEFAULTS);
@@ -287,6 +297,7 @@ export const KNOWN_TEMPLATE_KEYS = KNOWN_KEYS;
 export type NotificationCategory = "deals" | "account" | "reengagement" | "offers";
 
 export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
+  deal_of_the_day: "deals",
   welcome: "account",
   trial_ending_3d: "account",
   trial_ending_24h: "account",

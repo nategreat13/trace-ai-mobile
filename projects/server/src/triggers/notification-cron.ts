@@ -645,6 +645,79 @@ async function runDailyNotifications() {
       console.log(`[cron] discount_on_business: scanned ${snap.size} candidates`);
     }
 
+    // ─── Deal of the day (all users, daily) ───────────────────────
+    {
+      const dotdTemplate = await getTemplate("deal_of_the_day");
+      if (dotdTemplate?.enabled) {
+        const snap = await colRef("userProfiles")
+          .where("notificationsEnabled", "==", true)
+          .select("userId", "homeAirport", "notificationPreferences", "dealTypes", "destinationPreference")
+          .get();
+
+        const byAirport = new Map<string, Array<{
+          userId: string;
+          prefs?: NotificationPrefs;
+          dealTypes: string[];
+          destinationPreference: string;
+        }>>();
+        for (const doc of snap.docs) {
+          const data = doc.data() as {
+            userId?: string;
+            homeAirport?: string;
+            notificationPreferences?: NotificationPrefs;
+            dealTypes?: string[];
+            destinationPreference?: string;
+          };
+          if (!data.userId || !data.homeAirport) continue;
+          if (!byAirport.has(data.homeAirport)) byAirport.set(data.homeAirport, []);
+          byAirport.get(data.homeAirport)!.push({
+            userId: data.userId,
+            prefs: data.notificationPreferences,
+            dealTypes: data.dealTypes ?? [],
+            destinationPreference: data.destinationPreference ?? "both",
+          });
+        }
+
+        let sent = 0;
+        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+        for (const [airport, users] of byAirport) {
+          const deals = await fetchDealsForAirport(airport);
+          if (deals.length === 0) continue;
+          for (const user of users) {
+            const best = pickDealForUser(deals, user.dealTypes, user.destinationPreference)
+              ?? pickDealForUser(deals, [], "both");
+            if (!best?.destination) continue;
+            const price = best.dealPriceUSD ?? best.price ?? 0;
+            const discount = Math.round(best.percentOff ?? best.discount_pct ?? 0);
+            if (!price || !discount) continue;
+
+            // Dedup — skip if this destination was sent within 3 days.
+            const destination = (best.destination).toLowerCase().trim();
+            const cacheRef = colRef("dotdCache").doc(user.userId);
+            const cacheDoc = await cacheRef.get();
+            const sentLog: Record<string, number> = cacheDoc.exists ? (cacheDoc.data()?.sentLog ?? {}) : {};
+            if (Date.now() - (sentLog[destination] ?? 0) < threeDaysMs) continue;
+            sentLog[destination] = Date.now();
+            // Prune entries older than 7 days.
+            for (const dest of Object.keys(sentLog)) {
+              if (Date.now() - sentLog[dest] > 7 * 24 * 60 * 60 * 1000) delete sentLog[dest];
+            }
+            await cacheRef.set({ sentLog });
+
+            await sendForTemplate(user.userId, "deal_of_the_day", {
+              destination: best.destination,
+              price,
+              discount,
+            }, user.prefs);
+            sent++;
+          }
+        }
+        console.log(`[cron] deal_of_the_day: sent to ${sent} users`);
+      } else {
+        console.log("[cron] deal_of_the_day: template disabled, skipping");
+      }
+    }
+
     // ─── Deal alert match (premium/business users with saved alerts) ─
     {
       const alertsSnap = await colRef("dealAlerts")
