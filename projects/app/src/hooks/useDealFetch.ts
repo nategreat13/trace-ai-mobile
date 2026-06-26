@@ -21,18 +21,19 @@ function isInternationalDeal(deal: Deal): boolean | null {
  * top half by discount so they're always decent but vary each session.
  * Skipped for international-only users.
  */
-function leadWithTopDomestic(deck: Deal[], destinationPreference?: string): Deal[] {
-  if (destinationPreference === "international") return deck;
-  const domestic = deck
-    .filter((d) => isInternationalDeal(d) === false)
-    .sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0));
-  if (domestic.length === 0) return deck;
-  // Pick randomly from the top half so the first cards vary each session
-  const pool = domestic.slice(0, Math.max(2, Math.ceil(domestic.length / 2)));
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  const picked = shuffled.slice(0, 2);
-  const pickedIds = new Set(picked.map((d) => d.id));
-  return [...picked, ...deck.filter((d) => !pickedIds.has(d.id))];
+/**
+ * Picks 1 random deal from the top-half by discount of the already-filtered
+ * preferred deck and surfaces it as the first card. Varies each session so
+ * users don't see the same deal every time, but always starts with something
+ * that matches what they told us they want.
+ */
+function leadWithBestMatch(deck: Deal[], preferredDeck: Deal[]): Deal[] {
+  const source = preferredDeck.length > 0 ? preferredDeck : deck;
+  const sorted = [...source].sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0));
+  const pool = sorted.slice(0, Math.max(1, Math.ceil(sorted.length / 2)));
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+  if (!picked) return deck;
+  return [picked, ...deck.filter((d) => d.id !== picked.id)];
 }
 
 function dedupeByDestination(arr: Deal[]): Deal[] {
@@ -165,19 +166,9 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
           ? [...dedupedPreferred, ...dedupedRemaining]
           : dedupeByDestination(sortByBestDeal(apiDeals));
 
-      // Final global dedup: if a destination appeared in BOTH the matched
-      // and unmatched buckets (e.g. some Sydney deals matched preferences,
-      // others didn't), one copy slipped through each bucket's individual
-      // dedup pass. This catches those cross-bucket duplicates.
       const globalDeduped = dedupeByDestination(finalDeals);
-      // Weighted-shuffle for variety, then guarantee the first couple of cards
-      // are "closer to home" so a new user isn't greeted by an unfamiliar
-      // international destination. Domestic-only decks are unaffected;
-      // international-only users are exempted inside leadWithNearby.
-      const deckDeals = leadWithTopDomestic(
-        weightedShuffle(globalDeduped),
-        profile.destinationPreference
-      );
+      const shuffled = weightedShuffle(globalDeduped);
+      const deckDeals = leadWithBestMatch(shuffled, dedupeByDestination(sortByBestDeal(filteredDeals)));
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 

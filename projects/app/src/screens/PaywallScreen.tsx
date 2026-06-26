@@ -306,6 +306,12 @@ export default function PaywallScreen() {
           headline: "Get notified the\nmoment deals drop",
           sub: null,
         };
+      case "third_save":
+        return {
+          eyebrow: "NICE TASTE",
+          headline: "We'll watch these\ndeals for you",
+          sub: null,
+        };
       default:
         return {
           eyebrow: "TRACE PREMIUM",

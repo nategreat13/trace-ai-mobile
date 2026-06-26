@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import Animated, {
   FadeIn,
+  FadeInDown,
   FadeOut,
   useSharedValue,
   useAnimatedStyle,
@@ -331,6 +332,8 @@ export default function SwipeDeckScreen() {
 
   // Dashboard tooltip — shown once after user's first-ever save
   const [showDashboardTooltip, setShowDashboardTooltip] = useState(false);
+  const [showTrialBanner, setShowTrialBanner] = useState(false);
+  const sessionSaveCount = useRef(0);
 
   // Fire `deck_rendered` exactly once per mount, the first time we have
   // at least one card actually visible. Closes the v1.3.2 blind spot on
@@ -677,9 +680,16 @@ export default function SwipeDeckScreen() {
       // saves leave the original timestamp alone.
       if (normalizedAction === "right" && !profile.firstSaveAt) {
         updates.firstSaveAt = new Date();
-        // Show the one-time tooltip pointing at the Dashboard tab
         setShowDashboardTooltip(true);
         setTimeout(() => setShowDashboardTooltip(false), 4000);
+      }
+
+      if (normalizedAction === "right" && !isPremium) {
+        sessionSaveCount.current += 1;
+        if (sessionSaveCount.current === 5) {
+          setShowTrialBanner(true);
+          setTimeout(() => setShowTrialBanner(false), 5000);
+        }
       }
 
       // Level up every 25 swipes
@@ -1107,9 +1117,51 @@ export default function SwipeDeckScreen() {
                     triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
                     isSwipeDisabled={!isPremium && swipesLeft <= 0}
                     isUndone={deal.id === undoneDealId}
+                    showPickedForYou={currentIndex === 0 && i === arr.length - 1}
                   />
                 ))}
               </>
+            )}
+
+            {/* Trial banner — appears after 3rd save for free users */}
+            {showTrialBanner && (
+              <Animated.View
+                entering={FadeInDown.duration(300)}
+                exiting={FadeOut.duration(300)}
+                style={{
+                  position: "absolute",
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  zIndex: 20,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowTrialBanner(false);
+                    navigation.navigate("Paywall", { entryPoint: "third_save" });
+                  }}
+                  activeOpacity={0.9}
+                  style={{
+                    backgroundColor: colors.brand.traceRed,
+                    borderRadius: 16,
+                    paddingVertical: 14,
+                    paddingHorizontal: 18,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    shadowColor: "#000",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 10,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff", flex: 1 }}>
+                    ✨ Want alerts if this price drops? Start your free 7-day trial
+                  </Text>
+                  <Text style={{ fontSize: 18, color: "#fff", marginLeft: 8 }}>→</Text>
+                </TouchableOpacity>
+              </Animated.View>
             )}
           </View>
 

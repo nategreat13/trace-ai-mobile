@@ -43,6 +43,7 @@ interface SwipeCardProps {
   triggerSwipe: "left" | "right" | "super" | null;
   isSwipeDisabled: boolean;
   isUndone?: boolean;
+  showPickedForYou?: boolean;
 }
 
 export default function SwipeCard({
@@ -53,6 +54,7 @@ export default function SwipeCard({
   triggerSwipe,
   isSwipeDisabled,
   isUndone = false,
+  showPickedForYou = false,
 }: SwipeCardProps) {
   // null = no image / failed — renders a gradient placeholder instead of a
   // wrong photo. We intentionally avoid any hardcoded fallback URL because
@@ -286,18 +288,22 @@ export default function SwipeCard({
           style={styles.gradient}
         />
 
-        {/* ── Top row: route pill + urgency badges ─────────────────── */}
+        {/* ── Top row: route pill + badges ─────────────────────────── */}
         <View style={styles.topRow}>
           {deal.origin && (
             <View style={styles.originPill}>
               <Text style={styles.originText}>✈️  {deal.origin} → {deal.destination_code || deal.destination}</Text>
             </View>
           )}
-          {(isHotDeal || isBookSoon) && (
+          {showPickedForYou ? (
+            <View style={[styles.urgencyBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
+              <Text style={styles.urgencyText}>⭐ Picked for you</Text>
+            </View>
+          ) : (isHotDeal || isBookSoon) ? (
             <View style={styles.urgencyBadge}>
               <Text style={styles.urgencyText}>{isHotDeal ? "🔥 Hot deal" : "⏰ Book soon"}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* ── Swipe indicators — Tinder stamp style ────────────────── */}
