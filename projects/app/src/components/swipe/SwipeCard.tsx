@@ -308,9 +308,9 @@ export default function SwipeCard({
               )}
             </View>
             <View style={styles.priceRight}>
-              {deal.discount_pct > 0 && (
+              {deal.original_price > deal.price && (
                 <View style={styles.discountBadge}>
-                  <Text style={styles.discountBadgeText}>{deal.discount_pct}% OFF</Text>
+                  <Text style={styles.discountBadgeText}>${Math.round(deal.original_price - deal.price)} off</Text>
                 </View>
               )}
             </View>
