@@ -1245,6 +1245,120 @@ export async function getCohortData(
 }
 
 /**
+ * The curated set of events that make up the "user journey," in funnel
+ * order and grouped by stage. Drives the per-cohort event matrix on the
+ * /cohorts page. Add a row here to surface a new event in that table.
+ *
+ * These are all per-user events (they carry a real userId), so the matrix
+ * counts DISTINCT users who fired each — not raw fire counts. `app_open` is
+ * intentionally omitted: it's under-instrumented (fires only a handful of
+ * times) and would read as a near-zero row, misleadingly. Note that
+ * `paywall_cta_tapped` and `purchase_initiated` fire together in the same
+ * handler, so only `purchase_initiated` is listed ("reached store popup").
+ */
+export type CohortEventStage =
+  | "Activation"
+  | "Engagement"
+  | "Paywall & purchase"
+  | "Notifications";
+
+export interface CohortKeyEvent {
+  name: string;
+  label: string;
+  stage: CohortEventStage;
+}
+
+export const COHORT_KEY_EVENTS: CohortKeyEvent[] = [
+  { name: "signup_completed", label: "Signed up", stage: "Activation" },
+  { name: "onboarding_completed", label: "Completed onboarding", stage: "Activation" },
+  { name: "swipe", label: "Swiped a deal", stage: "Engagement" },
+  { name: "daily_limit_hit", label: "Hit daily swipe limit", stage: "Engagement" },
+  { name: "deal_saved", label: "Saved a deal", stage: "Engagement" },
+  { name: "deal_expanded", label: "Viewed deal details", stage: "Engagement" },
+  { name: "deal_book_tapped", label: "Tapped to book", stage: "Engagement" },
+  { name: "paywall_viewed", label: "Viewed paywall", stage: "Paywall & purchase" },
+  { name: "trial_offer_shown", label: "Shown free-trial offer", stage: "Paywall & purchase" },
+  { name: "purchase_initiated", label: "Reached store popup", stage: "Paywall & purchase" },
+  { name: "purchase_completed", label: "Completed purchase", stage: "Paywall & purchase" },
+  { name: "purchase_canceled", label: "Canceled at store popup", stage: "Paywall & purchase" },
+  { name: "trial_started", label: "Started trial (client)", stage: "Paywall & purchase" },
+  { name: "trial_started_server", label: "Started trial (RevenueCat)", stage: "Paywall & purchase" },
+  { name: "subscription_canceled", label: "Canceled subscription", stage: "Paywall & purchase" },
+  { name: "push_soft_prompt_shown", label: "Shown push prompt", stage: "Notifications" },
+  { name: "push_permission_granted", label: "Enabled push", stage: "Notifications" },
+  { name: "push_permission_denied", label: "Denied push", stage: "Notifications" },
+];
+
+export interface CohortEventMatrix {
+  /** Cohorts as columns, newest first, capped at `maxCohorts`. */
+  cohorts: Array<{ key: string; label: string; size: number }>;
+  /** One row per key event, in COHORT_KEY_EVENTS order. */
+  rows: Array<{
+    name: string;
+    label: string;
+    stage: CohortEventStage;
+    /** cohort key -> distinct users who fired this event. */
+    byCohort: Record<string, number>;
+  }>;
+}
+
+/**
+ * Builds the per-cohort event matrix: for each signup-version cohort, how many
+ * distinct (non-excluded) users fired each key event. Cohorts are the columns
+ * (newest first), key events the rows (funnel order).
+ *
+ * Cost: one full `events` scan here plus the two that `getCohortData` already
+ * does. Fine at our current sub-100k-event scale (same assumption the rest of
+ * this file makes); revisit with a time window + counters doc if it grows.
+ *
+ * Exclusions are applied by userId (events carry no email). Guest/no-uid
+ * events are skipped — these are per-user funnel events. A user only counts
+ * toward a cohort if they have a `firstAppVersion` (in `userVersion`).
+ */
+export async function getCohortEventMatrix(
+  env: TraceEnv,
+  excluded?: ExcludedSets,
+  maxCohorts = 10
+): Promise<CohortEventMatrix> {
+  const { options, userVersion } = await getCohortData(env, excluded);
+
+  // options are pre-sorted newest-first; take the most recent N as columns.
+  const cohorts = options
+    .slice(0, maxCohorts)
+    .map((o) => ({ key: o.key, label: o.label, size: o.count }));
+  const cohortKeys = new Set(cohorts.map((c) => c.key));
+  const eventNames = new Set(COHORT_KEY_EVENTS.map((e) => e.name));
+
+  // distinct users per `${cohortKey}::${eventName}`.
+  const sets = new Map<string, Set<string>>();
+  const snap = await colRef(env, "events").select("name", "userId").get();
+  snap.forEach((doc) => {
+    const name = doc.get("name") as string | undefined;
+    if (!name || !eventNames.has(name)) return;
+    const uid = doc.get("userId") as string | undefined;
+    if (!uid || uid === "guest") return;
+    if (excluded?.userIds.has(uid)) return;
+    const cohort = userVersion[uid];
+    if (!cohort || !cohortKeys.has(cohort)) return;
+    const k = cohort + "::" + name;
+    let s = sets.get(k);
+    if (!s) {
+      s = new Set<string>();
+      sets.set(k, s);
+    }
+    s.add(uid);
+  });
+
+  const rows = COHORT_KEY_EVENTS.map((e) => {
+    const byCohort: Record<string, number> = {};
+    for (const c of cohorts) byCohort[c.key] = sets.get(c.key + "::" + e.name)?.size ?? 0;
+    return { name: e.name, label: e.label, stage: e.stage, byCohort };
+  });
+
+  return { cohorts, rows };
+}
+
+/**
  * Returns the count of `login` events in the last N days. Pairs with
  * `getSignupsByDay` so the dashboard can show new vs returning users.
  */

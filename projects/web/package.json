@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@trace/shared": "1.0.0",
     "date-fns": "^4.1.0",
     "firebase-admin": "^13.0.0",
