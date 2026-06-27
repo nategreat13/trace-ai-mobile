@@ -559,10 +559,6 @@ export default function SwipeDeckScreen() {
       setTriggerSwipe(null);
 
       if (!isPremium && swipesLeft <= 0) {
-        // daily_limit_hit fires from the transition effect below — the
-        // overlay rendered by deckPhase="daily_limit" blocks new swipe
-        // attempts, so emitting here is redundant *and* never fires in
-        // the practical case where the cap is hit by a real swipe.
         setDeckPhase("daily_limit");
         return;
       }
@@ -708,8 +704,8 @@ export default function SwipeDeckScreen() {
         setNewSwipeCount(newSwipeCount);
       }
 
-      await updateProfile(updates);
       setSwipesLeft((prev) => isPremium ? UNLIMITED_SWIPES : Math.max(0, prev - 1));
+      await updateProfile(updates);
 
       // Track swipe locally
       const newSwipeRecord = {
