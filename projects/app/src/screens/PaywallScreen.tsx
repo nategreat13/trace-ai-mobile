@@ -583,6 +583,9 @@ export default function PaywallScreen() {
           paddingBottom: 36,
         }}
       >
+        <Text style={{ textAlign: "center", fontSize: 12, color: theme.mutedForeground, marginBottom: 10 }}>
+          ✈️ Join 30,000+ travelers finding cheap flights
+        </Text>
         {(() => {
           let ctaLabel: string;
           if (subscribeDisabled) {
