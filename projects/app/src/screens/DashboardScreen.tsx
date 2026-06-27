@@ -426,8 +426,46 @@ export default function DashboardScreen() {
     const pulseScale = useRef(new RNAnimated.Value(1)).current;
     const pulseOpacity = useRef(new RNAnimated.Value(0.6)).current;
     const DELETE_THRESHOLD = -80;
-    const isMatched = item.status === "matched";
+    const isMatched = item.status === "matched" && !!item.matchedDeal;
     const accentColor = isMatched ? "#22c55e" : "#3b82f6";
+
+    const handlePress = () => {
+      if (!isMatched || !item.matchedDeal) return;
+      const md = item.matchedDeal;
+      setExpandedDeal({
+        id: item.id,
+        destination: md.destination,
+        destination_code: md.destinationCode ?? "",
+        origin: md.origin ?? "",
+        price: md.price,
+        original_price: md.price,
+        discount_pct: md.discount,
+        travel_window: md.travelWindow ?? "",
+        dateString: md.travelWindow ?? "",
+        image_url: md.imageUrl ?? "",
+        airlines: md.airlines ?? "",
+        url: md.url ?? "",
+        ai_insight: "",
+        vibe_description: "",
+        weather_preview: "",
+        continent: "",
+        urgency: "",
+        price_trend: "",
+        deal_type: null,
+        duration: "",
+        domestic_or_international: "",
+        layover_info: "",
+        month_type: "",
+        price_will_last: "",
+        itinerary_ideas: [],
+        neighborhood_previews: [],
+        best_time_to_book: "",
+        experiences: [],
+        travel_tips: [],
+        quick_tips: [],
+        interesting_facts: [],
+      });
+    };
 
     useEffect(() => {
       const pulse = RNAnimated.loop(
@@ -489,12 +527,17 @@ export default function DashboardScreen() {
           style={{ transform: [{ translateX }] }}
           {...panResponder.panHandlers}
         >
+          <TouchableOpacity
+            activeOpacity={isMatched ? 0.75 : 1}
+            onPress={handlePress}
+            disabled={!isMatched}
+          >
           <View
             style={{
               backgroundColor: theme.card,
               borderRadius: 14,
               borderWidth: 1,
-              borderColor: theme.border,
+              borderColor: isMatched ? "#22c55e44" : theme.border,
               flexDirection: "row",
               alignItems: "stretch",
               overflow: "hidden",
@@ -541,16 +584,21 @@ export default function DashboardScreen() {
                   <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: accentColor }} />
                 </View>
                 <Text style={{ fontSize: 11, fontWeight: "600", color: accentColor }}>
-                  {isMatched ? "Deal matched!" : "Watching for deals"}
+                  {isMatched ? `Deal found · $${item.matchedDeal.price} · Tap to view` : "Watching for deals"}
                 </Text>
               </View>
             </View>
 
-            {/* Swipe hint */}
+            {/* Swipe hint / chevron */}
             <View style={{ justifyContent: "center", paddingRight: 14 }}>
-              <Text style={{ fontSize: 10, color: theme.mutedForeground, opacity: 0.5 }}>⟵</Text>
+              {isMatched ? (
+                <Text style={{ fontSize: 14, color: "#22c55e", fontWeight: "700" }}>›</Text>
+              ) : (
+                <Text style={{ fontSize: 10, color: theme.mutedForeground, opacity: 0.5 }}>⟵</Text>
+              )}
             </View>
           </View>
+          </TouchableOpacity>
         </RNAnimated.View>
       </View>
     );

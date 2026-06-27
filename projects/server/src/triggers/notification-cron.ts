@@ -793,19 +793,78 @@ async function runDailyNotifications() {
             });
             if (!match) continue;
 
+            const matchedPrice = match.dealPriceUSD ?? match.price ?? 0;
+            const matchedDiscount = Math.round(match.percentOff ?? match.discount_pct ?? 0);
             await sendForTemplate(userId, "deal_alert_match", {
               destination: alert.destination,
-              price: match.dealPriceUSD ?? match.price ?? 0,
-              discount: Math.round(match.percentOff ?? match.discount_pct ?? 0),
+              price: matchedPrice,
+              discount: matchedDiscount,
             }, profile.notificationPreferences);
-            // Mark matched so this alert never fires again.
-            await colRef("dealAlerts").doc(alert.id).update({ status: "matched" });
+            // Store matched deal snapshot so the app can show a tappable deal card.
+            await colRef("dealAlerts").doc(alert.id).update({
+              status: "matched",
+              matchedAt: new Date(),
+              matchedDeal: {
+                destination: match.destination ?? alert.destination,
+                price: matchedPrice,
+                discount: matchedDiscount,
+                url: (match as any).url ?? null,
+                imageUrl: (match as any).image_url ?? null,
+                airlines: (match as any).airlines ?? null,
+                travelWindow: (match as any).travel_window ?? (match as any).dateString ?? null,
+                origin: (match as any).origin ?? null,
+                destinationCode: (match as any).destination_code ?? null,
+              },
+            });
             sent++;
           }
         }
         console.log(`[cron] deal_alert_match: sent ${sent} notifications, scanned ${alertsSnap.size} active alerts`);
       } else {
         console.log("[cron] deal_alert_match: no active alerts");
+      }
+    }
+
+    // ─── Cleanup stale matched alerts ────────────────────────────
+    // Remove matched alerts where the deal is no longer in the live API
+    // so the app's alerts tab stays clean automatically.
+    {
+      const matchedSnap = await colRef("dealAlerts")
+        .where("status", "==", "matched")
+        .get();
+
+      if (!matchedSnap.empty) {
+        // Group by userId to fetch home airports in bulk.
+        const byUser = new Map<string, { docId: string; destination: string }[]>();
+        for (const doc of matchedSnap.docs) {
+          const data = doc.data() as { userId?: string; destination?: string };
+          if (!data.userId || !data.destination) continue;
+          if (!byUser.has(data.userId)) byUser.set(data.userId, []);
+          byUser.get(data.userId)!.push({ docId: doc.id, destination: data.destination });
+        }
+
+        let removed = 0;
+        for (const [userId, alerts] of byUser) {
+          const profileSnap = await colRef("userProfiles")
+            .where("userId", "==", userId)
+            .limit(1)
+            .select("homeAirport")
+            .get();
+          if (profileSnap.empty) continue;
+          const homeAirport = (profileSnap.docs[0].data() as { homeAirport?: string }).homeAirport;
+          if (!homeAirport) continue;
+
+          const liveDeals = await fetchDealsForAirport(homeAirport);
+          const liveDestinations = new Set(liveDeals.map((d) => (d.destination ?? "").toLowerCase()));
+
+          for (const alert of alerts) {
+            if (!liveDestinations.has(alert.destination.toLowerCase())) {
+              await colRef("dealAlerts").doc(alert.docId).delete();
+              removed++;
+            }
+          }
+        }
+        console.log(`[cron] stale_alert_cleanup: removed ${removed} of ${matchedSnap.size} matched alerts`);
       }
     }
 }
