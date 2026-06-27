@@ -1123,7 +1123,7 @@ export default function SwipeDeckScreen() {
               </>
             )}
 
-            {/* Trial banner — appears after 3rd save for free users */}
+            {/* Trial banner — appears after 5th save for free users */}
             {showTrialBanner && (
               <Animated.View
                 entering={FadeInDown.duration(300)}
@@ -1139,7 +1139,7 @@ export default function SwipeDeckScreen() {
                 <TouchableOpacity
                   onPress={() => {
                     setShowTrialBanner(false);
-                    navigation.navigate("Paywall", { entryPoint: "third_save" });
+                    navigation.navigate("Paywall", { entryPoint: "fifth_save" });
                   }}
                   activeOpacity={0.9}
                   style={{

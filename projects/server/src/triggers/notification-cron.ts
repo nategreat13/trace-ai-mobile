@@ -278,12 +278,13 @@ async function runDailyNotifications() {
         // overall best deal so we never send with a blank destination or $0 price.
         const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
           ?? pickDealForUser(deals, [], "both");
-        if (!best?.destination || !best?.price) continue;
+        const price = best?.dealPriceUSD ?? best?.price ?? 0;
+        if (!best?.destination || !price) continue;
         await sendForTemplate(data.userId, "inactivity_3d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
           destination: best.destination,
-          price: best.price,
+          price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_3d: scanned ${snap.size} candidates`);
@@ -313,12 +314,13 @@ async function runDailyNotifications() {
         const dealCount = deals.length;
         const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
           ?? pickDealForUser(deals, [], "both");
-        if (!best?.destination || !best?.price) continue;
+        const price = best?.dealPriceUSD ?? best?.price ?? 0;
+        if (!best?.destination || !price) continue;
         await sendForTemplate(data.userId, "inactivity_7d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
           destination: best.destination,
-          price: best.price,
+          price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_7d: scanned ${snap.size} candidates`);
@@ -348,12 +350,13 @@ async function runDailyNotifications() {
         const dealCount = deals.length;
         const best = pickDealForUser(deals, data.dealTypes ?? [], data.destinationPreference ?? "both")
           ?? pickDealForUser(deals, [], "both");
-        if (!best?.destination || !best?.price) continue;
+        const price = best?.dealPriceUSD ?? best?.price ?? 0;
+        if (!best?.destination || !price) continue;
         await sendForTemplate(data.userId, "inactivity_14d", {
           dealCount,
           homeAirport: data.homeAirport ?? "your home airport",
           destination: best.destination,
-          price: best.price,
+          price,
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_14d: scanned ${snap.size} candidates`);

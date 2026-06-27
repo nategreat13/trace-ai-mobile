@@ -185,6 +185,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Written by the deal-of-the-day cron via Admin SDK (per-user dedup of
+    // sent destinations); clients never touch it directly.
+    match /dotdCache/{docId} {
+      allow read, write: if false;
+    }
+
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║                      STAGING COLLECTIONS                         ║
     // ║                                                                  ║
@@ -283,6 +289,7 @@ service cloud.firestore {
     match /staging_notificationTemplates/{docId} { allow read, write: if false; }
     match /staging_notificationLog/{docId}     { allow read, write: if false; }
     match /staging_hotDealCache/{docId}        { allow read, write: if false; }
+    match /staging_dotdCache/{docId}           { allow read, write: if false; }
 
     // ──── Deny everything else ────
     match /{document=**} {
