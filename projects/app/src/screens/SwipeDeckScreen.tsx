@@ -333,6 +333,7 @@ export default function SwipeDeckScreen() {
 
   // Dashboard tooltip — shown once after user's first-ever save
   const [showDashboardTooltip, setShowDashboardTooltip] = useState(false);
+  const dashboardTooltipShown = useRef(false);
   const [showTrialBanner, setShowTrialBanner] = useState(false);
   const sessionSaveCount = useRef(0);
 
@@ -680,7 +681,8 @@ export default function SwipeDeckScreen() {
       // First-save stamp — gates the push soft prompt (see
       // useTriggerSoftPromptAfterFirstSave). Only stamp once; subsequent
       // saves leave the original timestamp alone.
-      if (normalizedAction === "right" && !profile.firstSaveAt) {
+      if (normalizedAction === "right" && !profile.firstSaveAt && !dashboardTooltipShown.current) {
+        dashboardTooltipShown.current = true;
         updates.firstSaveAt = new Date();
         setShowDashboardTooltip(true);
         setTimeout(() => setShowDashboardTooltip(false), 4000);
