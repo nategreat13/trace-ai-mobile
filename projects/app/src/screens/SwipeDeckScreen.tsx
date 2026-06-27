@@ -312,6 +312,7 @@ export default function SwipeDeckScreen() {
 
   // Tutorial/modal state
   const [showHowToSwipe, setShowHowToSwipe] = useState(false);
+  const howToSwipeDismissed = useRef(false);
   const [showAILearning, setShowAILearning] = useState(false);
   const [tutorialAction, setTutorialAction] = useState<"left" | "right" | null>(null);
   const [shownTutorialTypes, setShownTutorialTypes] = useState<Set<string>>(new Set());
@@ -458,7 +459,7 @@ export default function SwipeDeckScreen() {
   // and silently eating taps after the modal above is dismissed.
   useEffect(() => {
     if (!isFocused) return;
-    if (profile && !profile.howToSwipeShown && !loading) {
+    if (profile && !profile.howToSwipeShown && !loading && !howToSwipeDismissed.current) {
       setShowHowToSwipe(true);
     }
   }, [profile?.howToSwipeShown, loading, isFocused]);
@@ -525,6 +526,7 @@ export default function SwipeDeckScreen() {
   }, [loading, deckPhase, activeDeals.length]);
 
   const handleDismissHowToSwipe = useCallback(async () => {
+    howToSwipeDismissed.current = true;
     setShowHowToSwipe(false);
     await updateProfile({ howToSwipeShown: true });
   }, [updateProfile]);
