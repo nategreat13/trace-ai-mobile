@@ -709,7 +709,7 @@ export default function SwipeDeckScreen() {
       }
 
       await updateProfile(updates);
-      setSwipesLeft(isPremium ? UNLIMITED_SWIPES : MAX_DAILY_SWIPES - newDailySwipes);
+      setSwipesLeft((prev) => isPremium ? UNLIMITED_SWIPES : Math.max(0, prev - 1));
 
       // Track swipe locally
       const newSwipeRecord = {
