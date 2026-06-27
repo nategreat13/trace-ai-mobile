@@ -196,21 +196,21 @@ function DailyLimitView({
       <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 20 }}>
         <View style={{ alignItems: "center", marginBottom: 18 }}>
           <Text style={{ fontSize: 32, marginBottom: 8 }}>
-            {trialAvailable ? "✨" : "🌙"}
+            {trialAvailable ? "🔥" : "🌙"}
           </Text>
           <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 6 }}>
             {trialAvailable
-              ? `Keep swiping — free for ${trialLabelLong}`
-              : "Out of swipes for today"}
+              ? "You're on a roll"
+              : "That's all for today"}
           </Text>
           <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 18 }}>
-            {dealsWaiting > 0
-              ? trialAvailable
-                ? `${dealsWaiting} more deals${fromAirport} waiting — unlock them all now`
-                : `${dealsWaiting} more deals${fromAirport} waiting`
-              : trialAvailable
-                ? `Unlimited swipes & saves. Cancel anytime.`
-                : `Free members get ${maxSwipes} swipes/day`}
+            {trialAvailable
+              ? dealsWaiting > 0
+                ? `${dealsWaiting} more deals${fromAirport} waiting. Keep going free for ${trialLabelLong} — cancel anytime.`
+                : `Unlock unlimited swipes free for ${trialLabelLong}. Cancel anytime.`
+              : dealsWaiting > 0
+                ? `${dealsWaiting} more deals${fromAirport} waiting — come back tomorrow or upgrade for unlimited.`
+                : `Free members get ${maxSwipes} swipes per day. Upgrade for unlimited.`}
           </Text>
         </View>
 
@@ -227,7 +227,7 @@ function DailyLimitView({
             style={{ paddingVertical: 16, alignItems: "center" }}
           >
             <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>
-              {trialAvailable ? `Start ${trialLabel} free trial` : "Unlock Unlimited Swipes"}
+              {trialAvailable ? `Try free for ${trialLabelLong} →` : "Unlock Unlimited Swipes"}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
