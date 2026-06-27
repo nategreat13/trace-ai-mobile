@@ -7,8 +7,8 @@ export function useProfile() {
 
   const update = async (updates: Partial<UserProfile>) => {
     if (!profile?.id) return;
-    await updateUserProfile(profile.id, updates);
     setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
+    await updateUserProfile(profile.id, updates);
   };
 
   return { profile, updateProfile: update };
