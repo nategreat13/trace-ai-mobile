@@ -288,7 +288,7 @@ export default function SwipeDeckScreen() {
   const isFocused = useIsFocused();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium } = useAuth();
+  const { user, profile, isPremium, isTrialPeriod } = useAuth();
   const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
@@ -835,7 +835,24 @@ export default function SwipeDeckScreen() {
             )
           )}
         </View>
-        {!isPremium && (
+        {isPremium ? (
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            backgroundColor: "rgba(251,191,36,0.12)",
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderWidth: 1,
+            borderColor: "rgba(251,191,36,0.3)",
+          }}>
+            <Text style={{ fontSize: 11 }}>✨</Text>
+            <Text style={{ fontSize: 11, fontWeight: "700", color: colors.brand.amber600 }}>
+              {isTrialPeriod ? "Trial" : "Premium"}
+            </Text>
+          </View>
+        ) : (
           <TouchableOpacity
             onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_header_crown" })}
             style={{ flexDirection: "row", alignItems: "center" }}
