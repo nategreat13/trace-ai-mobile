@@ -61,14 +61,29 @@ const PLATFORM_FILTERS: Array<{ key: string; label: string }> = [
   { key: "web", label: "Web" },
 ];
 
+const STATUS_FILTERS: Array<{ key: string; label: string }> = [
+  { key: "", label: "All" },
+  { key: "free", label: "Free" },
+  { key: "trial", label: "Trial" },
+  { key: "premium", label: "Premium" },
+  { key: "business", label: "Business" },
+];
+
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; platform?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    platform?: string;
+    status?: string;
+    sort?: string;
+  }>;
 }) {
   const params = await searchParams;
   const search = params?.q?.trim() ?? "";
   const platform = params?.platform?.trim().toLowerCase() ?? "";
+  const status = params?.status?.trim().toLowerCase() ?? "";
+  const sort = params?.sort === "oldest" ? "oldest" : "newest";
   const env = await getAdminEnv();
 
   const [excluded, { rows, total }] = await Promise.all([
@@ -76,7 +91,13 @@ export default async function UsersPage({
       userIds: new Set<string>(),
       emails: new Set<string>(),
     })),
-    listUsers(env, { search, platform: platform || undefined, limit: 200 }),
+    listUsers(env, {
+      search,
+      platform: platform || undefined,
+      status: status || undefined,
+      sort,
+      limit: 200,
+    }),
   ]);
 
   // Annotate excluded flag (listUsers received excluded but we recompute
@@ -112,13 +133,17 @@ export default async function UsersPage({
           {platform && (
             <input type="hidden" name="platform" value={platform} />
           )}
+          {status && <input type="hidden" name="status" value={status} />}
+          {sort === "oldest" && (
+            <input type="hidden" name="sort" value="oldest" />
+          )}
           <button
             type="submit"
             className="px-3 py-2 bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium rounded-lg"
           >
             Search
           </button>
-          {(search || platform) && (
+          {(search || platform || status || sort === "oldest") && (
             <Link
               href="/users"
               className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
@@ -129,13 +154,15 @@ export default async function UsersPage({
         </form>
       </header>
 
-      <div className="mb-4 flex items-center gap-2 text-xs">
+      <div className="mb-3 flex items-center gap-2 text-xs">
         <span className="text-gray-500 mr-1">Platform:</span>
         {PLATFORM_FILTERS.map((f) => {
           const isActive = (platform || "") === f.key;
           const qs = new URLSearchParams();
           if (search) qs.set("q", search);
           if (f.key) qs.set("platform", f.key);
+          if (status) qs.set("status", status);
+          if (sort === "oldest") qs.set("sort", "oldest");
           const href = qs.toString() ? `/users?${qs.toString()}` : "/users";
           return (
             <Link
@@ -149,6 +176,60 @@ export default async function UsersPage({
               }
             >
               {f.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="mb-3 flex items-center gap-2 text-xs">
+        <span className="text-gray-500 mr-1">Status:</span>
+        {STATUS_FILTERS.map((f) => {
+          const isActive = (status || "") === f.key;
+          const qs = new URLSearchParams();
+          if (search) qs.set("q", search);
+          if (platform) qs.set("platform", platform);
+          if (f.key) qs.set("status", f.key);
+          if (sort === "oldest") qs.set("sort", "oldest");
+          const href = qs.toString() ? `/users?${qs.toString()}` : "/users";
+          return (
+            <Link
+              key={f.key || "all"}
+              href={href}
+              className={
+                "px-2.5 py-1 rounded-full border " +
+                (isActive
+                  ? "bg-rose-500 text-white border-rose-500"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50")
+              }
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="mb-4 flex items-center gap-2 text-xs">
+        <span className="text-gray-500 mr-1">Sort:</span>
+        {(["newest", "oldest"] as const).map((s) => {
+          const isActive = sort === s;
+          const qs = new URLSearchParams();
+          if (search) qs.set("q", search);
+          if (platform) qs.set("platform", platform);
+          if (status) qs.set("status", status);
+          if (s === "oldest") qs.set("sort", "oldest");
+          const href = qs.toString() ? `/users?${qs.toString()}` : "/users";
+          return (
+            <Link
+              key={s}
+              href={href}
+              className={
+                "px-2.5 py-1 rounded-full border capitalize " +
+                (isActive
+                  ? "bg-rose-500 text-white border-rose-500"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50")
+              }
+            >
+              {s}
             </Link>
           );
         })}

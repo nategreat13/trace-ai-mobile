@@ -37,11 +37,17 @@ export async function listUsers(
     excluded?: ExcludedSets;
     /** Filter to users whose firstPlatform matches. "ios" | "android" | "web". */
     platform?: string;
+    /** Filter to users whose subscriptionStatus matches. "free" | "trial" | "premium" | "business". */
+    status?: string;
+    /** "newest" (default) or "oldest", sorted by createdAt. */
+    sort?: "newest" | "oldest";
   } = {}
 ): Promise<{ rows: UserRow[]; total: number }> {
   const limit = opts.limit ?? 200;
   const search = opts.search?.trim().toLowerCase();
   const platform = opts.platform?.trim().toLowerCase();
+  const status = opts.status?.trim().toLowerCase();
+  const sort = opts.sort ?? "newest";
 
   const snap = await colRef(env, "userProfiles")
     .select(
@@ -101,15 +107,21 @@ export async function listUsers(
       )
     : all;
 
-  const filtered = platform
+  const platformFiltered = platform
     ? searched.filter((r) => (r.firstPlatform ?? "").toLowerCase() === platform)
     : searched;
 
-  // Sort by createdAt desc (newest first)
+  const filtered = status
+    ? platformFiltered.filter(
+        (r) => r.subscriptionStatus.toLowerCase() === status
+      )
+    : platformFiltered;
+
+  // Sort by createdAt — newest first by default, oldest first if requested.
   filtered.sort((a, b) => {
     const ta = a.createdAt?.getTime() ?? 0;
     const tb = b.createdAt?.getTime() ?? 0;
-    return tb - ta;
+    return sort === "oldest" ? ta - tb : tb - ta;
   });
 
   return {

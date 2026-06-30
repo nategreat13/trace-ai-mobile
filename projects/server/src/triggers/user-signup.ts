@@ -3,6 +3,7 @@ import { defineSecret } from "firebase-functions/params";
 import { colRef } from "../firebase";
 import { runWithEnv } from "../env";
 import { fanOutConversion } from "../lib/ad-conversions";
+import { trackKlaviyoEvent, subscribeKlaviyoProfile } from "../lib/klaviyo";
 
 /**
  * Slack incoming webhook URL — bound at deploy via Secret Manager.
@@ -10,6 +11,8 @@ import { fanOutConversion } from "../lib/ad-conversions";
  */
 const slackSignupWebhookUrl = defineSecret("SLACK_SIGNUP_WEBHOOK_URL");
 const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
+const klaviyoPrivateApiKey = defineSecret("KLAVIYO_PRIVATE_API_KEY");
+const klaviyoListId = defineSecret("KLAVIYO_LIST_ID");
 
 /**
  * Fires whenever a new userProfiles document is created. The userProfile
@@ -61,6 +64,19 @@ async function handleUserSignup(event: {
       lastName,
       country,
     });
+
+    // Klaviyo welcome series trigger. Fire-and-forget — never throws, so a
+    // Klaviyo outage can't break signup processing. In staging this only
+    // sends if `email` is on the sandbox whitelist (see lib/klaviyo.ts).
+    const resolvedEmail = email !== "(no email)" ? email : null;
+    if (resolvedEmail) {
+      await subscribeKlaviyoProfile(resolvedEmail, userId);
+      await trackKlaviyoEvent(
+        "Signed Up",
+        { externalId: userId, email: resolvedEmail, firstName, lastName },
+        { home_airport: homeAirport, country }
+      );
+    }
     const createdAtRaw: any = data.createdAt;
     const createdAt: Date =
       createdAtRaw?.toDate?.() ??
@@ -143,7 +159,12 @@ async function handleUserSignup(event: {
 export const onUserProfileCreated = onDocumentCreated(
   {
     document: "userProfiles/{id}",
-    secrets: [slackSignupWebhookUrl, metaCapiAccessToken],
+    secrets: [
+      slackSignupWebhookUrl,
+      metaCapiAccessToken,
+      klaviyoPrivateApiKey,
+      klaviyoListId,
+    ],
   },
   (event) => runWithEnv("prod", () => handleUserSignup(event))
 );
@@ -158,7 +179,7 @@ export const onUserProfileCreated = onDocumentCreated(
 export const onStagingUserProfileCreated = onDocumentCreated(
   {
     document: "staging_userProfiles/{id}",
-    secrets: [slackSignupWebhookUrl],
+    secrets: [slackSignupWebhookUrl, klaviyoPrivateApiKey, klaviyoListId],
   },
   (event) =>
     runWithEnv("staging", async () => {
@@ -169,5 +190,23 @@ export const onStagingUserProfileCreated = onDocumentCreated(
         data.email ?? "(no email)"
       );
       // Intentionally no Slack post — see comment above.
+
+      // Klaviyo fires here too — gated to the sandbox whitelist in staging
+      // (lib/klaviyo.ts), so only test accounts whose email is whitelisted
+      // in the admin portal actually receive anything.
+      const email: string | null = data.email ?? null;
+      const userId: string = data.userId ?? "";
+      const firstName: string | null = data.firstName ?? null;
+      const lastName: string | null = data.lastName ?? null;
+      const homeAirport: string = data.homeAirport ?? "(unknown)";
+      const country: string | null = data.country ?? null;
+      if (email) {
+        await subscribeKlaviyoProfile(email, userId);
+        await trackKlaviyoEvent(
+          "Signed Up",
+          { externalId: userId, email, firstName, lastName },
+          { home_airport: homeAirport, country }
+        );
+      }
     })
 );

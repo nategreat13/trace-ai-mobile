@@ -114,6 +114,11 @@ export {
   onStagingUserProfileCreated,
 } from "./triggers/user-signup";
 
+// Firestore trigger: forwards `app_open` analytics events to Klaviyo as
+// an "App Opened" event, so Day 2 / Day 7 re-engagement Flows have a
+// "time since last activity" signal to key off of.
+export { onAppOpened, onStagingAppOpened } from "./triggers/app-opened";
+
 // Cron: fires welcome / trial-ending / inactivity push notifications
 // once per day. Each trigger is gated on its template being enabled,
 // so Trevor can switch any of them on/off without a deploy.
