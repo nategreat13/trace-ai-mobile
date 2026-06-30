@@ -20,6 +20,7 @@
  *   - KLAVIYO_LIST_ID                       — required only for subscribe()
  */
 import { getEnv } from "../env";
+import { colRef } from "../firebase";
 
 const KLAVIYO_BASE = "https://a.klaviyo.com/api";
 // Pinned API revision — bump deliberately when adopting newer Klaviyo features.
@@ -52,10 +53,18 @@ function profileBlock(p: KlaviyoProfile): Record<string, unknown> {
 
 /**
  * Returns the API key if Klaviyo should fire for this call, else null (and
- * logs why). Gates on prod-only + key-present.
+ * logs why). Gates:
+ *   - KLAVIYO_PRIVATE_API_KEY must be set.
+ *   - prod    → send to anyone.
+ *   - staging → send ONLY to addresses on the sandbox email whitelist
+ *               (`sandboxEmailWhitelist`, managed in the admin portal), so
+ *               test sends can never reach real users. No email → can't be
+ *               whitelisted → skip.
  */
-function keyOrSkip(op: string): string | null {
-  if (getEnv() !== "prod") return null; // staging/test — never hit real Klaviyo
+async function gate(
+  op: string,
+  email: string | null | undefined
+): Promise<string | null> {
   const key = process.env.KLAVIYO_PRIVATE_API_KEY;
   if (!key) {
     console.warn(
@@ -66,7 +75,45 @@ function keyOrSkip(op: string): string | null {
     );
     return null;
   }
-  return key;
+
+  if (getEnv() === "prod") return key;
+
+  // staging — only whitelisted test addresses may receive email.
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) {
+    console.log(
+      JSON.stringify({
+        severity: "INFO",
+        message: `[Klaviyo] staging: ${op} skipped — no email to match against sandbox whitelist`,
+      })
+    );
+    return null;
+  }
+  try {
+    const snap = await colRef("sandboxEmailWhitelist")
+      .where("email", "==", normalized)
+      .limit(1)
+      .get();
+    if (snap.empty) {
+      console.log(
+        JSON.stringify({
+          severity: "INFO",
+          message: `[Klaviyo] staging: ${op} skipped — ${normalized} not on sandbox whitelist`,
+        })
+      );
+      return null;
+    }
+    return key;
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        severity: "ERROR",
+        message: "[Klaviyo] staging whitelist check failed",
+        error: String((err as { message?: string })?.message ?? err),
+      })
+    );
+    return null;
+  }
 }
 
 /**
@@ -80,9 +127,9 @@ export async function trackKlaviyoEvent(
   properties: Record<string, unknown> = {},
   value?: number
 ): Promise<void> {
-  const key = keyOrSkip(`event "${metric}"`);
-  if (!key) return;
   if (!profile.email && !profile.externalId) return; // need an identifier
+  const key = await gate(`event "${metric}"`, profile.email);
+  if (!key) return;
 
   const body = {
     data: {
@@ -145,9 +192,9 @@ export async function subscribeKlaviyoProfile(
   email: string | null | undefined,
   externalId: string
 ): Promise<void> {
-  const key = keyOrSkip("subscribe");
-  if (!key) return;
   if (!email) return;
+  const key = await gate("subscribe", email);
+  if (!key) return;
   const listId = process.env.KLAVIYO_LIST_ID;
   if (!listId) {
     console.warn(

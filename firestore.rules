@@ -191,6 +191,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Sandbox/staging email whitelist — the only addresses allowed to receive
+    // Klaviyo email while env=staging. Managed in the admin portal via Admin
+    // SDK; clients never touch it.
+    match /sandboxEmailWhitelist/{docId} {
+      allow read, write: if false;
+    }
+
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║                      STAGING COLLECTIONS                         ║
     // ║                                                                  ║
@@ -290,6 +297,7 @@ service cloud.firestore {
     match /staging_notificationLog/{docId}     { allow read, write: if false; }
     match /staging_hotDealCache/{docId}        { allow read, write: if false; }
     match /staging_dotdCache/{docId}           { allow read, write: if false; }
+    match /staging_sandboxEmailWhitelist/{docId} { allow read, write: if false; }
 
     // ──── Deny everything else ────
     match /{document=**} {

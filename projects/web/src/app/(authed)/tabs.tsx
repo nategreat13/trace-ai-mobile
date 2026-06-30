@@ -12,6 +12,7 @@ const TABS = [
   { href: "/promo-codes", label: "Promo codes" },
   { href: "/notifications", label: "Notifications" },
   { href: "/exclusions", label: "Exclusions" },
+  { href: "/email-whitelist", label: "Email whitelist" },
   { href: "/spend", label: "Spend" },
   { href: "/audit", label: "Audit log" },
 ] as const;

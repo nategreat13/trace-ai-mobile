@@ -51,6 +51,7 @@ export const COLLECTION_NAMES = [
   "adSpend",
   "hotDealCache",
   "dotdCache",
+  "sandboxEmailWhitelist",
   "webhookEvents",
 ] as const;
 
