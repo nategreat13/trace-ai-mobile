@@ -4,6 +4,7 @@ import { colRef } from "../firebase";
 import { runWithEnv } from "../env";
 import { sendToUser } from "../lib/push";
 import { getTemplate, renderString, TEMPLATE_CATEGORY } from "../lib/notification-templates";
+import { trackKlaviyoEvent } from "../lib/klaviyo";
 
 type NotificationPrefs = {
   deals?: boolean;
@@ -96,6 +97,10 @@ function pickDealForUser(
 // in-trigger entitlement checks. Listed even if not used today so
 // secrets binding stays consistent across functions.
 const adminApiToken = defineSecret("ADMIN_API_TOKEN");
+// Klaviyo — the cron fires re-engagement events (lib/klaviyo.ts) for the
+// Day 2 / Day 7 email Flows. No-ops without the key.
+const klaviyoPrivateApiKey = defineSecret("KLAVIYO_PRIVATE_API_KEY");
+const klaviyoListId = defineSecret("KLAVIYO_LIST_ID");
 
 /**
  * Helper: send a templated push to one user. Looks up the template,
@@ -169,7 +174,7 @@ export const dailyNotificationTriggers = onSchedule(
   {
     schedule: "0 14 * * *",
     timeZone: "UTC",
-    secrets: [adminApiToken],
+    secrets: [adminApiToken, klaviyoPrivateApiKey, klaviyoListId],
   },
   async () => {
     // Cron is prod-only by default. The staging counterpart (gated on
@@ -360,6 +365,56 @@ async function runDailyNotifications() {
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_14d: scanned ${snap.size} candidates`);
+    }
+
+    // ─── Klaviyo re-engagement events (EMAIL, via lastSeenAt) ─────
+    // Fires Klaviyo events that trigger the Day 2 / Day 7 re-engagement
+    // EMAIL Flows. Keyed on `lastSeenAt` (reliably mirrored on every
+    // foreground) rather than the sparse `app_open` event. Email consent is
+    // owned by the Klaviyo list — NOT `notificationsEnabled`, which gates
+    // push. Each 1-day-wide window matches a user once, so no extra dedup is
+    // needed. trackKlaviyoEvent no-ops without the Klaviyo secret and, in
+    // staging, only fires for sandbox-whitelisted emails (see lib/klaviyo.ts).
+    {
+      const REENGAGE_WINDOWS = [
+        { days: 2, metric: "Inactive 2 Days" },
+        { days: 7, metric: "Inactive 7 Days" },
+      ] as const;
+      for (const w of REENGAGE_WINDOWS) {
+        const cutoffEnd = new Date(now.getTime() - w.days * 24 * 60 * 60 * 1000);
+        const cutoffStart = new Date(now.getTime() - (w.days + 1) * 24 * 60 * 60 * 1000);
+        const snap = await colRef("userProfiles")
+          .where("lastSeenAt", ">=", cutoffStart)
+          .where("lastSeenAt", "<", cutoffEnd)
+          .select("userId", "email", "firstName", "lastName", "homeAirport")
+          .get();
+        let fired = 0;
+        for (const doc of snap.docs) {
+          const data = doc.data() as {
+            userId?: string;
+            email?: string;
+            firstName?: string;
+            lastName?: string;
+            homeAirport?: string;
+          };
+          if (!data.userId || !data.email) continue;
+          await trackKlaviyoEvent(
+            w.metric,
+            {
+              externalId: data.userId,
+              email: data.email,
+              firstName: data.firstName ?? null,
+              lastName: data.lastName ?? null,
+              // Set home_airport as a PROFILE property so the email's
+              // `{{ person.home_airport }}` renders (not just an event prop).
+              properties: data.homeAirport ? { home_airport: data.homeAirport } : undefined,
+            },
+            { home_airport: data.homeAirport ?? null }
+          );
+          fired++;
+        }
+        console.log(`[cron] klaviyo "${w.metric}": fired for ${fired} of ${snap.size} candidates`);
+      }
     }
 
     // ─── Hot deal alert (≥60% off, premium + business only) ───────
@@ -882,7 +937,7 @@ export const dailyStagingNotificationTriggers =
         {
           schedule: "0 14 * * *",
           timeZone: "UTC",
-          secrets: [adminApiToken],
+          secrets: [adminApiToken, klaviyoPrivateApiKey, klaviyoListId],
         },
         async () => runWithEnv("staging", () => runDailyNotifications())
       )

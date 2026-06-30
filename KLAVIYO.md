@@ -1,133 +1,88 @@
 # Klaviyo Email Integration — status & guide
 
-_For a Claude session helping **Trevor** build out Trace's lifecycle email. Read this first, then `CLAUDE.md` (deploy policy) and `STAGING.md` (env model). Last updated: 2026-06-29._
-
-This doc explains what's already built, how the pieces fit, and the work that remains — so you can guide Trevor through it.
-
----
+_For a Claude session helping **Trevor** build out Trace's lifecycle email. Read this first, then `CLAUDE.md` (deploy policy) and `STAGING.md` (env model). Last updated: 2026-06-30._
 
 ## TL;DR — where things stand
 
-- ✅ **Config + client lib are live.** The Cloud Functions hold the Klaviyo secrets, and `projects/server/src/lib/klaviyo.ts` is deployed and ready to call.
-- ✅ **Staging safety (whitelist) is built** — in staging, email only sends to whitelisted test addresses.
-- ⬜ **No events are wired yet — nothing sends.** This is the main remaining work: decide *what to send and when*, then call the lib from the right server hooks.
-- ⬜ **No Klaviyo Flows/copy yet** — Trevor builds these in the Klaviyo UI once events flow.
-- ⬜ **Sending domain not verified** (assumed) — required before any real email can deliver.
-
-Relevant commits: `4599ca8` (config + lib), `46bc98a` (staging whitelist).
-
----
+- ✅ **All 5 lifecycle events are wired in server code** (signup, 2 re-engagement, trial start, swipe-limit). Each fires a Klaviyo metric.
+- ✅ **The 5 metrics are registered in Klaviyo** (via a one-off test fire), so they're selectable as Flow triggers **right now** — Trevor can build the flows today.
+- ⬜ **Functions not deployed yet** — the events won't fire for *real* users until Nate deploys (`firebase deploy --only functions:api,functions:apiStaging`). Building the flows doesn't need the deploy; live firing does.
+- ⬜ **Trevor builds 5 Flows** (NOT Campaigns — see below) triggered by the 5 metrics.
+- ⬜ **Sending domain** (SPF/DKIM in Klaviyo) must be verified before anything delivers.
 
 ## The one Klaviyo fact that shapes everything
 
-**Klaviyo has no generic "send this email to this address" API.** All sends are **Flow- or Campaign-driven**. The model is:
+**Klaviyo has no generic "send this email to this address" API.** All sends are **Flow- or Campaign-driven**:
+> our server fires an **event** → a **Flow** Trevor built (triggered by that event's metric) → the email sends (if the profile is subscribed + the sending domain is verified).
 
-> fire an **event** (e.g. "Signed Up") → a **Flow** Trevor built in Klaviyo (triggered by that event) → the email sends to that profile (if subscribed).
+Firing the event via the API *is* the entire server-side hookup — no webhook to register. Klaviyo auto-creates a metric the first time it receives an event with that name.
 
-So "send an email" always means "fire an event + have a Flow set up + the profile is subscribed." There is no shortcut. Keep this in mind whenever Trevor says "send X email."
+## ⚠️ Flows, NOT Campaigns
 
----
+These are the two different Klaviyo objects, and it matters:
+- **Campaign** = a one-time manual blast to a list. **Does not react to events.**
+- **Flow** = an automated sequence **triggered by a metric/event**. ← all five of ours must be Flows.
 
-## How it's wired (architecture)
+If these were built as Campaigns, our events won't trigger them and nothing automates. The email *content* is reusable — copy it into a Flow's email step.
 
-- **Server-side only.** The mobile app does NOT talk to Klaviyo. Every send originates from a Cloud Function calling `lib/klaviyo.ts`. (This keeps the API key off devices and out of the web app.)
-- **The client lib** — `projects/server/src/lib/klaviyo.ts`, two functions:
-  - `trackKlaviyoEvent(metric, profile, properties?, value?)` — records a metric event **and upserts the profile** from the inline `profile` block (`{ externalId, email, firstName, lastName }`). `metric` is the human name Flows trigger on (e.g. `"Started Trial"`). `externalId` = the Firebase `userId`.
-  - `subscribeKlaviyoProfile(email, externalId)` — single opt-in to the **Email List**. Required for Flows to actually *send* — tracking an event alone leaves the profile unsubscribed.
-  - Both are **fire-and-forget** (never throw, never block the caller) and **no-op without the secrets**.
-- **The prod/staging gate** (inside the lib):
-  - **prod →** send to anyone.
-  - **staging →** send only if the recipient email is on the `sandboxEmailWhitelist` collection. No email, or not whitelisted → skipped (logged).
-  - This is why you can safely test in staging: real users never get email there.
+## The 5 emails → events
 
----
+| Email (`projects/emails/*.html`, reference only) | Trigger metric | Fires when | Source |
+|---|---|---|---|
+| welcome | **`Signed Up`** | user finishes onboarding | signup trigger |
+| day2-reengagement | **`Inactive 2 Days`** | ~2 days since last app activity | daily cron (`lastSeenAt`) |
+| day7-reengagement | **`Inactive 7 Days`** | ~7 days since last app activity | daily cron (`lastSeenAt`) |
+| trial-started | **`Started Trial`** | free trial begins | RevenueCat webhook |
+| swipe-limit | **`Hit Swipe Limit`** | user hits the daily swipe cap | client-events trigger (`daily_limit_hit`) |
 
-## The work that remains
+We set `first_name` and `home_airport` as **profile properties** so the templates' `{{ first_name }}` / `{{ person.home_airport }}` render.
 
-### 1. Wire events (the core dev task — you can do this with Trevor)
+> Note: `projects/emails/*.html` are **reference drafts only — not wired to anything.** The live email is whatever's built in Klaviyo. Klaviyo is the source of truth for copy.
 
-Pick a lifecycle moment, import the lib, call it. The hook points already exist in the codebase:
+## How to build a Flow on a metric
 
-| Moment | File | What's available there |
-|---|---|---|
-| **Signup** (finished onboarding) | `projects/server/src/triggers/user-signup.ts` → `handleUserSignup` | `email`, `userId`, `firstName`, `lastName`, `country`, `homeAirport` |
-| **Trial / purchase / cancel / expire** | `projects/server/src/routes/revenuecat-webhook.ts` | `app_user_id` (= userId), profile `email`, event `type`, `period_type` (TRIAL vs paid), `tier` |
-| **App engagement** (first swipe, etc.) | client writes to the `events` Firestore collection | would need a new filtered Firestore trigger if a Flow needs these |
+1. **Flows → Create Flow → Create from scratch.**
+2. Trigger type = **Metric** → **Your metrics → API** → pick the metric (e.g. `Inactive 2 Days`). *(The metric must already exist in Klaviyo to appear here — ours are registered, so they will.)*
+3. Drag in an **Email** action, build/paste the content.
+4. Set **Live**.
 
-Example — wiring the signup event (illustrative; confirm the exact insertion with the current file):
+**No time delay needed.** Our cron is the timer — `Inactive 2 Days` only fires when someone is *actually* 2 days inactive, so the flow should send **immediately** on trigger. Don't add a 2-day delay inside the flow or you'd double the wait. Same for the others — the server fires each event at the right moment.
 
-```ts
-import { trackKlaviyoEvent, subscribeKlaviyoProfile } from "../lib/klaviyo";
+## Re-entry & the cooldown filter (important for the re-engagement emails)
 
-// inside handleUserSignup, after the existing fanOutConversion(...) call:
-await subscribeKlaviyoProfile(email, userId);
-await trackKlaviyoEvent(
-  "Signed Up",
-  { externalId: userId, email, firstName, lastName },
-  { home_airport: homeAirport, country }
-);
-```
+Two layers govern how often a person gets a re-engagement email:
 
-⚠️ **Secrets-per-function gotcha:** the Klaviyo secrets are currently bound to the `api` + `apiStaging` functions only (in `index.ts`). The **signup trigger is a separate function** with its own `secrets:` array (in `user-signup.ts`). If you wire events from the signup trigger, add `KLAVIYO_PRIVATE_API_KEY` + `KLAVIYO_LIST_ID` to that array too, or the lib will no-op there. Events fired from the RC webhook (which runs inside `api`/`apiStaging`) already have the secrets.
+- **Our side:** each `Inactive N Days` event fires **once per inactivity episode** — once when they cross the 2-day mark, again only if they come back and lapse again later. It does **not** repeat daily while they stay gone.
+- **Klaviyo side (Trevor's setting):** by default a profile **re-enters** a metric-triggered flow each time the metric fires. For re-engagement that's usually desirable (win them back each time they lapse) — but add a **cooldown flow filter** so a frequently-in-and-out user isn't pestered, e.g.:
+  > Flow filter: **"Has not received [this email] in the last 14 days"** (or 2–4 weeks).
 
-After wiring → **server deploy required** (`firebase deploy --only functions:api,functions:apiStaging`) — **ask Nate** (see deploy policy below).
+  For `Signed Up` / `Started Trial`, re-entry is moot — those moments happen once per person — but a "skip if already premium" filter on the trial email is reasonable.
 
-### 2. Build the email in Klaviyo (Trevor's side, in the Klaviyo UI)
+## Prerequisites for anything to actually deliver
+- **Subscription/consent** — the profile must be on the **Email List**. The server subscribes users (single opt-in) on signup. *(This subscribe path hasn't been verified end-to-end yet — confirm on the first real signup post-deploy.)*
+- **Sending domain verified** (Klaviyo → Settings → Domains: SPF/DKIM). Nothing delivers until this is done.
 
-1. **Verify a sending domain** (Settings → Domains: SPF/DKIM DNS records). Nothing delivers until this is done. DNS may need Nate.
-2. Create a **Flow** triggered by the metric you wired (e.g. `Signed Up` → Welcome series).
-3. Write the copy.
-4. Make sure the Flow's audience includes subscribed Email List members.
-
-### 3. Test it (staging, safely)
-
-1. Admin portal → **Email whitelist** tab, with the env toggle set to **Staging** → add your own email.
-2. Trigger the event in staging (e.g. complete a signup against the staging server). Local option: `yarn dev1` defaults to staging; needs `KLAVIYO_PRIVATE_API_KEY` + `KLAVIYO_LIST_ID` in `projects/server/.env.local` (get values from Nate).
-3. Confirm in Klaviyo's **activity feed** + your inbox. Check Cloud Function logs for `[Klaviyo] event accepted` (success) or a `401`/`404` (bad key/list).
-
-### 4. (Optional, deferred) "Send test email" admin button
-
-Discussed but **not built**. Because Klaviyo has no one-call send, a "test email" = fire a chosen event for a target address (triggers the Flow). If Trevor wants this, it'd be a new admin endpoint + UI: prod → any address, staging → whitelist only (reuse the same gate). Flag it to Nate as a small follow-up feature.
-
----
-
-## Staging vs prod safety (the whitelist)
-
-- **Admin → "Email whitelist" tab.** Manage it with the env toggle on **Staging** (the only place it does anything).
-- In **staging**, only whitelisted addresses can receive email. In **prod**, the whitelist is ignored (everyone). Adding to the prod whitelist is intentionally blocked.
-- Backed by the `sandboxEmailWhitelist` Firestore collection (server-only).
-
----
-
-## Who does what (important — Trevor is non-technical on infra)
-
+## Who does what
 | Task | Who |
 |---|---|
-| Write event-wiring code, build Klaviyo Flows + copy, manage the whitelist | **Trevor + Claude** |
-| `firebase functions:secrets:set …`, `firebase deploy …`, `vercel --prod`, DNS for the sending domain | **Nate** (infra owner) |
+| Build the 5 Flows + copy, set re-entry/cooldown, verify sending domain | **Trevor (+ Claude)** |
+| `firebase deploy` (live event firing), secrets, DNS | **Nate** (infra owner) |
 
-**Deploy policy (from `CLAUDE.md`): never run a production deploy without Nate's explicit approval *in that session*.** This includes any `firebase deploy`, `vercel --prod`, secret changes, or App Store/OTA actions. Write the code, then ask Nate to deploy — don't chain code + deploy.
+**Deploy policy (`CLAUDE.md`): never run a production deploy without Nate's explicit approval in-session.** Write code/build flows; ask Nate to deploy.
 
----
+## Dev notes / gotchas (for a coding session)
+- **Klaviyo Events API payload:** `metric` and `profile` are JSON:API relationships — each must be `{ "data": { "type": ..., "attributes": ... } }`. A flat object 400s with *"'data' key missing in relationship."* (`lib/klaviyo.ts` is correct; don't regress it.) Host `https://a.klaviyo.com/api`, `Authorization: Klaviyo-API-Key pk_…`, `revision: 2026-04-15`.
+- **Re-engagement uses `lastSeenAt`, not `app_open`.** The old `app_open → "App Opened"` forwarding was removed — `app_open` was too sparse (~4% of users). Re-engagement runs off the reliable `lastSeenAt` cron in `notification-cron.ts`.
+- **Secrets are per-function.** `KLAVIYO_PRIVATE_API_KEY` + `KLAVIYO_LIST_ID` are bound to every function that fires events (api/apiStaging, signup triggers, the cron, the client-events trigger). A new firing site needs them in its own `secrets:` array.
+- **Staging is whitelist-gated.** In staging, events only fire for emails on the `sandboxEmailWhitelist` (admin "Email whitelist" tab, env = Staging). Prod sends to everyone.
 
 ## File reference
-
-| File | What it is |
+| File | What |
 |---|---|
-| `projects/server/src/lib/klaviyo.ts` | the client (`trackKlaviyoEvent`, `subscribeKlaviyoProfile`) + the prod/staging gate |
-| `projects/server/src/index.ts` | declares `KLAVIYO_PRIVATE_API_KEY` + `KLAVIYO_LIST_ID`, bound to `api`/`apiStaging` |
-| `projects/server/src/triggers/user-signup.ts` | signup hook (a separate function — needs its own secrets entry if you wire here) |
-| `projects/server/src/routes/revenuecat-webhook.ts` | subscription lifecycle hook |
-| `projects/web/src/app/(authed)/email-whitelist/page.tsx` + `lib/sandbox-whitelist.ts` | the whitelist admin UI |
-| `firestore.rules` | deny-all rules for `sandboxEmailWhitelist` (+ `staging_`) |
-| `projects/shared/src/collections.ts` | registers the `sandboxEmailWhitelist` collection name |
-
----
-
-## Gotchas checklist
-
-- **Nothing sends until an event is wired AND a Flow exists AND the profile is subscribed AND the sending domain is verified.** Four conditions.
-- **Klaviyo API:** host `https://a.klaviyo.com/api`, `Authorization: Klaviyo-API-Key pk_…`, pinned `revision: 2026-04-15`. Events return `202`. (All handled inside the lib.)
-- **Secrets must exist in Secret Manager before *any* functions deploy** (they do). If you bind them to a new function, the secret must exist or the deploy fails.
-- **Consent:** US-centric base → single opt-in is fine (CAN-SPAM is opt-out); Klaviyo auto-adds unsubscribe. If meaningful EU/Canada volume shows up, segment them out or get explicit consent.
-- **The list is the Klaviyo "Email List."** Segments (Engaged 30/60/90, New Subscribers) auto-populate from behavior — you subscribe people to the *list*, not a segment.
+| `projects/server/src/lib/klaviyo.ts` | client (`trackKlaviyoEvent`, `subscribeKlaviyoProfile`) + prod/staging gate |
+| `projects/server/src/triggers/user-signup.ts` | `Signed Up` + subscribe |
+| `projects/server/src/triggers/notification-cron.ts` | `Inactive 2 Days` / `Inactive 7 Days` (lastSeenAt) |
+| `projects/server/src/routes/revenuecat-webhook.ts` | `Started Trial` |
+| `projects/server/src/triggers/client-events.ts` | `Hit Swipe Limit` (from `daily_limit_hit`) |
+| `scripts/klaviyo-register-metrics.mjs` | one-off: registers the 5 metrics in Klaviyo so flows can be built pre-deploy |
+| `projects/emails/*.html` | reference drafts only (not wired) |

@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { colRef } from "../firebase";
 import { getEnv } from "../env";
 import { fanOutConversion } from "../lib/ad-conversions";
+import { trackKlaviyoEvent } from "../lib/klaviyo";
 import { listActiveEntitlements } from "../lib/revenuecat-rest";
 import { sendToUser } from "../lib/push";
 import { getTemplate, renderString, TEMPLATE_CATEGORY } from "../lib/notification-templates";
@@ -465,6 +466,26 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
             currency: currency ?? "USD",
             productId: product_id ?? undefined,
           });
+          // Klaviyo: trial start → "Started Trial" email Flow. Only on a
+          // trialing INITIAL_PURCHASE. The RC webhook runs in api/apiStaging,
+          // which already hold the Klaviyo secrets; staging is whitelist-gated
+          // inside lib/klaviyo.ts.
+          if (isTrial) {
+            const pd = profileDoc.data() as {
+              firstName?: string;
+              homeAirport?: string;
+            };
+            await trackKlaviyoEvent(
+              "Started Trial",
+              {
+                externalId: app_user_id,
+                email,
+                firstName: pd.firstName ?? null,
+                properties: pd.homeAirport ? { home_airport: pd.homeAirport } : undefined,
+              },
+              { tier }
+            );
+          }
         }
 
         // Analytics

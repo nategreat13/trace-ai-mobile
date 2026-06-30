@@ -32,6 +32,13 @@ export interface KlaviyoProfile {
   email?: string | null;
   firstName?: string | null;
   lastName?: string | null;
+  /**
+   * Custom profile properties (e.g. { home_airport: "SLC" }) — set on the
+   * Klaviyo profile so templates can reference `{{ person.<key> }}`. Distinct
+   * from the per-event `properties` arg, which lives on the event, not the
+   * profile.
+   */
+  properties?: Record<string, unknown>;
 }
 
 function klaviyoHeaders(key: string): Record<string, string> {
@@ -48,6 +55,9 @@ function profileBlock(p: KlaviyoProfile): Record<string, unknown> {
   if (p.email) block.email = p.email;
   if (p.firstName) block.first_name = p.firstName;
   if (p.lastName) block.last_name = p.lastName;
+  if (p.properties && Object.keys(p.properties).length > 0) {
+    block.properties = p.properties;
+  }
   return block;
 }
 
@@ -131,15 +141,18 @@ export async function trackKlaviyoEvent(
   const key = await gate(`event "${metric}"`, profile.email);
   if (!key) return;
 
+  // metric + profile are JSON:API relationships — each must be wrapped as
+  // { data: { type, attributes } }. (Flat objects 400 with "'data' key
+  // missing in relationship".)
   const body = {
     data: {
       type: "event",
       attributes: {
-        metric: { name: metric },
-        profile: profileBlock(profile),
         properties,
         ...(value != null ? { value } : {}),
         time: new Date().toISOString(),
+        metric: { data: { type: "metric", attributes: { name: metric } } },
+        profile: { data: { type: "profile", attributes: profileBlock(profile) } },
       },
     },
   };

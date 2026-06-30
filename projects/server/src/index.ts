@@ -114,10 +114,11 @@ export {
   onStagingUserProfileCreated,
 } from "./triggers/user-signup";
 
-// Firestore trigger: forwards `app_open` analytics events to Klaviyo as
-// an "App Opened" event, so Day 2 / Day 7 re-engagement Flows have a
-// "time since last activity" signal to key off of.
-export { onAppOpened, onStagingAppOpened } from "./triggers/app-opened";
+// Firestore trigger: forwards selected client analytics events to Klaviyo
+// (currently `daily_limit_hit` → "Hit Swipe Limit" for the swipe-limit
+// email). Re-engagement no longer uses app_open — it runs off the
+// lastSeenAt cron in notification-cron.ts.
+export { onClientEvent, onStagingClientEvent } from "./triggers/client-events";
 
 // Cron: fires welcome / trial-ending / inactivity push notifications
 // once per day. Each trigger is gated on its template being enabled,
