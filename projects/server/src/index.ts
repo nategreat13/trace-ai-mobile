@@ -50,6 +50,16 @@ const metaCapiAccessToken = defineSecret("META_CAPI_ACCESS_TOKEN");
 //   firebase functions:secrets:set SLACK_REVENUE_WEBHOOK_URL
 const slackRevenueWebhookUrl = defineSecret("SLACK_REVENUE_WEBHOOK_URL");
 
+// Klaviyo email platform. Read by lib/klaviyo.ts to push lifecycle events +
+// profiles (so Klaviyo Flows can target users). The RC webhook (this function)
+// fires trial/purchase events; the signup trigger fires "Signed Up". Without
+// KLAVIYO_PRIVATE_API_KEY the calls no-op. KLAVIYO_LIST_ID is the marketing
+// list new users are subscribed to (single opt-in). Set with:
+//   firebase functions:secrets:set KLAVIYO_PRIVATE_API_KEY
+//   firebase functions:secrets:set KLAVIYO_LIST_ID
+const klaviyoPrivateApiKey = defineSecret("KLAVIYO_PRIVATE_API_KEY");
+const klaviyoListId = defineSecret("KLAVIYO_LIST_ID");
+
 /**
  * Prod API. Wraps the Express app in `runWithEnv("prod", …)` so every
  * Firestore read/write inside the request handler resolves to the
@@ -58,7 +68,7 @@ const slackRevenueWebhookUrl = defineSecret("SLACK_REVENUE_WEBHOOK_URL");
 export const api = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl, klaviyoPrivateApiKey, klaviyoListId],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps
@@ -85,7 +95,7 @@ export const api = onRequest(
 export const apiStaging = onRequest(
   {
     invoker: "public",
-    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl],
+    secrets: [revenuecatWebhookSecret, revenuecatRestApiKey, adminApiToken, anthropicApiKey, slackSupportWebhookUrl, metaCapiAccessToken, slackRevenueWebhookUrl, klaviyoPrivateApiKey, klaviyoListId],
     // Default is 60s — too short for /destination-info, which calls
     // Anthropic to generate ~4000 tokens of structured JSON and
     // routinely takes 60-90s. The route's own AbortController caps
