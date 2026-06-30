@@ -46,7 +46,9 @@ We set `first_name` and `home_airport` as **profile properties** so the template
 3. Drag in an **Email** action, build/paste the content.
 4. Set **Live**.
 
-**No time delay needed.** Our cron is the timer — `Inactive 2 Days` only fires when someone is *actually* 2 days inactive, so the flow should send **immediately** on trigger. Don't add a 2-day delay inside the flow or you'd double the wait. Same for the others — the server fires each event at the right moment.
+**Timing — send immediately, with ONE exception.** Our server fires each event at the right moment (the cron only fires `Inactive 2 Days` once someone's actually 2 days inactive, etc.), so the flows should send **immediately** on trigger — don't add a "wait 2 days" step or you'd double the wait.
+
+**Exception — the Welcome flow needs a 5-minute Time Delay.** Subscribe (Email List opt-in) is an async bulk job that fires at the same instant as the `Signed Up` event, so the flow can evaluate the send before the subscription lands and skip it. Add a **Time Delay → 5 minutes** between the `Signed Up` trigger and the welcome email. (Only Welcome needs this — for every other flow the user signed up long ago and is already subscribed.)
 
 ## Re-entry & the cooldown filter (important for the re-engagement emails)
 

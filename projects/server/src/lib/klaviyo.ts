@@ -227,9 +227,13 @@ export async function subscribeKlaviyoProfile(
           data: [
             {
               type: "profile",
+              // The bulk-subscribe profile only accepts email / phone_number /
+              // subscriptions / age_gated_date_of_birth — NOT external_id (it
+              // 400s). The profile is matched by email here; the "Signed Up"
+              // event sets external_id on the same profile separately. The
+              // `externalId` param is kept for call-site stability / future use.
               attributes: {
                 email,
-                external_id: externalId,
                 subscriptions: { email: { marketing: { consent: "SUBSCRIBED" } } },
               },
             },
