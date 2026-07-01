@@ -707,7 +707,12 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
     // Awaited (not void'd): once res.json sends, Cloud Run throttles CPU
     // and an un-awaited fetch never completes. sendRevenueSlack swallows
     // all errors internally, so awaiting it can't break the webhook.
-    {
+    //
+    // Skip the Slack post for TRIAL EXPIRATIONS (Trevor's request): a free
+    // trial that expires without converting arrives as EXPIRATION with
+    // period_type "TRIAL". Every other event — real (paid) expirations,
+    // purchases, renewals, cancellations, billing issues, promos — still posts.
+    if (!(type === "EXPIRATION" && period_type === "TRIAL")) {
       const slackTier =
         tierFromEntitlements(entitlement_ids) ??
         tierFromProductId(product_id) ??
