@@ -23,12 +23,19 @@ service cloud.firestore {
 
       // Users can update their own profile but NOT subscription/Stripe fields
       // (those are written by the server via Admin SDK which bypasses rules)
+      // Note: subscriptionStatus/trialEndDate/inTrial use get(field, null)
+      // instead of plain dot access — direct access to a field absent from
+      // the document errors out rule evaluation (Firestore treats an
+      // erroring rule as deny), and inTrial in particular is never set by
+      // client-side profile creation, so plain dot access here denied every
+      // client-side profile update for any account that had never started
+      // a trial. Found 2026-07-16.
       allow update: if request.auth != null
                     && resource.data.userId == request.auth.uid
                     && request.resource.data.userId == resource.data.userId
-                    && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
-                    && request.resource.data.trialEndDate == resource.data.trialEndDate
-                    && request.resource.data.inTrial == resource.data.inTrial
+                    && request.resource.data.get('subscriptionStatus', null) == resource.data.get('subscriptionStatus', null)
+                    && request.resource.data.get('trialEndDate', null) == resource.data.get('trialEndDate', null)
+                    && request.resource.data.get('inTrial', null) == resource.data.get('inTrial', null)
                     && unchangedStripeFields();
 
       // Users can delete their own profile (account deletion)
@@ -219,12 +226,13 @@ service cloud.firestore {
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.subscriptionStatus == "free";
 
+      // See matching note in the prod userProfiles block above.
       allow update: if request.auth != null
                     && resource.data.userId == request.auth.uid
                     && request.resource.data.userId == resource.data.userId
-                    && request.resource.data.subscriptionStatus == resource.data.subscriptionStatus
-                    && request.resource.data.trialEndDate == resource.data.trialEndDate
-                    && request.resource.data.inTrial == resource.data.inTrial
+                    && request.resource.data.get('subscriptionStatus', null) == resource.data.get('subscriptionStatus', null)
+                    && request.resource.data.get('trialEndDate', null) == resource.data.get('trialEndDate', null)
+                    && request.resource.data.get('inTrial', null) == resource.data.get('inTrial', null)
                     && stagingUnchangedStripeFields();
 
       allow delete: if request.auth != null

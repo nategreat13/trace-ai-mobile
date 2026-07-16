@@ -56,7 +56,7 @@ export async function getUserProfile(userId: string): Promise<(UserProfile & { i
   const q = query(envCollection("userProfiles"), where("userId", "==", userId));
   const snap = await getDocs(q);
   if (snap.empty) return null;
-  const docSnap = snap.docs[0];
+  const docSnap = pickCanonicalProfileDoc(snap.docs);
   return { id: docSnap.id, ...docToProfile(docSnap.data()) };
 }
 
@@ -112,7 +112,7 @@ export function subscribeToProfile(
     if (snap.empty) {
       callback(null);
     } else {
-      const d = snap.docs[0];
+      const d = pickCanonicalProfileDoc(snap.docs);
       callback({ id: d.id, ...docToProfile(d.data()) });
     }
   });
@@ -248,6 +248,23 @@ export async function deleteDealAlert(docId: string): Promise<void> {
 }
 
 // ──── Helpers ────
+
+/**
+ * Some accounts have more than one userProfiles doc for the same userId
+ * (a double-tap on onboarding's submit button can create two before the
+ * first write resolves). Both getUserProfile and subscribeToProfile must
+ * resolve to the *same* doc every time, or a dismiss/toggle write can land
+ * on one doc while the next read returns the other, making the write look
+ * like it silently failed. Deterministic pick: oldest createdAt, doc id as
+ * a stable tiebreaker.
+ */
+function pickCanonicalProfileDoc<T extends { id: string; data: () => DocumentData }>(docs: T[]): T {
+  return [...docs].sort((a, b) => {
+    const at = a.data().createdAt?.toMillis?.() ?? 0;
+    const bt = b.data().createdAt?.toMillis?.() ?? 0;
+    return at !== bt ? at - bt : a.id.localeCompare(b.id);
+  })[0];
+}
 
 /** Replace undefined values with null so Firestore doesn't reject the write. */
 function stripUndefined(obj: Record<string, any>): Record<string, any> {

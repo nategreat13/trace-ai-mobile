@@ -26,7 +26,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Crown, X, Heart, Undo2 } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
-import { useFreeTrial } from "../context/TrialContext";
 import { useDealFetch } from "../hooks/useDealFetch";
 import { useSounds } from "../hooks/useSounds";
 import { useProfile } from "../hooks/useProfile";
@@ -39,13 +38,12 @@ import {
   updateUserProfile,
 } from "../services/firestore";
 import {
-  MAX_DAILY_SWIPES,
-  UNLIMITED_SWIPES,
+  UPSELL_CARD_INTERVAL,
   ALL_BADGES,
 } from "../lib/constants";
 import { getItem, setItem } from "../lib/storage";
-import { scheduleSwipeResetReminder, registerPushToken } from "../services/push";
 import SwipeCard from "../components/swipe/SwipeCard";
+import UpsellSwipeCard from "../components/swipe/UpsellSwipeCard";
 import SwipeTutorial from "../components/swipe/SwipeTutorial";
 import DashboardTooltip from "../components/swipe/DashboardTooltip";
 import HowToSwipeModal from "../components/swipe/HowToSwipeModal";
@@ -116,180 +114,12 @@ function LoadingScreen({ today, theme }: { today: string; theme: typeof colors.l
   );
 }
 
-function DailyLimitView({
-  theme,
-  scheme,
-  maxSwipes,
-  dealsWaiting,
-  homeAirport,
-  windowStart,
-  onUpgrade,
-  onExplore,
-  onRemindMe,
-}: {
-  theme: typeof colors.light | typeof colors.dark;
-  scheme: "light" | "dark" | null | undefined;
-  maxSwipes: number;
-  dealsWaiting: number;
-  homeAirport?: string | null;
-  windowStart?: string | null;
-  onUpgrade: () => void;
-  onExplore: () => void;
-  onRemindMe: () => Promise<boolean>;
-}) {
-  const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
-  // Return-hook state: tapping "remind me" requests notification permission
-  // and schedules a local reset reminder.
-  const [remindState, setRemindState] = React.useState<
-    "idle" | "working" | "done" | "denied"
-  >("idle");
-  const handleRemind = async () => {
-    if (remindState === "working" || remindState === "done") return;
-    setRemindState("working");
-    const ok = await onRemindMe();
-    setRemindState(ok ? "done" : "denied");
-  };
-  const fromAirport = homeAirport ? ` from ${homeAirport}` : "";
-  const getSecondsLeft = React.useCallback(() => {
-    const resetAt = windowStart
-      ? new Date(windowStart).getTime() + 24 * 60 * 60 * 1000
-      : Date.now() + 24 * 60 * 60 * 1000;
-    return Math.max(0, Math.floor((resetAt - Date.now()) / 1000));
-  }, [windowStart]);
-
-  const [timeLeft, setTimeLeft] = React.useState(getSecondsLeft);
-
-  React.useEffect(() => {
-    const timer = setInterval(() => setTimeLeft(getSecondsLeft()), 1000);
-    return () => clearInterval(timer);
-  }, [getSecondsLeft]);
-
-  const hours = Math.floor(timeLeft / 3600);
-  const minutes = Math.floor((timeLeft % 3600) / 60);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const resetsInLabel = `${pad(hours)}h ${pad(minutes)}m`;
-
-  const bg = scheme === "dark" ? "rgba(10,10,18," : "rgba(255,255,255,";
-
-  // Trial-first layout: when the user is intro-eligible, lead with the
-  // trial CTA and demote "come back tomorrow" to small print. The
-  // v1.3.2 cohort showed 15/29 users hitting the cap and only 2 of
-  // them reaching the paywall — the old "Resets in HH:MM:SS" pill read
-  // as the headline answer, so users just left.
-  return (
-    <Animated.View
-      entering={FadeIn.duration(500)}
-      style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, borderRadius: 20, overflow: "hidden" }}
-    >
-      {/* Gradient fade — card peeks through a sliver at the top, then solid */}
-      <LinearGradient
-        colors={[
-          `${bg}0.0)`,
-          `${bg}0.92)`,
-          `${bg}1.0)`,
-        ]}
-        locations={[0, 0.22, 0.40]}
-        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-      />
-
-      {/* Content anchored to the bottom */}
-      <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingBottom: 20 }}>
-        <View style={{ alignItems: "center", marginBottom: 18 }}>
-          <Text style={{ fontSize: 32, marginBottom: 8 }}>
-            {trialAvailable ? "🔥" : "🌙"}
-          </Text>
-          <Text style={{ fontSize: 22, fontWeight: "900", color: theme.foreground, textAlign: "center", marginBottom: 6 }}>
-            {trialAvailable
-              ? "You're on a roll"
-              : "That's all for today"}
-          </Text>
-          <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 18 }}>
-            {trialAvailable
-              ? dealsWaiting > 0
-                ? `${dealsWaiting} more deals${fromAirport} waiting. Keep going free for ${trialLabelLong} — cancel anytime.`
-                : `Unlock unlimited swipes free for ${trialLabelLong}. Cancel anytime.`
-              : dealsWaiting > 0
-                ? `${dealsWaiting} more deals${fromAirport} waiting — come back tomorrow or upgrade for unlimited.`
-                : `Free members get ${maxSwipes} swipes per day. Upgrade for unlimited.`}
-          </Text>
-        </View>
-
-        {/* Primary CTA — trial when available, generic upgrade otherwise */}
-        <TouchableOpacity
-          onPress={onUpgrade}
-          activeOpacity={0.85}
-          style={{ borderRadius: 14, overflow: "hidden", marginBottom: 10 }}
-        >
-          <LinearGradient
-            colors={[colors.brand.traceRed, colors.brand.tracePink]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ paddingVertical: 16, alignItems: "center" }}
-          >
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>
-              {trialAvailable ? `Try free for ${trialLabelLong} →` : "Unlock Unlimited Swipes"}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
-
-        {/* Return hook — for users who won't start a trial, give them a
-            concrete reason (and reminder) to come back tomorrow. Requests
-            push permission and schedules a local reset reminder; also grows
-            our push channel so server re-engagement can reach them. */}
-        <TouchableOpacity
-          onPress={handleRemind}
-          disabled={remindState === "working" || remindState === "done"}
-          activeOpacity={0.85}
-          style={{
-            backgroundColor:
-              remindState === "done"
-                ? scheme === "dark"
-                  ? "rgba(34,197,94,0.15)"
-                  : "rgba(34,197,94,0.10)"
-                : scheme === "dark"
-                ? "rgba(255,255,255,0.08)"
-                : "rgba(0,0,0,0.05)",
-            borderRadius: 14,
-            paddingVertical: 13,
-            alignItems: "center",
-            borderWidth: 1,
-            borderColor:
-              remindState === "done" ? "rgba(34,197,94,0.45)" : theme.border,
-            marginBottom: 10,
-          }}
-        >
-          <Text style={{ color: theme.foreground, fontSize: 14, fontWeight: "700" }}>
-            {remindState === "done"
-              ? "✓ We'll remind you when they reset"
-              : remindState === "working"
-              ? "Setting reminder…"
-              : remindState === "denied"
-              ? "Enable notifications to get reminded"
-              : "🔔 Remind me when my swipes reset"}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Tertiary */}
-        <TouchableOpacity onPress={onExplore} style={{ paddingVertical: 8, alignItems: "center", marginBottom: 4 }}>
-          <Text style={{ color: theme.mutedForeground, fontSize: 13, fontWeight: "600" }}>Browse Explore instead</Text>
-        </TouchableOpacity>
-
-        {/* Reset time — small print; the reminder above fires at this moment. */}
-        <Text style={{ fontSize: 11, color: theme.mutedForeground, textAlign: "center" }}>
-          Your free swipes reset in {resetsInLabel}
-        </Text>
-      </View>
-    </Animated.View>
-  );
-}
-
 export default function SwipeDeckScreen() {
   const navigation = useNavigation<Nav>();
   const isFocused = useIsFocused();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { user, profile, isPremium, isTrialPeriod } = useAuth();
-  const { available: trialAvailable, label: trialLabel, labelLong: trialLabelLong } = useFreeTrial();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
@@ -299,12 +129,17 @@ export default function SwipeDeckScreen() {
   const [deckMode, setDeckMode] = useState<"economy" | "business">("economy");
   const [destFilter, setDestFilter] = useState<"both" | "domestic" | "international">("both");
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted" | "daily_limit">("swiping");
-  const [swipesLeft, setSwipesLeft] = useState(MAX_DAILY_SWIPES);
+  const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted">("swiping");
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
   const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
+
+  // Premium/business upsell card — shown as an extra top-of-stack card
+  // every UPSELL_CARD_INTERVAL lifetime swipes (see handleSwipe). Doesn't
+  // touch currentIndex/visibleDeals, so the real deal flow is unaffected.
+  const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | null>(null);
+  const isBusinessMember = profile?.subscriptionStatus === "business";
 
   // Undo state — also tracks the Firestore doc ID of a saved deal so undo can delete it
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -419,7 +254,10 @@ export default function SwipeDeckScreen() {
     return raw && raw !== "Travel Explorer" ? raw : null;
   })();
 
-  // Initialize swipes left and fetch swipe history
+  // Reset the rolling daily-swipe counter and fetch swipe history. The
+  // counter itself is no longer used to cap anyone — it's kept purely as
+  // an engagement signal (avg swipes/session) now that it isn't saturated
+  // by a hard limit.
   useEffect(() => {
     if (!profile || !user) return;
     const init = async () => {
@@ -429,15 +267,12 @@ export default function SwipeDeckScreen() {
         ? new Date(profile.dailySwipeWindowStart).getTime()
         : 0;
       const windowExpired = now - windowStart >= 24 * 60 * 60 * 1000;
-      let dailySwipes = profile.dailySwipesToday || 0;
       if (windowExpired) {
-        dailySwipes = 0;
         await updateProfile({
           dailySwipesToday: 0,
           dailySwipeWindowStart: new Date(now).toISOString(),
         });
       }
-      setSwipesLeft(isPremium ? UNLIMITED_SWIPES : MAX_DAILY_SWIPES - dailySwipes);
 
       const swipeHistory = await getSwipeActions(user.uid);
       setAllSwipes(swipeHistory);
@@ -487,39 +322,6 @@ export default function SwipeDeckScreen() {
     reload();
   }, [visibleDeals.length, activeDeals.length, currentIndex, loading, deckPhase, destFilter]);
 
-  // Transition to daily limit screen when a free user hits 0 swipes.
-  // Fires daily_limit_hit here (vs. inside handleSwipe) because the
-  // overlay catches further swipe attempts, so the in-handleSwipe path
-  // never executed in practice — the v1.3.2 cohort had 0 emits for 15
-  // users who hit the cap. On the first cap-hit each day we also auto-
-  // open the paywall (trial-first cohort fix), gated by a per-USER-
-  // per-day key so the same physical device hitting the cap on a
-  // different account still gets the prompt — and so remounting the
-  // deck (tab switch) on the same user doesn't re-pop.
-  useEffect(() => {
-    if (isPremium || swipesLeft > 0 || deckPhase !== "swiping") return;
-    if (!user?.uid) return; // can't scope the per-user key yet
-    setDeckPhase("daily_limit");
-    logEvent("daily_limit_hit", { swipes_left: 0 });
-
-    (async () => {
-      const today = new Date().toISOString().split("T")[0];
-      const autoOpenKey = `dailyLimitPaywallAutoOpened.${user.uid}.${today}`;
-      const alreadyOpened = await getItem<string>(autoOpenKey);
-      if (alreadyOpened) return;
-      await setItem(autoOpenKey, new Date().toISOString());
-      navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit_auto" });
-    })();
-  }, [swipesLeft, isPremium, deckPhase, navigation, user?.uid]);
-
-  // When isPremium becomes true, unlock swipes and exit the daily limit screen
-  useEffect(() => {
-    if (isPremium) {
-      setSwipesLeft(UNLIMITED_SWIPES);
-      setDeckPhase((prev) => (prev === "daily_limit" ? "swiping" : prev));
-    }
-  }, [isPremium]);
-
   // When the expansion reload finishes: decide if we have new deals or are truly done
   useEffect(() => {
     if (deckPhase !== "expanding" || loading) return;
@@ -557,11 +359,6 @@ export default function SwipeDeckScreen() {
     async (action: "left" | "right" | "super") => {
       if (!profile || currentIndex >= visibleDeals.length) return;
       setTriggerSwipe(null);
-
-      if (!isPremium && swipesLeft <= 0) {
-        setDeckPhase("daily_limit");
-        return;
-      }
 
       const deal = visibleDeals[currentIndex];
       const newIndex = currentIndex + 1;
@@ -603,12 +400,32 @@ export default function SwipeDeckScreen() {
 
       if (!user) return;
 
-      // Track session swipe count for AI learning modal. Fire on the 4th
-      // swipe (not the 5th) so it doesn't collide with the daily-limit
-      // paywall, which auto-opens the instant the 5th swipe exhausts the cap.
+      // Track session swipe count for AI learning modal — fires once, on
+      // the 4th swipe of the session.
       sessionSwipeCount.current += 1;
       if (sessionSwipeCount.current === 4 && !profile.aiLearningShown) {
         setShowAILearning(true);
+      }
+
+      const newSwipeCount = (profile.swipeCount || 0) + 1;
+      const newDailySwipes = (profile.dailySwipesToday || 0) + 1;
+
+      // Premium/business upsell card — every UPSELL_CARD_INTERVAL lifetime
+      // swipes, pitch the next rung up: free users see Premium (alerts),
+      // Premium (non-business) users see Business. Business members never
+      // see it — nothing left to upsell. Placed here, ahead of the
+      // saveDeal/createSwipeAction calls below, so it fires unconditionally
+      // off the swipe itself rather than depending on those writes succeeding
+      // (the card's own exit animation already completed by this point
+      // regardless of what happens further down this async function).
+      if (newSwipeCount % UPSELL_CARD_INTERVAL === 0) {
+        if (!isPremium) {
+          setUpsellVariant("premium");
+          logEvent("upsell_card_shown", { variant: "premium" });
+        } else if (!isBusinessMember) {
+          setUpsellVariant("business");
+          logEvent("upsell_card_shown", { variant: "business" });
+        }
       }
 
       // Save position (only when unfiltered — filtered positions are transient)
@@ -662,9 +479,7 @@ export default function SwipeDeckScreen() {
         domesticOrInternational: deal.domestic_or_international ?? null,
       });
 
-      // Update profile stats
-      const newSwipeCount = (profile.swipeCount || 0) + 1;
-      const newDailySwipes = (profile.dailySwipesToday || 0) + 1;
+      // Update profile stats (newSwipeCount/newDailySwipes computed earlier, above)
       const updates: Record<string, any> = {
         swipeCount: newSwipeCount,
         dailySwipesToday: newDailySwipes,
@@ -704,7 +519,6 @@ export default function SwipeDeckScreen() {
         setNewSwipeCount(newSwipeCount);
       }
 
-      setSwipesLeft((prev) => isPremium ? UNLIMITED_SWIPES : Math.max(0, prev - 1));
       await updateProfile(updates);
 
       // Track swipe locally
@@ -742,21 +556,28 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
-    [currentIndex, visibleDeals, activeDeals, profile, user, swipesLeft, allSwipes, isPremium, deckMode, destFilter, shownTutorialTypes]
+    [currentIndex, visibleDeals, activeDeals, profile, user, allSwipes, isPremium, isBusinessMember, deckMode, destFilter, shownTutorialTypes]
   );
 
   const handleButtonSwipe = (action: "left" | "right") => {
-    if (!isPremium && swipesLeft <= 0) {
-      setDeckPhase("daily_limit");
-      return;
-    }
     setTriggerSwipe(action);
     setTimeout(() => setTriggerSwipe(null), 400);
   };
 
+  const openUpsellPaywall = useCallback((variant: "premium" | "business") => {
+    logEvent("upsell_card_tapped", { variant });
+    setUpsellVariant(null);
+    navigation.navigate(
+      "Paywall",
+      variant === "business"
+        ? { entryPoint: "swipe_upsell_business", tier: "business" }
+        : { entryPoint: "swipe_upsell_premium" }
+    );
+  }, [navigation]);
+
   const handleCenterButton = () => {
-    if (!isPremium && swipesLeft <= 0) {
-      setDeckPhase("daily_limit");
+    if (upsellVariant) {
+      openUpsellPaywall(upsellVariant);
       return;
     }
     const deal = visibleDeals[currentIndex];
@@ -767,8 +588,6 @@ export default function SwipeDeckScreen() {
     const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
     return <LoadingScreen today={today} theme={theme} />;
   }
-
-  const isBusinessMember = profile?.subscriptionStatus === "business";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={["top", "left", "right"]}>
@@ -857,26 +676,7 @@ export default function SwipeDeckScreen() {
             onPress={() => navigation.navigate("Paywall", { entryPoint: "swipe_header_crown" })}
             style={{ flexDirection: "row", alignItems: "center" }}
           >
-            {swipesLeft <= 8 ? (
-              <View style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-                backgroundColor: colors.brand.amber50,
-                borderRadius: 999,
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderWidth: 1,
-                borderColor: colors.brand.amber200,
-              }}>
-                <Text style={{ fontSize: 12 }}>⚡</Text>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.brand.amber600 }}>
-                  {swipesLeft} left
-                </Text>
-              </View>
-            ) : (
-              <Crown color={colors.brand.amber500} size={24} />
-            )}
+            <Crown color={colors.brand.amber500} size={24} />
           </TouchableOpacity>
         )}
       </View>
@@ -1029,34 +829,6 @@ export default function SwipeDeckScreen() {
         <View style={{ flex: 1, paddingHorizontal: 12, paddingTop: 8, position: "relative" }}>
           {/* Card stack */}
           <View style={{ flex: 1, position: "relative" }}>
-            {/* Daily limit overlay — sits on top of the last deal card */}
-            {deckPhase === "daily_limit" && (
-              <DailyLimitView
-                theme={theme}
-                scheme={scheme}
-                maxSwipes={MAX_DAILY_SWIPES}
-                dealsWaiting={Math.max(0, visibleDeals.length - currentIndex)}
-                homeAirport={profile?.homeAirport}
-                windowStart={profile?.dailySwipeWindowStart}
-                onUpgrade={() => navigation.navigate("Paywall", { entryPoint: "swipe_daily_limit" })}
-                onExplore={() => navigation.navigate("MainTabs", { screen: "Explore" })}
-                onRemindMe={async () => {
-                  logEvent("daily_limit_remind_tapped", {});
-                  const status = await scheduleSwipeResetReminder({
-                    homeAirport: profile?.homeAirport,
-                    dealsWaiting: Math.max(0, visibleDeals.length - currentIndex),
-                  });
-                  if (status === "granted") {
-                    updateProfile({
-                      notificationsEnabled: true,
-                      notificationPermissionAsked: true,
-                    }).catch(() => {});
-                    if (profile?.id) registerPushToken(profile.id).catch(() => {});
-                  }
-                  return status === "granted";
-                }}
-              />
-            )}
             {deckMode === "business" && (
               <View
                 style={{
@@ -1102,25 +874,6 @@ export default function SwipeDeckScreen() {
               </Animated.View>
             ) : (
               <>
-                {/* Subtle amber strip that peeks below the card when ≤3 free swipes left.
-                    Rendered before the cards so it paints behind them; only the bottom
-                    ~12px are visible since the real card covers the rest. */}
-                {!isPremium && swipesLeft <= 3 && swipesLeft > 0 && (
-                  <Animated.View
-                    entering={FadeIn.duration(600)}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 8,
-                      right: 8,
-                      bottom: -12,
-                      borderRadius: 20,
-                      backgroundColor: colors.brand.amber50,
-                      borderWidth: 1,
-                      borderColor: colors.brand.amber200,
-                    }}
-                  />
-                )}
               {visibleDeals
                 .slice(currentIndex, currentIndex + 3)
                 .reverse()
@@ -1128,15 +881,28 @@ export default function SwipeDeckScreen() {
                   <SwipeCard
                     key={deal.id}
                     deal={deal}
-                    isTop={i === arr.length - 1}
+                    isTop={i === arr.length - 1 && !upsellVariant}
                     onSwipe={handleSwipe}
-                    onExpand={() => { if (!isPremium && swipesLeft <= 0) { setDeckPhase("daily_limit"); return; } setExpandedDeal(deal); }}
-                    triggerSwipe={i === arr.length - 1 ? triggerSwipe : null}
-                    isSwipeDisabled={!isPremium && swipesLeft <= 0}
+                    onExpand={() => setExpandedDeal(deal)}
+                    triggerSwipe={i === arr.length - 1 && !upsellVariant ? triggerSwipe : null}
+                    isSwipeDisabled={false}
                     isUndone={deal.id === undoneDealId}
                     showPickedForYou={currentIndex === 0 && i === arr.length - 1}
                   />
                 ))}
+                {/* Premium/business upsell card — painted last so it sits on
+                    top of the real stack and intercepts touch while showing. */}
+                {upsellVariant && (
+                  <UpsellSwipeCard
+                    variant={upsellVariant}
+                    triggerSwipe={triggerSwipe}
+                    onDismiss={() => {
+                      logEvent("upsell_card_dismissed", { variant: upsellVariant });
+                      setUpsellVariant(null);
+                    }}
+                    onUpgrade={() => openUpsellPaywall(upsellVariant)}
+                  />
+                )}
               </>
             )}
 

@@ -544,7 +544,7 @@ export default function ExploreScreen() {
       </Text>
       <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", marginBottom: 20 }}>
         {trialAvailable
-          ? `Start your ${trialLabel} free trial — all ${filteredDeals.length}+ deals, unlimited swipes & alerts`
+          ? `Start your ${trialLabel} free trial — all ${filteredDeals.length}+ deals, plus deal alerts`
           : `Get access to all ${filteredDeals.length}+ deals with premium features`}
       </Text>
       <View style={{ flexDirection: "row", gap: 12, marginBottom: 20, width: "100%" }}>

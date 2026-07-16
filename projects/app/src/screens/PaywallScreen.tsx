@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { X, Zap, TrendingDown, Bell, Users, Crown, Clock, Sparkles } from "lucide-react-native";
+import { X, Bell, Users, Crown, Clock, Sparkles } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -287,20 +287,15 @@ export default function PaywallScreen() {
       sub: null,
     };
     switch (entryPoint) {
-      case "swipe_daily_limit":
-        return {
-          eyebrow: "YOU'VE HIT YOUR LIMIT",
-          headline: "Unlimited swipes,\nevery day",
-          sub: null,
-        };
       case "swipe_header_crown":
         return {
           eyebrow: "TRACE PREMIUM",
-          headline: "Swipe without limits",
+          headline: "Never miss\na deal drop",
           sub: null,
         };
       case "explore_upgrade":
       case "deal_alert_match":
+      case "swipe_upsell_premium":
         return {
           eyebrow: "DEAL ALERTS",
           headline: "Get notified the\nmoment deals drop",
@@ -454,7 +449,7 @@ export default function PaywallScreen() {
                     )}
                   </View>
                   <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 2 }}>
-                    {isBusinessPaywall ? "Business class deals + everything in Premium" : "Unlimited swipes & saves"}
+                    {isBusinessPaywall ? "Business class deals + everything in Premium" : "Deal alerts, sent the moment they drop"}
                   </Text>
                   {hasFreeTrial && (
                     <Text style={{ fontSize: 11, fontWeight: "700", color: colors.brand.traceRed, marginTop: 4 }}>
@@ -498,12 +493,10 @@ export default function PaywallScreen() {
               { icon: Sparkles, title: "Everything in Premium" },
             ];
             let features = [
-              { icon: Zap, title: "Unlimited swipes — no daily cap" },
-              { icon: TrendingDown, title: "Unlimited saves" },
               { icon: Bell, title: "Deal alerts for any destination" },
               { icon: Users, title: "Full Explore access" },
             ];
-            if (entryPoint === "explore_upgrade" || entryPoint === "deal_alert_match") {
+            if (entryPoint === "explore_upgrade" || entryPoint === "deal_alert_match" || entryPoint === "swipe_upsell_premium") {
               const alerts = features.find((f) => f.title.startsWith("Deal alerts"))!;
               features = [alerts, ...features.filter((f) => !f.title.startsWith("Deal alerts"))];
             }

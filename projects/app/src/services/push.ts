@@ -81,60 +81,6 @@ export async function requestNotificationPermission(): Promise<
   return status as "granted" | "denied" | "undetermined";
 }
 
-const SWIPE_RESET_REMINDER_ID = "swipe-reset-reminder";
-
-/**
- * Give free users a concrete reason to come back: schedule a LOCAL
- * notification for the next daily-swipe reset (next local midnight, when
- * MAX_DAILY_SWIPES refills). Requests permission first; no-ops (returns the
- * status) if the user declines. Replaces any previously-scheduled reset
- * reminder so we never stack duplicates across multiple cap hits.
- *
- * Local (not server) on purpose — it needs no push token, no Cloud Function,
- * and fires even for users we've never registered server-side. Growing OS
- * permission here ALSO unlocks our server re-engagement pushes for this user.
- */
-export async function scheduleSwipeResetReminder(opts: {
-  homeAirport?: string | null;
-  dealsWaiting?: number;
-}): Promise<"granted" | "denied" | "undetermined"> {
-  const status = await requestNotificationPermission();
-  if (status !== "granted") return status;
-
-  // 24 hours from now — mirrors the rolling window reset in SwipeDeckScreen.
-  const resetAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
-  const where = opts.homeAirport ? ` from ${opts.homeAirport}` : "";
-  const body =
-    opts.dealsWaiting && opts.dealsWaiting > 0
-      ? `${opts.dealsWaiting} more deals${where} are waiting — start swiping.`
-      : `Your free swipes have refilled${where}. Come see what's new.`;
-
-  try {
-    await Notifications.cancelScheduledNotificationAsync(
-      SWIPE_RESET_REMINDER_ID
-    ).catch(() => {});
-    await Notifications.scheduleNotificationAsync({
-      identifier: SWIPE_RESET_REMINDER_ID,
-      content: {
-        title: "Your free swipes are back ✈️",
-        body,
-        data: { deepLink: "/swipe", templateKey: "swipe_reset_local" },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: resetAt,
-      },
-    });
-    logEvent("swipe_reset_reminder_scheduled", {
-      deals_waiting: opts.dealsWaiting ?? 0,
-    });
-  } catch (err) {
-    if (__DEV__) console.warn("[push] scheduleSwipeResetReminder failed:", err);
-  }
-  return status;
-}
-
 /**
  * Get the device's Expo push token + register it on the user's
  * userProfile. Should only be called after permission has been granted.

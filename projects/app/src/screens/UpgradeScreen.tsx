@@ -286,7 +286,6 @@ export default function UpgradeScreen() {
             {[
               { emoji: "👑", title: "Exclusive business class deals", desc: "Lie-flat fares up to 65% off, unavailable anywhere else" },
               { emoji: "⚡", title: "48-hour early access", desc: "See new deals 2 days before regular and premium members" },
-              { emoji: "♾️", title: "Unlimited swipes", desc: "No daily cap — explore every deal at your own pace" },
               { emoji: "🔔", title: "Instant deal alerts", desc: "Push notifications the moment a matching deal drops" },
               { emoji: "🎯", title: "AI deal matching", desc: "Smarter recommendations tuned to your travel style" },
               { emoji: "💬", title: "VIP support", desc: "Priority response, human team, no bots" },
