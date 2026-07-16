@@ -1,9 +1,9 @@
 import Constants from "expo-constants";
 import { getEnv } from "./env";
 
-export const MAX_DAILY_SWIPES = 10;
 export const MAX_SAVES = 5;
-export const UNLIMITED_SWIPES = 999999;
+/** Cadence for the in-deck premium/business upsell card (every Nth lifetime swipe). */
+export const UPSELL_CARD_INTERVAL = 10;
 
 /**
  * Cloud Function URLs.

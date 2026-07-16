@@ -54,6 +54,10 @@ export type AnalyticsEventName =
   | "ai_learning_shown"
   | "badge_unlocked"
   | "level_up"
+  // Premium/business in-deck upsell card (every UPSELL_CARD_INTERVAL swipes)
+  | "upsell_card_shown"
+  | "upsell_card_tapped"
+  | "upsell_card_dismissed"
   // Deck readiness — close the blind spot on why ~38% of v1.3.2 cohort
   // never swiped. `deck_rendered` fires once per SwipeDeck mount when
   // at least one card actually shows. `deals_load_failed` fires when

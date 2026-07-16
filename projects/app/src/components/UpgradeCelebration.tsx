@@ -227,10 +227,9 @@ export default function UpgradeCelebration({ tier, onContinue }: UpgradeCelebrat
 
   const features: Feature[] = isPremium
     ? [
-        { emoji: "♾️", label: "Unlimited swipes", hint: "No daily cap — swipe as much as you want" },
+        { emoji: "🔔", label: "Deal alerts", hint: "Open any deal → tap Set Alert" },
         { emoji: "💾", label: "Save any deal", hint: "Tap the Trace button while swiping to save" },
         { emoji: "🔍", label: "Explore tab", hint: "Browse deals by destination — bottom nav" },
-        { emoji: "🔔", label: "Deal alerts", hint: "Open any deal → tap Set Alert" },
       ]
     : [
         { emoji: "✈️", label: "Business class deals", hint: "They'll appear right in your swipe deck" },

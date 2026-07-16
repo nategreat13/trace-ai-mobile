@@ -53,6 +53,11 @@ export default function OnboardingScreen() {
     null,
   );
   const lastNameRef = useRef<TextInput>(null);
+  // Guards against a double-tap on "Start Swiping" firing handleContinue
+  // twice before `profile` state updates from the first call — without
+  // this, both calls see profile?.id as falsy and both create a new
+  // profile doc for the same user.
+  const isSubmittingRef = useRef(false);
 
   const [data, setData] = useState({
     firstName: "",
@@ -132,6 +137,8 @@ export default function OnboardingScreen() {
 
   const handleContinue = async () => {
     if (!user) return;
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     // The name step is required (canProceed gates it), so by the time
     // we reach here both fields are filled.
@@ -202,6 +209,7 @@ export default function OnboardingScreen() {
           onboardingComplete: true,
           subscriptionStatus: "free",
           trialEndDate: null,
+          inTrial: false,
           swipeCount: 0,
           streakDays: 1,
           dealHunterLevel: 1,
@@ -254,6 +262,7 @@ export default function OnboardingScreen() {
       Alert.alert("Error", "Failed to save your profile. Please try again.");
     } finally {
       setShowPersonality(false);
+      isSubmittingRef.current = false;
     }
   };
 
