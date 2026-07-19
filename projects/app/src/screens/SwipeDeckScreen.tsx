@@ -38,6 +38,7 @@ import {
   updateUserProfile,
 } from "../services/firestore";
 import {
+  UPSELL_CARD_START,
   UPSELL_CARD_INTERVAL,
   ALL_BADGES,
 } from "../lib/constants";
@@ -131,13 +132,24 @@ export default function SwipeDeckScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted">("swiping");
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
-  const [triggerSwipe, setTriggerSwipe] = useState<"left" | "right" | null>(null);
+  // Targeted, not a blind broadcast: a button-triggered swipe is addressed
+  // to a specific card (a deal id, or the literal "upsell" for the upsell
+  // card). Each card only reacts if the trigger's targetId matches its own
+  // identity — this makes it structurally impossible for a newly-mounted
+  // card to ever act on a trigger meant for whatever existed before it,
+  // regardless of timing (a plain "left"/"right" broadcast to "whichever
+  // card is currently on top" was the root cause of a real card swiping
+  // itself immediately after the upsell card consumed a trigger meant for
+  // an earlier card — no amount of shortening the reset delay closed that
+  // race, since React can mount + effect in a handful of milliseconds).
+  const [triggerSwipe, setTriggerSwipe] = useState<{ direction: "left" | "right"; targetId: string } | null>(null);
   const [undoneDealId, setUndoneDealId] = useState<string | null>(null);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
 
   // Premium/business upsell card — shown as an extra top-of-stack card
-  // every UPSELL_CARD_INTERVAL lifetime swipes (see handleSwipe). Doesn't
-  // touch currentIndex/visibleDeals, so the real deal flow is unaffected.
+  // every UPSELL_CARD_INTERVAL swipes starting at UPSELL_CARD_START (see
+  // handleSwipe). Doesn't touch currentIndex/visibleDeals, so the real
+  // deal flow is unaffected.
   const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | null>(null);
   const isBusinessMember = profile?.subscriptionStatus === "business";
 
@@ -165,6 +177,10 @@ export default function SwipeDeckScreen() {
 
   // Track total swipes this session for AI learning modal
   const sessionSwipeCount = useRef(0);
+  // At most one badge notification before the first upsell-card milestone
+  // (swipe UPSELL_CARD_START) — keeps a first-time user's first 10 swipes
+  // from stacking the tutorial modal, a badge, AND the upsell card.
+  const preUpsellBadgeShown = useRef(false);
 
   // Dashboard tooltip — shown once after user's first-ever save
   const [showDashboardTooltip, setShowDashboardTooltip] = useState(false);
@@ -401,30 +417,42 @@ export default function SwipeDeckScreen() {
       if (!user) return;
 
       // Track session swipe count for AI learning modal — fires once, on
-      // the 4th swipe of the session.
+      // the 13th swipe of the session. Sits between the swipe-10 and
+      // swipe-15 upsell milestones on purpose, so nothing stacks with
+      // either of them.
       sessionSwipeCount.current += 1;
-      if (sessionSwipeCount.current === 4 && !profile.aiLearningShown) {
+      if (sessionSwipeCount.current === 13 && !profile.aiLearningShown) {
         setShowAILearning(true);
       }
 
       const newSwipeCount = (profile.swipeCount || 0) + 1;
       const newDailySwipes = (profile.dailySwipesToday || 0) + 1;
 
-      // Premium/business upsell card — every UPSELL_CARD_INTERVAL lifetime
-      // swipes, pitch the next rung up: free users see Premium (alerts),
-      // Premium (non-business) users see Business. Business members never
-      // see it — nothing left to upsell. Placed here, ahead of the
-      // saveDeal/createSwipeAction calls below, so it fires unconditionally
-      // off the swipe itself rather than depending on those writes succeeding
-      // (the card's own exit animation already completed by this point
-      // regardless of what happens further down this async function).
-      if (newSwipeCount % UPSELL_CARD_INTERVAL === 0) {
-        if (!isPremium) {
-          setUpsellVariant("premium");
-          logEvent("upsell_card_shown", { variant: "premium" });
-        } else if (!isBusinessMember) {
+      // Premium/business upsell card — fires every UPSELL_CARD_INTERVAL
+      // swipes starting at UPSELL_CARD_START (10, 15, 20, 25, ...). Free
+      // users alternate Premium/Business each time (10=Premium,
+      // 15=Business, 20=Premium, ...) rather than only ever seeing
+      // Premium — some free users are exactly the traveler who'd go
+      // straight to Business if they knew it existed. Premium
+      // (non-business) users only ever get the Business pitch, since
+      // Premium's moot for them. Business members never see it — nothing
+      // left to upsell. Placed here, ahead of the saveDeal/createSwipeAction
+      // calls below, so it fires unconditionally off the swipe itself
+      // rather than depending on those writes succeeding (the card's own
+      // exit animation already completed by this point regardless of what
+      // happens further down this async function).
+      if (newSwipeCount >= UPSELL_CARD_START && newSwipeCount % UPSELL_CARD_INTERVAL === 0) {
+        const cyclesSinceStart = newSwipeCount / UPSELL_CARD_INTERVAL;
+        const wantsBusiness = cyclesSinceStart % 2 === 1;
+        if (isBusinessMember) {
+          // top tier — nothing to upsell
+        } else if (isPremium) {
           setUpsellVariant("business");
           logEvent("upsell_card_shown", { variant: "business" });
+        } else {
+          const variant = wantsBusiness ? "business" : "premium";
+          setUpsellVariant(variant);
+          logEvent("upsell_card_shown", { variant });
         }
       }
 
@@ -533,21 +561,27 @@ export default function SwipeDeckScreen() {
       };
       setAllSwipes((prev) => [newSwipeRecord, ...prev]);
 
-      // Check badges
-      const newSwipes = [newSwipeRecord, ...allSwipes];
-      const updatedProfile = { ...profile, ...updates };
-      let newBadges = [...(profile.badges || [])];
-      for (const badge of ALL_BADGES) {
-        if (newBadges.includes(badge.id)) continue;
-        const wasEarned = badge.requirement(profile, allSwipes);
-        const isNowEarned = badge.requirement(updatedProfile, newSwipes);
-        if (!wasEarned && isNowEarned) {
-          newBadges = [...newBadges, badge.id];
-          await updateProfile({ badges: newBadges });
-          // Show badge notification
-          setUnlockedBadge({ name: badge.name, emoji: badge.emoji, description: badge.desc });
-          play("badge");
-          break;
+      // Check badges — before the first upsell card (swipe
+      // UPSELL_CARD_START), cap it at one notification so it doesn't
+      // stack with the tutorial modal and the upsell card.
+      const isPreUpsellWindow = newSwipeCount < UPSELL_CARD_START;
+      if (!isPreUpsellWindow || !preUpsellBadgeShown.current) {
+        const newSwipes = [newSwipeRecord, ...allSwipes];
+        const updatedProfile = { ...profile, ...updates };
+        let newBadges = [...(profile.badges || [])];
+        for (const badge of ALL_BADGES) {
+          if (newBadges.includes(badge.id)) continue;
+          const wasEarned = badge.requirement(profile, allSwipes);
+          const isNowEarned = badge.requirement(updatedProfile, newSwipes);
+          if (!wasEarned && isNowEarned) {
+            newBadges = [...newBadges, badge.id];
+            await updateProfile({ badges: newBadges });
+            // Show badge notification
+            setUnlockedBadge({ name: badge.name, emoji: badge.emoji, description: badge.desc });
+            play("badge");
+            if (isPreUpsellWindow) preUpsellBadgeShown.current = true;
+            break;
+          }
         }
       }
 
@@ -560,7 +594,9 @@ export default function SwipeDeckScreen() {
   );
 
   const handleButtonSwipe = (action: "left" | "right") => {
-    setTriggerSwipe(action);
+    const targetId = upsellVariant ? "upsell" : visibleDeals[currentIndex]?.id;
+    if (!targetId) return;
+    setTriggerSwipe({ direction: action, targetId });
     setTimeout(() => setTriggerSwipe(null), 400);
   };
 
@@ -872,6 +908,19 @@ export default function SwipeDeckScreen() {
                   <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Show All Deals</Text>
                 </TouchableOpacity>
               </Animated.View>
+            ) : upsellVariant ? (
+              // While the upsell card is showing, the real cards aren't
+              // rendered at all — no reason for them to exist while
+              // nothing should be swiping them.
+              <UpsellSwipeCard
+                variant={upsellVariant}
+                triggerSwipe={triggerSwipe?.targetId === "upsell" ? triggerSwipe.direction : null}
+                onDismiss={() => {
+                  logEvent("upsell_card_dismissed", { variant: upsellVariant });
+                  setUpsellVariant(null);
+                }}
+                onUpgrade={() => openUpsellPaywall(upsellVariant)}
+              />
             ) : (
               <>
               {visibleDeals
@@ -881,28 +930,15 @@ export default function SwipeDeckScreen() {
                   <SwipeCard
                     key={deal.id}
                     deal={deal}
-                    isTop={i === arr.length - 1 && !upsellVariant}
+                    isTop={i === arr.length - 1}
                     onSwipe={handleSwipe}
                     onExpand={() => setExpandedDeal(deal)}
-                    triggerSwipe={i === arr.length - 1 && !upsellVariant ? triggerSwipe : null}
+                    triggerSwipe={triggerSwipe?.targetId === deal.id ? triggerSwipe.direction : null}
                     isSwipeDisabled={false}
                     isUndone={deal.id === undoneDealId}
                     showPickedForYou={currentIndex === 0 && i === arr.length - 1}
                   />
                 ))}
-                {/* Premium/business upsell card — painted last so it sits on
-                    top of the real stack and intercepts touch while showing. */}
-                {upsellVariant && (
-                  <UpsellSwipeCard
-                    variant={upsellVariant}
-                    triggerSwipe={triggerSwipe}
-                    onDismiss={() => {
-                      logEvent("upsell_card_dismissed", { variant: upsellVariant });
-                      setUpsellVariant(null);
-                    }}
-                    onUpgrade={() => openUpsellPaywall(upsellVariant)}
-                  />
-                )}
               </>
             )}
 

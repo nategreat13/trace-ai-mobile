@@ -9,7 +9,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import { Crown, Bell, ArrowRight } from "lucide-react-native";
+import { Crown, Bell, ArrowRight, Check } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
 // Same thresholds/exit mechanics as SwipeCard.tsx — this is a sibling
@@ -31,22 +31,28 @@ interface UpsellSwipeCardProps {
   triggerSwipe: "left" | "right" | null;
 }
 
+// Bullets are deliberately limited to benefits that are actually real
+// today (matches PaywallScreen's own feature lists) — no "48-hour early
+// access" here, since that's advertised elsewhere in the app but has no
+// backing server logic yet.
 const CONTENT = {
   premium: {
     eyebrow: "TRACE PREMIUM",
     Icon: Bell,
     headline: "Get notified the\nmoment deals drop",
-    sub: "Deal alerts for any destination — we'll watch for you, so you don't have to keep checking.",
-    cta: "Tap to unlock alerts",
+    sub: "We'll watch for you, so you don't have to keep checking.",
+    bullets: ["Deal alerts for any destination", "Full Explore access"],
+    cta: "Unlock alerts",
     gradient: [colors.brand.traceRed, colors.brand.tracePink] as const,
   },
   business: {
     eyebrow: "TRACE BUSINESS",
     Icon: Crown,
     headline: "Fly business.\nPay economy.",
-    sub: "Lie-flat business class deals at a fraction of the price, right in your deck.",
-    cta: "Tap to see Business",
-    gradient: ["#8a5a00", colors.brand.amber500] as const,
+    sub: "Lie-flat business class deals, right in your deck.",
+    bullets: ["Lie-flat business class, up to 65% off", "Everything in Premium, included"],
+    cta: "See Business",
+    gradient: ["#1c1500", colors.brand.amber500] as const,
   },
 };
 
@@ -61,18 +67,31 @@ export default function UpsellSwipeCard({
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  const handleDismiss = useCallback(() => onDismiss(), [onDismiss]);
-  const handleUpgrade = useCallback(() => onUpgrade(), [onUpgrade]);
+  // Guards against onDismiss/onUpgrade firing more than once for a
+  // single swipe.
+  const handled = React.useRef(false);
+  const handleDismiss = useCallback(() => {
+    if (handled.current) return;
+    handled.current = true;
+    onDismiss();
+  }, [onDismiss]);
+  const handleUpgrade = useCallback(() => {
+    if (handled.current) return;
+    handled.current = true;
+    onUpgrade();
+  }, [onUpgrade]);
 
   // Programmatic swipe via the bottom X/heart buttons — same pattern as
-  // SwipeCard's triggerSwipe prop, so those buttons dismiss this card too.
+  // SwipeCard's triggerSwipe prop. Right/like opens the paywall (same
+  // "positive" semantics as saving a real deal); left/pass just dismisses.
   useEffect(() => {
     if (!triggerSwipe) return;
     const exitX = triggerSwipe === "left" ? -EXIT_X : EXIT_X;
+    const onExit = triggerSwipe === "left" ? handleDismiss : handleUpgrade;
     translateX.value = withTiming(exitX, { duration: EXIT_X_DURATION }, () => {
-      runOnJS(handleDismiss)();
+      runOnJS(onExit)();
     });
-  }, [triggerSwipe, translateX, handleDismiss]);
+  }, [triggerSwipe, translateX, handleDismiss, handleUpgrade]);
 
   const tapScale = useSharedValue(1);
 
@@ -90,8 +109,10 @@ export default function UpsellSwipeCard({
         return;
       }
       if (translationX > SWIPE_X_THRESHOLD || velocityX > VELOCITY_THRESHOLD) {
+        // Right/like — same "positive" semantics as saving a real deal —
+        // opens the paywall instead of just dismissing.
         translateX.value = withTiming(EXIT_X, { duration: EXIT_X_DURATION }, () => {
-          runOnJS(handleDismiss)();
+          runOnJS(handleUpgrade)();
         });
         return;
       }
@@ -142,6 +163,16 @@ export default function UpsellSwipeCard({
           </View>
           <Text style={styles.headline}>{content.headline}</Text>
           <Text style={styles.sub}>{content.sub}</Text>
+          <View style={styles.bulletList}>
+            {content.bullets.map((bullet) => (
+              <View key={bullet} style={styles.bulletRow}>
+                <View style={styles.bulletCheck}>
+                  <Check color="#fff" size={11} strokeWidth={3} />
+                </View>
+                <Text style={styles.bulletText}>{bullet}</Text>
+              </View>
+            ))}
+          </View>
           <View style={styles.ctaRow}>
             <Text style={styles.ctaText}>{content.cta}</Text>
             <ArrowRight color="#fff" size={18} />
@@ -204,7 +235,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "rgba(255,255,255,0.9)",
     lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: 16,
+  },
+  bulletList: {
+    marginBottom: 20,
+    gap: 8,
+  },
+  bulletRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bulletCheck: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  bulletText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fff",
+    flex: 1,
   },
   ctaRow: {
     flexDirection: "row",

@@ -31,30 +31,20 @@ interface SavedDealsProps {
   onBook: (url: string) => void;
 }
 
-type SortMode = "date" | "price_asc" | "price_desc" | "discount";
-
-const FILTER_CHIPS: { label: string; value: string | null }[] = [
-  { label: "All", value: null },
-  { label: "✈️ Adventure", value: "adventure" },
-  { label: "✨ Luxury", value: "luxury" },
-  { label: "🏛️ Cultural", value: "cultural" },
-  { label: "🏖️ Relaxation", value: "relaxation" },
-  { label: "👨‍👩‍👧‍👦 Family", value: "family" },
-  { label: "💰 Budget", value: "budget" },
-];
+type SortMode = "date" | "price_asc" | "price_desc" | "discount" | "alphabetical";
 
 const SORT_OPTIONS: { label: string; value: SortMode }[] = [
   { label: "Recently saved", value: "date" },
   { label: "Price ↑", value: "price_asc" },
   { label: "Price ↓", value: "price_desc" },
   { label: "Biggest discount", value: "discount" },
+  { label: "A–Z", value: "alphabetical" },
 ];
 
 export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const [sortBy, setSortBy] = useState<SortMode>("date");
-  const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -82,11 +72,6 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
       );
     }
 
-    // Deal type filter
-    if (activeFilter) {
-      result = result.filter(({ deal }) => deal.dealType === activeFilter);
-    }
-
     // Sort
     if (sortBy === "price_asc") {
       result.sort((a, b) => a.deal.price - b.deal.price);
@@ -94,6 +79,8 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
       result.sort((a, b) => b.deal.price - a.deal.price);
     } else if (sortBy === "discount") {
       result.sort((a, b) => (b.deal.discountPct || 0) - (a.deal.discountPct || 0));
+    } else if (sortBy === "alphabetical") {
+      result.sort((a, b) => (a.deal.destination || "").localeCompare(b.deal.destination || ""));
     } else {
       // date — newest first (already sorted from Firestore but re-sort for safety)
       result.sort(
@@ -102,7 +89,7 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
     }
 
     return result;
-  }, [deals, searchQuery, activeFilter, sortBy]);
+  }, [deals, searchQuery, sortBy]);
 
   const activeSortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label ?? "Sort";
 
@@ -275,36 +262,6 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
         />
       </View>
 
-      {/* Filter chips */}
-      <FlatList
-        data={FILTER_CHIPS}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={(item) => item.label}
-        contentContainerStyle={styles.filterChipsContent}
-        style={styles.filterChips}
-        renderItem={({ item }) => {
-          const isActive = activeFilter === item.value;
-          return (
-            <TouchableOpacity
-              onPress={() => setActiveFilter(isActive ? null : item.value)}
-              style={[
-                styles.filterChip,
-                {
-                  backgroundColor: isActive ? colors.brand.traceRed : theme.muted,
-                  borderColor: isActive ? colors.brand.traceRed : theme.border,
-                },
-              ]}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.filterChipText, { color: isActive ? "#fff" : theme.mutedForeground }]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        }}
-      />
-
       {/* Results */}
       {filtered.length === 0 ? (
         <View style={styles.noResultsContainer}>
@@ -391,24 +348,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     padding: 0,
-  },
-  filterChips: {
-    marginBottom: 12,
-    marginHorizontal: -16,
-  },
-  filterChipsContent: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  filterChipText: {
-    fontSize: 12,
-    fontWeight: "600",
   },
   listContent: {
     paddingBottom: 4,

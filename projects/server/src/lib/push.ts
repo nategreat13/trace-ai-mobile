@@ -90,7 +90,25 @@ export async function sendToUser(
       errors: ["user opted out of this category"],
     };
   }
-  const tokens = ((data.pushTokens ?? []) as Array<{ token: string }>)
+  // Dedupe by token string (belt-and-suspenders — the client already
+  // self-heals this on next launch, but don't rely on that having run
+  // yet) and cap to the 3 most-recently-registered tokens. A user
+  // realistically has 1-2 real devices; heavy reinstall/rebuild cycles
+  // (dev testing, TestFlight builds) can otherwise leave many distinct
+  // Expo tokens on one profile, each a legitimately different string
+  // for what's actually the same physical device — sending to all of
+  // them is what produces a pile of identical notifications on one phone.
+  const rawTokens = (data.pushTokens ?? []) as Array<{
+    token: string;
+    addedAt?: admin.firestore.Timestamp;
+  }>;
+  const dedupedByToken = new Map<string, (typeof rawTokens)[number]>();
+  for (const t of rawTokens) {
+    if (t?.token && !dedupedByToken.has(t.token)) dedupedByToken.set(t.token, t);
+  }
+  const tokens = Array.from(dedupedByToken.values())
+    .sort((a, b) => (b.addedAt?.toMillis() ?? 0) - (a.addedAt?.toMillis() ?? 0))
+    .slice(0, 3)
     .map((t) => t.token)
     .filter(Boolean);
   if (tokens.length === 0) {

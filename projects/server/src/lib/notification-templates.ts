@@ -108,7 +108,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
   },
   hot_deal_alert: {
     key: "hot_deal_alert",
-    title: "Trace",
+    title: "{{destination}} just dropped {{discount}}% off",
     body: "${{price}} from {{homeAirport}}. Limited time — tap to see it.",
     deepLink: "/swipe",
     enabled: false,

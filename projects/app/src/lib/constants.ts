@@ -2,8 +2,15 @@ import Constants from "expo-constants";
 import { getEnv } from "./env";
 
 export const MAX_SAVES = 5;
-/** Cadence for the in-deck premium/business upsell card (every Nth lifetime swipe). */
-export const UPSELL_CARD_INTERVAL = 10;
+/**
+ * Cadence for the in-deck premium/business upsell card: fires every
+ * UPSELL_CARD_INTERVAL lifetime swipes, starting at UPSELL_CARD_START.
+ * Free users alternate Premium/Business each time it fires (swipe 10 =
+ * Premium, 15 = Business, 20 = Premium, ...); Premium-but-not-Business
+ * users only ever see the Business pitch, since Premium's moot for them.
+ */
+export const UPSELL_CARD_START = 10;
+export const UPSELL_CARD_INTERVAL = 5;
 
 /**
  * Cloud Function URLs.

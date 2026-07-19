@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from "react";
+import React, { useEffect, useCallback, useState, useRef } from "react";
 import { View, Text, Dimensions, StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -83,8 +83,19 @@ export default function SwipeCard({
   }, [isUndone]);
 
   // ── Callbacks (must be plain JS for runOnJS) ────────────────────────
+  // hasSwiped guards against the underlying gesture recognizer invoking
+  // its onEnd callback more than once for a single physical swipe — a
+  // pre-existing issue confirmed via logging, where a delayed duplicate
+  // firing can land well after the first one already completed (so a
+  // simple in-flight lock in the parent doesn't catch it), processing
+  // whatever the *next* card happens to be by the time it runs. Every
+  // exit path (drag, button-triggered swipe, disabled-swipe tap) funnels
+  // through this single wrapper, so guarding here catches all of them.
+  const hasSwiped = useRef(false);
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
+      if (hasSwiped.current) return;
+      hasSwiped.current = true;
       onSwipe(action);
     },
     [onSwipe],
@@ -184,6 +195,7 @@ export default function SwipeCard({
     });
 
   const tapGesture = Gesture.Tap()
+    .enabled(isTop)
     .onBegin(() => {
       tapScale.value = withTiming(0.965, { duration: 80 });
     })
@@ -340,7 +352,7 @@ export default function SwipeCard({
             <View style={styles.priceRight}>
               {deal.original_price > deal.price && (
                 <View style={styles.discountBadge}>
-                  <Text style={styles.discountBadgeText}>${Math.round(deal.original_price - deal.price)} off</Text>
+                  <Text style={styles.discountBadgeText}>{Math.round(deal.discount_pct)}% off</Text>
                 </View>
               )}
             </View>

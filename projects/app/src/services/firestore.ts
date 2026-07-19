@@ -190,6 +190,19 @@ export async function saveDeal(data: Record<string, any>): Promise<string> {
   return ref.id;
 }
 
+// `createdAt` is stored as a Firestore Timestamp; `new Date(Timestamp)`
+// upstream (e.g. Dashboard's "Saved [date]" label) silently produces
+// Invalid Date, so convert it here at the source rather than at every
+// display call site.
+function docToSavedDeal(d: { id: string; data: () => DocumentData }): SavedDealRecord {
+  const data = d.data();
+  return {
+    id: d.id,
+    ...data,
+    createdAt: data.createdAt?.toDate?.() ?? new Date(),
+  } as SavedDealRecord;
+}
+
 export async function getSavedDeals(userId: string): Promise<SavedDealRecord[]> {
   const q = query(
     envCollection("flightDeals"),
@@ -197,12 +210,7 @@ export async function getSavedDeals(userId: string): Promise<SavedDealRecord[]> 
     orderBy("createdAt", "desc")
   );
   const snap = await getDocs(q);
-  // The spread of `d.data()` (DocumentData = { [k: string]: any })
-  // loses its index signature in TS unless we widen explicitly.
-  // Casting to SavedDealRecord here keeps field access typed at
-  // every call site instead of producing the bare `{ id: string }`
-  // TS would otherwise infer.
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavedDealRecord));
+  return snap.docs.map(docToSavedDeal);
 }
 
 export async function deleteSavedDeal(docId: string): Promise<void> {
@@ -219,7 +227,7 @@ export function subscribeToSavedDeals(
     orderBy("createdAt", "desc")
   );
   return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavedDealRecord)));
+    callback(snap.docs.map(docToSavedDeal));
   });
 }
 
