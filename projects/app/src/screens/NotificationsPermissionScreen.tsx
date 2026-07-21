@@ -41,9 +41,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
  *     ever — only Settings can flip it back. So preserving the
  *     ability to re-prompt is the whole point.
  *
- * The trigger lives in MainTabs (see useTriggerSoftPromptAfterFirstSave)
- * so we only ever present this modal once the user has demonstrated
- * value by saving a deal.
+ * The trigger lives in MainTabs (see useTriggerSoftPrompt) so we only
+ * present this modal once the user has swiped a few deals or saved one.
  */
 export default function NotificationsPermissionScreen() {
   const navigation = useNavigation<Nav>();

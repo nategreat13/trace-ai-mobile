@@ -78,11 +78,10 @@ export default function RootNavigator() {
             component={PaywallScreen}
             options={{ presentation: "fullScreenModal" }}
           />
-          {/* Push soft prompt now fires after the user saves their first
-              deal — moment of demonstrated value, vs. the cold post-
-              onboarding ask that was converting at ~24%. Routing is
-              kicked off by useTriggerSoftPromptAfterFirstSave inside
-              MainTabs. */}
+          {/* Push soft prompt fires once the user has swiped a few deals
+              or saved one, whichever lands first. Routing is kicked off by
+              useTriggerSoftPrompt inside MainTabs — see that hook for why
+              the trigger has moved twice. */}
           <Stack.Screen
             name="NotificationsPermission"
             component={NotificationsPermissionScreen}

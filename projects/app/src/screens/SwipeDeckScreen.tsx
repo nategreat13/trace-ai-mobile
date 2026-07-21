@@ -517,9 +517,9 @@ export default function SwipeDeckScreen() {
         updates.dailySwipeWindowStart = new Date().toISOString();
       }
 
-      // First-save stamp — gates the push soft prompt (see
-      // useTriggerSoftPromptAfterFirstSave). Only stamp once; subsequent
-      // saves leave the original timestamp alone.
+      // First-save stamp — one of the two push soft-prompt triggers (see
+      // useTriggerSoftPrompt; swipeCount is the other). Only stamp once;
+      // subsequent saves leave the original timestamp alone.
       if (normalizedAction === "right" && !profile.firstSaveAt && !dashboardTooltipShown.current) {
         dashboardTooltipShown.current = true;
         updates.firstSaveAt = new Date();

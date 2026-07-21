@@ -6,7 +6,7 @@ import { useColorScheme } from "react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { usePostOnboardingPaywall } from "../hooks/usePostOnboardingPaywall";
-import { useTriggerSoftPromptAfterFirstSave } from "../hooks/useTriggerSoftPromptAfterFirstSave";
+import { useTriggerSoftPrompt } from "../hooks/useTriggerSoftPrompt";
 import type { TabParamList } from "./types";
 
 import SwipeDeckScreen from "../screens/SwipeDeckScreen";
@@ -33,9 +33,10 @@ export default function TabNavigator() {
   // i.e. after they've felt the value. Pass `true` to re-enable.
   usePostOnboardingPaywall(false);
 
-  // Push soft prompt fires after the user's first save (moment of
-  // demonstrated value), not cold after onboarding.
-  useTriggerSoftPromptAfterFirstSave();
+  // Push soft prompt fires once the user has swiped a few deals or saved
+  // one, whichever comes first — gating it on saves alone only ever asked
+  // ~21% of users. See the hook for the full history.
+  useTriggerSoftPrompt();
 
   return (
     <Tab.Navigator

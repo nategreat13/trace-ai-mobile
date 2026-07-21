@@ -15,11 +15,11 @@ import { getItem, removeItem, setItem } from "../lib/storage";
  *      UI side effects.
  *
  *   2. useShouldShowSoftPrompt — returns whether the per-device gates
- *      currently allow showing the soft prompt. Called from MainTabs
- *      after the user saves their first deal — we hold the ask for the
- *      moment of demonstrated value rather than firing it cold right
- *      after onboarding (the v1.3.2 cohort accepted at ~24% from the
- *      cold post-onboarding ask).
+ *      currently allow showing the soft prompt. Called from MainTabs once
+ *      the user has swiped a few deals or saved one, whichever lands
+ *      first — warm enough to beat the cold post-onboarding ask, broad
+ *      enough to actually reach people. See useTriggerSoftPrompt for the
+ *      numbers behind that tradeoff.
  *
  * Per-device soft-prompt gates, in priority order:
  *
