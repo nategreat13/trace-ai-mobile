@@ -307,6 +307,15 @@ export default function PaywallScreen() {
           headline: "We'll watch these\ndeals for you",
           sub: null,
         };
+      // Arrived by tapping a locked pin on the Explore map — they're
+      // looking at a specific place they want, so name that intent
+      // rather than pitching alerts generically.
+      case "explore_map_locked_pin":
+        return {
+          eyebrow: "LOCKED DESTINATION",
+          headline: "Unlock every\ndeal on the map",
+          sub: null,
+        };
       default:
         return {
           eyebrow: "TRACE PREMIUM",

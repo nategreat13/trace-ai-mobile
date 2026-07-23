@@ -65,6 +65,13 @@ export type AnalyticsEventName =
   // can distinguish "API broke" from "user bounced before swiping."
   | "deck_rendered"
   | "deals_load_failed"
+  // Explore map view. `explore_map_opened` is the adoption signal — if
+  // nobody flips the toggle, the map isn't worth its build cost.
+  // `explore_map_locked_pin_tapped` measures whether the map works as an
+  // upsell surface: free users see every destination pinned, but locked
+  // pins show a lock instead of a price and route to the paywall.
+  | "explore_map_opened"
+  | "explore_map_locked_pin_tapped"
   // Paywall
   | "paywall_viewed"
   | "paywall_tier_selected"

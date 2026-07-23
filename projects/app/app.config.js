@@ -37,13 +37,37 @@ try {
   // Missing file — fall back to defaults above. Don't block config.
 }
 
+// Two different Mapbox tokens, neither committed:
+//
+//   MAPBOX_DOWNLOAD_TOKEN — secret (sk.…, scope DOWNLOADS:READ). Used at
+//     build time to pull the native SDK from Mapbox's private artifact
+//     repo. Absent, the JS installs fine and only the native build fails,
+//     with a Mapbox 401 during pod install.
+//
+//   MAPBOX_PUBLIC_TOKEN — public (pk.…). Baked into the binary at build
+//     time and used by the map at runtime. It is genuinely public — any
+//     user can extract it from the app, which is how Mapbox intends it —
+//     but it still isn't committed, because GitHub's secret scanner blocks
+//     pushes containing any Mapbox token and bypassing that check is a
+//     worse habit than passing one more env var. Absent, DealsMap renders
+//     an explanatory placeholder rather than a blank grey rectangle.
+//
+// Both are set as EAS secrets; export them locally for a local native build.
+const mapboxDownloadToken = process.env.MAPBOX_DOWNLOAD_TOKEN ?? undefined;
+const mapboxPublicToken = process.env.MAPBOX_PUBLIC_TOKEN ?? null;
+
 module.exports = ({ config }) => ({
   ...config,
-  plugins: [...(config.plugins || []), "expo-web-browser"],
+  plugins: [
+    ...(config.plugins || []),
+    "expo-web-browser",
+    ["@rnmapbox/maps", { RNMapboxMapsDownloadToken: mapboxDownloadToken }],
+  ],
   extra: {
     ...config.extra,
     devApiUrl,
     devSubscribeUrl,
+    mapboxPublicToken,
     gitSha: buildInfo.gitSha,
     buildTimestamp: buildInfo.buildTimestamp,
   },

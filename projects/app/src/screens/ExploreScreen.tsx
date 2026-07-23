@@ -13,7 +13,7 @@ import {
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing } from "lucide-react-native";
+import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing, List, Map as MapIcon } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { colors } from "../theme/colors";
@@ -26,6 +26,8 @@ import { trendingScore } from "../lib/dealScorer";
 import ExploreFilters, { ExploreFilterState } from "../components/explore/ExploreFilters";
 import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import DealsMap, { type MapDeal } from "../components/explore/DealsMap";
+import { logEvent } from "../lib/analytics";
 import { AIRPORTS } from "../components/onboarding/AirportInput";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -56,6 +58,7 @@ export default function ExploreScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [pendingAlertDest, setPendingAlertDest] = useState<{ label: string; code?: string } | null>(null);
@@ -373,6 +376,23 @@ export default function ExploreScreen() {
     if (filteredDeals.length <= picks.length) return picks;
     return [...picks, { type: "paywall" as const }, ...blurred];
   }, [filteredDeals, isPremium, isFiltered]);
+
+  /**
+   * Map pins. Every destination gets a pin — that breadth is the whole
+   * appeal of the map — but anything the user can't open in the list is
+   * marked locked so the pin shows a lock instead of the price. Derived
+   * from listData rather than recomputed so the map and list can never
+   * disagree about what's unlocked.
+   */
+  const mapDeals: MapDeal[] = useMemo(() => {
+    const unlocked = new Set(
+      listData.filter((i): i is Deal => !("type" in i)).map((d) => d.id)
+    );
+    return filteredDeals.map((deal) => ({
+      deal,
+      locked: !isPremium && !unlocked.has(deal.id),
+    }));
+  }, [filteredDeals, listData, isPremium]);
 
   const renderDeal = (baseDeal: Deal, isBlurred: boolean) => {
     const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
@@ -846,13 +866,66 @@ export default function ExploreScreen() {
         )}
       </View>
 
-      {/* Deal count */}
-      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+      {/* Deal count + list/map toggle */}
+      <View
+        style={{
+          paddingHorizontal: 16,
+          marginBottom: 8,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
           {isPremium
             ? `Showing ${filteredDeals.length} deal${filteredDeals.length !== 1 ? "s" : ""}`
             : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
         </Text>
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: theme.muted,
+            borderRadius: 999,
+            padding: 2,
+          }}
+        >
+          {(["list", "map"] as const).map((mode) => {
+            const active = viewMode === mode;
+            const Icon = mode === "list" ? List : MapIcon;
+            return (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => {
+                  setViewMode(mode);
+                  if (mode === "map") logEvent("explore_map_opened", { deal_count: filteredDeals.length });
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={mode === "list" ? "List view" : "Map view"}
+                accessibilityState={{ selected: active }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 999,
+                  backgroundColor: active ? theme.background : "transparent",
+                }}
+              >
+                <Icon size={13} color={active ? theme.foreground : theme.mutedForeground} />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "700",
+                    color: active ? theme.foreground : theme.mutedForeground,
+                  }}
+                >
+                  {mode === "list" ? "List" : "Map"}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       {/* 1 save left warning */}
@@ -910,6 +983,16 @@ export default function ExploreScreen() {
         </View>
       )}
 
+      {viewMode === "map" ? (
+        <DealsMap
+          deals={mapDeals}
+          onSelectDeal={(deal) => setExpandedDeal(deal)}
+          onLockedPress={() => {
+            logEvent("explore_map_locked_pin_tapped", {});
+            navigation.navigate("Paywall", { entryPoint: "explore_map_locked_pin" });
+          }}
+        />
+      ) : (
       <FlatList
         data={listData}
         renderItem={renderItem}
@@ -1072,6 +1155,7 @@ export default function ExploreScreen() {
           );
         }}
       />
+      )}
 
       {/* Filters modal */}
       {showFilters && (

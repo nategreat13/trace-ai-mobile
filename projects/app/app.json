@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trace",
     "slug": "trace-ai-mobile",
-    "version": "1.3.6",
+    "version": "1.4.0",
     "scheme": "tracetravel",
     "orientation": "portrait",
     "icon": "./assets/icon.jpeg",
@@ -35,7 +35,7 @@
       "googleServicesFile": "./google-services.json"
     },
     "web": {},
-    "runtimeVersion": "1.3.0",
+    "runtimeVersion": "1.4.0",
     "updates": {
       "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab"
     },
