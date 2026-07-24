@@ -9,8 +9,19 @@ import {
   RefreshControl,
   Linking,
   ScrollView,
+  StyleSheet,
+  Dimensions,
 } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  runOnJS,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  interpolate,
+} from "react-native-reanimated";
+
+const SCREEN_H = Dimensions.get("window").height;
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing, List, Map as MapIcon } from "lucide-react-native";
@@ -58,6 +69,8 @@ export default function ExploreScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
+  // List is home (Going-style). A floating "Map" pill dives into the map;
+  // from the map, swiping up on the bottom handle brings the list back.
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [showFilters, setShowFilters] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -378,21 +391,63 @@ export default function ExploreScreen() {
   }, [filteredDeals, isPremium, isFiltered]);
 
   /**
-   * Map pins. Every destination gets a pin — that breadth is the whole
-   * appeal of the map — but anything the user can't open in the list is
-   * marked locked so the pin shows a lock instead of the price. Derived
-   * from listData rather than recomputed so the map and list can never
-   * disagree about what's unlocked.
+   * Map pins. Free users get exactly 5 unlocked deals on the map — the 5
+   * cheapest DOMESTIC destinations — and everything else (other domestic +
+   * all international) is locked. This is intentionally its own rule, not
+   * the list's 3-domestic/2-international curation: the map is a discovery
+   * surface where locked international pins drive the upsell.
+   *
+   * The unlocked set is computed from the full deal universe (`deals`), not
+   * the search-filtered set, so which 5 are free stays stable while the
+   * user searches.
    */
   const mapDeals: MapDeal[] = useMemo(() => {
-    const unlocked = new Set(
-      listData.filter((i): i is Deal => !("type" in i)).map((d) => d.id)
+    if (isPremium) return filteredDeals.map((deal) => ({ deal, locked: false }));
+
+    const cheapestDomestic = new Map<string, number>();
+    for (const d of deals) {
+      if (!d.domestic_or_international?.toLowerCase().includes("domestic")) continue;
+      const price = d.price || Infinity;
+      const existing = cheapestDomestic.get(d.destination);
+      if (existing === undefined || price < existing) cheapestDomestic.set(d.destination, price);
+    }
+    const freeDestinations = new Set(
+      [...cheapestDomestic.entries()]
+        .sort((a, b) => a[1] - b[1])
+        .slice(0, 5)
+        .map(([destination]) => destination)
     );
+
     return filteredDeals.map((deal) => ({
       deal,
-      locked: !isPremium && !unlocked.has(deal.id),
+      locked: !freeDestinations.has(deal.destination),
     }));
-  }, [filteredDeals, listData, isPremium]);
+  }, [filteredDeals, deals, isPremium]);
+
+  const goToMap = useCallback(() => {
+    logEvent("explore_map_opened", { deal_count: filteredDeals.length });
+    setViewMode("map");
+  }, [filteredDeals.length]);
+
+  // While `sliding`, the list panel is rendered over the still-mounted map
+  // and animated up; on completion we settle into plain list mode.
+  const [sliding, setSliding] = useState(false);
+  const slideProgress = useSharedValue(0); // 0 = below screen, 1 = covering
+  const listSheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(slideProgress.value, [0, 1], [SCREEN_H, 0]) }],
+  }));
+  const finishSlide = useCallback(() => {
+    setViewMode("list");
+    setSliding(false);
+  }, []);
+  const goToListAnimated = useCallback(() => {
+    slideProgress.value = 0;
+    setSliding(true);
+    slideProgress.value = withTiming(1, { duration: 340 }, (finished) => {
+      if (finished) runOnJS(finishSlide)();
+    });
+  }, [finishSlide, slideProgress]);
+
 
   const renderDeal = (baseDeal: Deal, isBlurred: boolean) => {
     const variants = dealVariants.get(baseDeal.destination) || [baseDeal];
@@ -866,67 +921,16 @@ export default function ExploreScreen() {
         )}
       </View>
 
-      {/* Deal count + list/map toggle */}
-      <View
-        style={{
-          paddingHorizontal: 16,
-          marginBottom: 8,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
-          {isPremium
-            ? `Showing ${filteredDeals.length} deal${filteredDeals.length !== 1 ? "s" : ""}`
-            : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
-        </Text>
-        <View
-          style={{
-            flexDirection: "row",
-            backgroundColor: theme.muted,
-            borderRadius: 999,
-            padding: 2,
-          }}
-        >
-          {(["list", "map"] as const).map((mode) => {
-            const active = viewMode === mode;
-            const Icon = mode === "list" ? List : MapIcon;
-            return (
-              <TouchableOpacity
-                key={mode}
-                onPress={() => {
-                  setViewMode(mode);
-                  if (mode === "map") logEvent("explore_map_opened", { deal_count: filteredDeals.length });
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={mode === "list" ? "List view" : "Map view"}
-                accessibilityState={{ selected: active }}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  borderRadius: 999,
-                  backgroundColor: active ? theme.background : "transparent",
-                }}
-              >
-                <Icon size={13} color={active ? theme.foreground : theme.mutedForeground} />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "700",
-                    color: active ? theme.foreground : theme.mutedForeground,
-                  }}
-                >
-                  {mode === "list" ? "List" : "Map"}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+      {/* Deal count — list view only; the map is kept uncluttered. */}
+      {viewMode === "list" && (
+        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: theme.mutedForeground }}>
+            {isPremium
+              ? `Showing ${filteredDeals.length} deal${filteredDeals.length !== 1 ? "s" : ""}`
+              : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
+          </Text>
         </View>
-      </View>
+      )}
 
       {/* 1 save left warning */}
       {!isPremium && savedDealIds.size === 2 && (
@@ -983,21 +987,37 @@ export default function ExploreScreen() {
         </View>
       )}
 
-      {viewMode === "map" ? (
+      <View style={{ flex: 1 }}>
+      {viewMode === "map" && (
         <DealsMap
           deals={mapDeals}
+          searchTarget={pendingAlertDest?.label ?? null}
+          savedDealIds={savedDealIds}
+          onSaveDeal={(deal) => handleSave(deal)}
           onSelectDeal={(deal) => setExpandedDeal(deal)}
           onLockedPress={() => {
             logEvent("explore_map_locked_pin_tapped", {});
             navigation.navigate("Paywall", { entryPoint: "explore_map_locked_pin" });
           }}
+          onRequestAlert={(destination) => {
+            logEvent("explore_map_alert_requested", { destination });
+            handleCreateAlert({ label: destination });
+          }}
         />
-      ) : (
+      )}
+      {(viewMode === "list" || sliding) && (
+        <Animated.View
+          style={
+            sliding
+              ? [StyleSheet.absoluteFillObject, { backgroundColor: theme.background }, listSheetStyle]
+              : { flex: 1 }
+          }
+        >
       <FlatList
         data={listData}
         renderItem={renderItem}
         keyExtractor={(item) => ("type" in item ? "paywall" : item.id)}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 88 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1155,7 +1175,9 @@ export default function ExploreScreen() {
           );
         }}
       />
+        </Animated.View>
       )}
+      </View>
 
       {/* Filters modal */}
       {showFilters && (
@@ -1169,6 +1191,66 @@ export default function ExploreScreen() {
             navigation.navigate("Paywall", { entryPoint: "explore_filters_business" });
           }}
         />
+      )}
+
+      {/* Floating "Map" pill — the entry point into the map from the list. */}
+      {viewMode === "list" && (
+        <TouchableOpacity
+          onPress={goToMap}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Open map view"
+          style={{
+            position: "absolute",
+            bottom: 24,
+            alignSelf: "center",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            backgroundColor: colors.brand.traceRed,
+            borderRadius: 999,
+            paddingHorizontal: 22,
+            paddingVertical: 13,
+            shadowColor: colors.brand.traceRed,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.45,
+            shadowRadius: 12,
+            elevation: 10,
+          }}
+        >
+          <MapIcon size={17} color="#fff" />
+          <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>Map</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Floating "List" button on the map — tap to slide back to the list. */}
+      {viewMode === "map" && !sliding && (
+        <TouchableOpacity
+          onPress={goToListAnimated}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Back to list view"
+          style={{
+            position: "absolute",
+            bottom: 24,
+            alignSelf: "center",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            backgroundColor: colors.brand.traceRed,
+            borderRadius: 999,
+            paddingHorizontal: 22,
+            paddingVertical: 13,
+            shadowColor: colors.brand.traceRed,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.45,
+            shadowRadius: 12,
+            elevation: 10,
+          }}
+        >
+          <List size={17} color="#fff" />
+          <Text style={{ fontSize: 15, fontWeight: "800", color: "#fff" }}>List</Text>
+        </TouchableOpacity>
       )}
 
       {expandedDeal && (

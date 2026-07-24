@@ -72,6 +72,9 @@ export type AnalyticsEventName =
   // pins show a lock instead of a price and route to the paywall.
   | "explore_map_opened"
   | "explore_map_locked_pin_tapped"
+  // Fired when a user searches a place we don't have a deal for and taps
+  // the map's alert pin — pure demand signal for destinations to add.
+  | "explore_map_alert_requested"
   // Paywall
   | "paywall_viewed"
   | "paywall_tier_selected"
