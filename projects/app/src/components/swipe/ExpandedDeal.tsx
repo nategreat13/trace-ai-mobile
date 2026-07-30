@@ -34,6 +34,7 @@ import WeatherPreview from "./WeatherPreview";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealTravelTips from "./DealTravelTips";
 import DealDestinationTab from "./DealDestinationTab";
+import PriceGauge from "./PriceGauge";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.65;
@@ -395,6 +396,17 @@ export default function ExpandedDeal({
               </View>
             )}
 
+            {/* Price gauge — where this deal sits vs. its typical price */}
+            {deal.price > 0 && (
+              <PriceGauge
+                price={deal.price}
+                originalPrice={deal.original_price}
+                discountPct={deal.discount_pct}
+                foreground={theme.foreground}
+                mutedForeground={theme.mutedForeground}
+              />
+            )}
+
             {/* Flight Details */}
             {(deal.origin || deal.destination_code || deal.duration || deal.layover_info) && (
               <View
@@ -600,7 +612,7 @@ export default function ExpandedDeal({
               </TouchableOpacity>
             )}
 
-            <Animated.View style={{ flex: 1, transform: [{ scale: saveScale }] }}>
+            <Animated.View style={{ flex: 1, height: 50, transform: [{ scale: saveScale }] }}>
               <TouchableOpacity
                 onPress={handleSave}
                 activeOpacity={0.85}
@@ -621,32 +633,37 @@ export default function ExpandedDeal({
               </TouchableOpacity>
             </Animated.View>
 
-            <TouchableOpacity
-              onPress={() => {
-                // Analytics: the user tapped through to the deal's booking
-                // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
-                logEvent("deal_book_tapped", {
-                  deal_id: deal.id,
-                  destination_code: deal.destination_code ?? null,
-                  price: deal.price ?? null,
-                  deal_type: deal.deal_type ?? null,
-                  domestic_or_international: deal.domestic_or_international ?? null,
-                });
-                onBook();
-              }}
-              activeOpacity={0.8}
-              style={styles.bookButton}
-            >
-              <LinearGradient
-                colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.bookGradient}
+            <View style={styles.bookButtonWrap}>
+              <TouchableOpacity
+                onPress={() => {
+                  // Analytics: the user tapped through to the deal's booking
+                  // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
+                  logEvent("deal_book_tapped", {
+                    deal_id: deal.id,
+                    destination_code: deal.destination_code ?? null,
+                    price: deal.price ?? null,
+                    deal_type: deal.deal_type ?? null,
+                    domestic_or_international: deal.domestic_or_international ?? null,
+                  });
+                  onBook();
+                }}
+                activeOpacity={0.8}
+                style={styles.bookButton}
               >
-                <ExternalLink size={16} color="#ffffff" />
-                <Text style={styles.bookButtonText}>Book Now</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.bookGradient}
+                >
+                  <ExternalLink size={16} color="#ffffff" />
+                  <Text style={styles.bookButtonText}>Book Now</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <Text style={[styles.bookOnGoogleText, { color: theme.mutedForeground }]}>
+                Book on Google
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -1011,20 +1028,22 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
   },
-  buttonRow: { flexDirection: "row", gap: 12 },
+  buttonRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   saveButton: {
     flex: 1,
     height: 50,
     borderRadius: 14,
-    borderWidth: 2,
+    borderWidth: 3,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
   },
   saveButtonText: { fontSize: 15, fontWeight: "700" },
-  bookButton: {
+  bookButtonWrap: {
     flex: 2,
+  },
+  bookButton: {
     height: 50,
     borderRadius: 14,
     overflow: "hidden",
@@ -1042,6 +1061,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bookButtonText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
+  bookOnGoogleText: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 6,
+  },
 
   // ── Sharing ───────────────────────────────────────────────────────────────
   sharedBanner: {
