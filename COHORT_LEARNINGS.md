@@ -9,8 +9,8 @@ This is a running summary of what we've learned from **signup-version cohort ana
 It exists so that anyone (or their Claude) can pull the latest `main`, read this file, and understand the current state of our learnings **without re-deriving it**. If you're Trevor's Claude reading this to prep a "what's next" chat: everything you need is below, including the open questions and the current recommendations.
 
 **Two things to keep in mind as you read:**
-1. The newest cohort (1.3.6) is only ~3–4 days old as of this writing — its conversion numbers are promising but based on tiny samples. Don't over-index.
-2. Our **retention metric is almost certainly undercounting** (see "Known measurement problems"). Treat retention as relative-across-cohorts, not as a true return rate.
+1. The data table below is the **June 26** snapshot, when 1.3.6 was ~3–4 days old. It has since matured to n=278 and **the exciting conversion signal did not survive** — see "Corrections after maturity" directly beneath it. Read that before quoting any 1.3.6 number.
+2. Our **retention metric undercounts** because ~33% of events were mis-attributed to `"guest"` (root cause found and fixed July 31, 2026 — see "Known measurement problems"). Cohorts predating the fix still understate; treat retention as relative-across-cohorts.
 
 ---
 
@@ -48,6 +48,31 @@ Same methodology for every row; test accounts excluded; "matured windows only" f
 
 ---
 
+## Corrections after maturity (July 31, 2026)
+
+1.3.6 has now matured from 49 users to **278**. Re-running the same analysis changes one headline materially, so the June 26 table above should be read as a historical snapshot, not current truth.
+
+| Metric | 1.3.6 @ 3 days (n=49) | **1.3.6 matured (n=278)** | 1.3.5 matured (n=133) |
+|---|---|---|---|
+| Purchase (% of signups) | 6.1% (3) | **2.5% (7)** | 2.3% (3) |
+| Purchase / paywall-viewer | 9.1% | **4.6%** | 2.8% |
+| Trial started (server) | 4.1% (2) | 2.2% (6) | 2.3% (3) |
+| Trial → paid conversions | 0 | 1 | 0 |
+| Swipes per active user | 7.6 | **11.4** | 7.8 |
+| Saves per active user | — | **5.7** | 4.6 |
+| D1 / D7 retention (exact) | 3.7% / n/a | **6.3% / 4.1%** | 3.0% / 3.8% |
+| D1 / D7 retention (rolling) | — | **24.6% / 20.7%** | — |
+
+**❌ Retracted: "the trial-led paywall converts ~2× better."** That rested on 3 purchases in a 3-day-old cohort. At full size the purchase rate landed at 2.5% vs 1.3.5's 2.3% — **flat**. It was small-sample noise, and it is a good cautionary example: a 3-purchase delta is not a result. Don't re-derive this conclusion from the June 26 table.
+
+**✅ Confirmed and strengthened: the engagement work is real.** Swipes per active user went _up_ with maturity (7.6 → 11.4 vs 1.3.5's 7.8), saves per active user beat 1.3.5, and deal detail views (2.6×) and "Book on Google" taps (6×) both clear 1.3.5 decisively. Removing the swipe cap worked.
+
+**✅ Retention improved across every window** vs 1.3.5, though absolute levels stay low and are still understated for cohorts predating the attribution fix.
+
+**🔴 New: the monetization leak is at the bottom of the funnel, not the top.** Only ~9% of paywall viewers tap the CTA, and **of those who tap buy, only half complete the store transaction** (7 of 14 on 1.3.6; 3 of 8 on 1.3.5). Two releases have now improved engagement without moving revenue. That 50% purchase-initiated drop-off is the most concrete unexplained loss we have.
+
+---
+
 ## What we've learned (with confidence levels)
 
 **✅ Higher swipe cap → more swiping (high confidence).**
@@ -66,10 +91,27 @@ D1 is 3–6% and D7 is 2–3% for every release. 1.3.6 is in line with the other
 
 ## Known measurement problems (important)
 
-**Retention is event-based and almost certainly undercounts.**
-The cohort script measures retention as: "did this user fire a tracked event (swipe / deal_saved / deal_expanded / deal_book_tapped) inside the D1/D7/D30 window?" A user who reopens the app and just _browses_ without one of those interactions is counted as churned. That likely makes true retention much higher than the 3% we see.
+**Retention undercounts — but not for the reason we thought. Root cause found and fixed July 31, 2026.**
 
-**Implication:** we currently cannot make retention-based decisions with confidence. The fix is to instrument an app-open / `session_start` event and recompute. Until then, retention is only useful as a _relative_ comparison between cohorts, and even that is shaky.
+An earlier revision of this file claimed retention only counted the four engagement events (swipe / deal_saved / deal_expanded / deal_book_tapped) and that instrumenting an app-open event was the fix. **Both halves were wrong.** The cohort script's event fetch is unmasked by name, so retention has always counted _any_ tracked event including `screen_view` and `app_open` — and `app_open` had already been instrumented (it fires on cold launch and on foreground resume after 30 min, in `AnalyticsLifecycle.tsx`).
+
+The actual bug was **attribution, not instrumentation**. Firebase restores the signed-in user from storage asynchronously, so for the first beat of a cold launch `auth.currentUser` is `null` even for a long-logged-in user. Every event fired in that window was stamped `userId: "guest"` and became invisible to per-user queries. Measured on prod before the fix:
+
+| Event | Attributed to `"guest"` |
+|---|---|
+| `app_open`, `source: cold_launch` | **1,283 of 1,283 — 100%** (zero real uids) |
+| `app_open`, `source: foreground_resume` | 84.3% |
+| `screen_view` | 38.2% |
+| `swipe` | 0% (happens long after auth resolves) |
+| **whole `events` collection** | **~33%** |
+
+So a returning user's first events landed under "guest" and they were scored as churned. `swipe` was clean precisely because swiping happens late in a session — which is why engagement metrics always looked sane while retention looked impossible.
+
+**Fixed** in `projects/app/src/lib/analytics.ts`: `logEvent` now buffers events in memory until Firebase resolves auth state once, then flushes them with the userId that is actually known. Genuine logged-out users still flush as `"guest"`, which is correct for them.
+
+**Implication:** every cohort that predates this fix _shipping to devices_ still understates retention, and the fix is client-side so it only takes effect for users on the new bundle. Keep comparing cohorts relative to one another until a cohort exists that was fully instrumented from signup. `scripts/cohort-analysis.mjs` now prints the collection-wide guest-attribution share on every run so this can't silently regress, and `scripts/retention-diagnostic.mjs` breaks retention down by event set and definition.
+
+**Retention now reports two definitions.** Classic "exact day-N window" DN is brutal for an episodic deal-hunting app (someone who returns on day 2 and day 5 scores zero on both D1 and D7), so the script also prints rolling "still active on/after day N". For the 1.3.6 cohort the two read very differently — D1 6.3% exact vs 24.6% rolling — and the rolling number is the more honest description of whether a cohort stuck.
 
 **Cohort tagging tracks the JS bundle version, not the native binary.**
 `firstAppVersion` is set from `Constants.expoConfig.version` (the OTA-controlled bundle version), not the installed binary. So a "1.3.6 cohort" = everyone who onboarded while running a 1.3.6-stamped JS bundle, regardless of which store binary they installed. Practical consequence: **whenever we ship a new batch, bump the version stamp** (e.g. 1.3.7) so the next cohort separates cleanly. If we reuse a version stamp, two different releases blend into one cohort bucket.

@@ -148,6 +148,28 @@ const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
     let a = eventsByUser.get(e.userId); if (!a) { a = []; eventsByUser.set(e.userId, a); }
     a.push(e.timestamp.getTime());
   }
+  // Two definitions, because they answer different questions and the
+  // "classic" one alone reads far more bleakly than reality:
+  //
+  //   retention(N)        — active during the exact 24h of day N. This is the
+  //                         textbook DN number, and it is brutal for an app
+  //                         people use episodically (a deal hunter who returns
+  //                         on day 2 and day 5 scores 0 on both D1 and D7).
+  //   retentionRolling(N) — active at any point on or after day N, i.e. "still
+  //                         around by then". Better matches how we actually
+  //                         reason about whether a cohort stuck.
+  //
+  // Both count ANY tracked event, not just the four engagement events — that
+  // includes app_open and screen_view. (An earlier revision of
+  // COHORT_LEARNINGS.md claimed only engagement events counted; that was
+  // wrong, the fetch above is unmasked by name.)
+  //
+  // Caveat that mattered until 2026-07-31: events fired before Firebase auth
+  // rehydrated were attributed to "guest", so returning users' first events
+  // vanished from these numbers — 100% of cold-launch app_opens and 38% of
+  // screen_views. Fixed in projects/app/src/lib/analytics.ts (auth-resolution
+  // gate). Cohorts that predate that fix shipping still understate retention;
+  // compare like-for-like across cohorts rather than trusting the absolute.
   function retention(dayN) {
     let denom = 0, retained = 0;
     for (const p of cohort) {
@@ -162,7 +184,26 @@ const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
     }
     return { denom, retained, pct: pct(retained, denom) };
   }
+  function retentionRolling(dayN) {
+    let denom = 0, retained = 0;
+    for (const p of cohort) {
+      if (!p.createdAt) continue;
+      const signup = p.createdAt.getTime();
+      const winStart = signup + dayN * 86400000;
+      if (winStart + 86400000 > now.getTime()) continue; // same maturity bar as above
+      denom++;
+      const ts = eventsByUser.get(p.userId) ?? [];
+      if (ts.some((t) => t >= winStart)) retained++;
+    }
+    return { denom, retained, pct: pct(retained, denom) };
+  }
   const r1 = retention(1), r7 = retention(7), r30 = retention(30);
+  const rr1 = retentionRolling(1), rr7 = retentionRolling(7), rr30 = retentionRolling(30);
+
+  // Attribution health: if a big share of this cohort's events landed on
+  // "guest" the retention numbers below are understated, so surface it
+  // inline instead of leaving it to be rediscovered later.
+  const guestEvents = events.filter((e) => e.userId === "guest").length;
 
   // signup date range
   const dates = cohort.map((p) => p.createdAt).filter(Boolean).sort((a, b) => a - b);
@@ -201,9 +242,16 @@ const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
   row("deal_book_tapped(clk)", clicks);
   L(`  sessions (deal-interaction): ${sessSet.size} total`);
 
-  L(`\n-- Retention (matured windows only) --`);
-  L(`  D1:  ${r1.retained}/${r1.denom} = ${r1.pct}%`);
-  L(`  D7:  ${r7.retained}/${r7.denom} = ${r7.pct}%`);
-  L(`  D30: ${r30.retained}/${r30.denom} = ${r30.pct}%`);
+  L(`\n-- Retention (matured windows only; any tracked event counts) --`);
+  L(`  exact day-N window (classic DN):`);
+  L(`    D1:  ${r1.retained}/${r1.denom} = ${r1.pct}%`);
+  L(`    D7:  ${r7.retained}/${r7.denom} = ${r7.pct}%`);
+  L(`    D30: ${r30.retained}/${r30.denom} = ${r30.pct}%`);
+  L(`  still active on/after day N (rolling):`);
+  L(`    D1:  ${rr1.retained}/${rr1.denom} = ${rr1.pct}%`);
+  L(`    D7:  ${rr7.retained}/${rr7.denom} = ${rr7.pct}%`);
+  L(`    D30: ${rr30.retained}/${rr30.denom} = ${rr30.pct}%`);
+  L(`  attribution: ${guestEvents}/${events.length} events collection-wide landed on "guest" ` +
+    `(${pct(guestEvents, events.length)}%) — those are invisible to per-user retention.`);
   L("");
 })().catch((e) => { console.error(e); process.exit(1); });

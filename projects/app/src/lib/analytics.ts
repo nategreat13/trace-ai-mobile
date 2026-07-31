@@ -1,4 +1,5 @@
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import { col } from "@trace/shared";
@@ -194,6 +195,103 @@ function getBaseProps(): Record<string, string | null> {
   };
 }
 
+/* ────────────────── auth-resolution gate ──────────────────
+ *
+ * Firebase restores the signed-in user from persistent storage
+ * asynchronously: for the first beat of a cold launch `auth.currentUser` is
+ * null even for a user who has been logged in for months. Any event fired in
+ * that window was stamped `userId: "guest"` and became invisible to every
+ * per-user query.
+ *
+ * That was not hypothetical. Measured on prod 2026-07-31: of 1,634 `app_open`
+ * events, 96.6% were attributed to "guest" — and of the 1,283 fired with
+ * `source: "cold_launch"`, **100% were "guest" and zero carried a real uid**.
+ * 38% of `screen_view` was lost the same way, since the first screens render
+ * before auth resolves. `swipe` was 0% guest, because swiping happens much
+ * later in a session. The visible symptom was retention that looked
+ * impossibly low (D1 ~6%) — we were counting returning users as churned
+ * because their return events landed under "guest".
+ *
+ * Fix: hold events in memory until Firebase has resolved auth state once,
+ * then flush with the userId that is actually known. `onAuthStateChanged`
+ * fires exactly once for the logged-out case too, so genuine guests flush
+ * immediately and are still recorded as "guest" — which is correct for them.
+ */
+
+/** Events logged before auth resolves, flushed once it does. */
+const pendingEvents: Array<{ name: AnalyticsEventName; props: Record<string, unknown> }> = [];
+let authResolved = false;
+
+/**
+ * Cap the buffer so a pathological startup can't grow it without bound.
+ * Well above any realistic pre-auth burst (a cold launch fires a handful of
+ * events); overflow drops the oldest so the most recent context survives.
+ */
+const MAX_PENDING_EVENTS = 100;
+
+/**
+ * Backstop: if auth never resolves (offline cold start with a corrupt
+ * persistence layer, say), flush anyway rather than silently dropping the
+ * session. Losing attribution is bad; losing the events entirely is worse.
+ */
+const AUTH_RESOLVE_TIMEOUT_MS = 8000;
+
+function writeEvent(name: AnalyticsEventName, cleanProps: Record<string, unknown>): void {
+  // Env-aware: staging writes to `staging_events`, prod to `events`.
+  addDoc(collection(db, col(getEnv(), "events")), {
+    name,
+    // Source from auth.currentUser directly so it always agrees with
+    // request.auth.uid in the Firestore security rule. See the comment
+    // on setAnalyticsUser above for the race this avoids.
+    userId: auth.currentUser?.uid ?? "guest",
+    props: cleanProps,
+    // serverTimestamp for queued events too: the buffer drains in well under
+    // a second, and a consistent clock source matters far more to day-bucketed
+    // retention than sub-second ordering (screen_view carries previous_screen
+    // explicitly, so sequence is recoverable without timestamps).
+    timestamp: serverTimestamp(),
+  }).catch((err) => {
+    // Swallow — analytics must never break the app
+    if (__DEV__) console.warn("[analytics] log failed:", name, err?.message);
+  });
+}
+
+function markAuthResolved(): void {
+  if (authResolved) return;
+  authResolved = true;
+  // splice so a write that re-enters logEvent can't double-send
+  const queued = pendingEvents.splice(0, pendingEvents.length);
+  for (const e of queued) writeEvent(e.name, e.props);
+}
+
+// Self-initializing: importing this module arms the gate, so no caller has to
+// remember to wire it up. Wrapped defensively — analytics must never be the
+// reason the app fails to boot.
+try {
+  // `unsub` is declared with let and assigned after, then null-checked inside
+  // the callback: if Firebase ever invokes the listener synchronously, reading
+  // a `const` from the callback would throw on the temporal dead zone. The
+  // pendingUnsub flag covers that case by unsubscribing right after we get it.
+  let unsub: (() => void) | null = null;
+  let resolvedBeforeSubscribed = false;
+  unsub = onAuthStateChanged(auth, () => {
+    markAuthResolved();
+    // One resolution is all we need; later sign-in/sign-out transitions are
+    // picked up by reading auth.currentUser at write time.
+    if (unsub) unsub();
+    else resolvedBeforeSubscribed = true;
+  });
+  if (resolvedBeforeSubscribed) unsub();
+
+  const t = setTimeout(markAuthResolved, AUTH_RESOLVE_TIMEOUT_MS);
+  // Don't hold the JS runtime open on the backstop timer if the host supports it.
+  (t as unknown as { unref?: () => void })?.unref?.();
+} catch (err) {
+  if (__DEV__) console.warn("[analytics] auth gate init failed:", (err as Error)?.message);
+  // Fail open: never let an analytics init problem strand events in the buffer.
+  markAuthResolved();
+}
+
 export function logEvent(
   name: AnalyticsEventName,
   props: Record<string, string | number | boolean | null | undefined> = {}
@@ -207,17 +305,14 @@ export function logEvent(
   // later requires no schema migration on the events collection.
   if (!("experiments" in cleanProps)) cleanProps.experiments = {};
 
-  // Env-aware: staging writes to `staging_events`, prod to `events`.
-  addDoc(collection(db, col(getEnv(), "events")), {
-    name,
-    // Source from auth.currentUser directly so it always agrees with
-    // request.auth.uid in the Firestore security rule. See the comment
-    // on setAnalyticsUser above for the race this avoids.
-    userId: auth.currentUser?.uid ?? "guest",
-    props: cleanProps,
-    timestamp: serverTimestamp(),
-  }).catch((err) => {
-    // Swallow — analytics must never break the app
-    if (__DEV__) console.warn("[analytics] log failed:", name, err?.message);
-  });
+  // Base props (session_id, app_version, locale…) are captured now, at call
+  // time, so a queued event still describes the moment it happened. Only the
+  // userId is deliberately deferred to flush time.
+  if (!authResolved) {
+    if (pendingEvents.length >= MAX_PENDING_EVENTS) pendingEvents.shift();
+    pendingEvents.push({ name, props: cleanProps });
+    return;
+  }
+
+  writeEvent(name, cleanProps);
 }
