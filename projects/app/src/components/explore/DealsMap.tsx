@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, useColorScheme } from "react-native";
 import { Image } from "expo-image";
-import Constants from "expo-constants";
 import Mapbox, { MapView, Camera, MarkerView } from "@rnmapbox/maps";
 import { Lock, ArrowRight, Bell, Bookmark, BookmarkCheck } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { coordsForDestination, lookupKey } from "../../lib/destinationCoords";
+import { extraString } from "../../lib/expoExtra";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -13,10 +13,15 @@ import type { Deal } from "@trace/shared";
  * user can extract it, which is how Mapbox is designed to work. The *secret*
  * download token is a separate thing and is injected at build time from the
  * MAPBOX_DOWNLOAD_TOKEN env var (see app.config.js).
+ *
+ * Read via extraString, NOT `extra?.mapboxPublicToken ?? null`: when the env
+ * var is absent app.config.js sets null, but Expo serializes that to an empty
+ * object `{}`, which is truthy. The `??` form therefore skipped the fallback
+ * below and handed `{}` to setAccessToken, so a token-less build rendered a
+ * live map that failed with "401 Not Authorized - Invalid Token" instead of
+ * the explanatory placeholder. See lib/expoExtra.ts.
  */
-const MAPBOX_PUBLIC_TOKEN =
-  (Constants.expoConfig?.extra as { mapboxPublicToken?: string } | undefined)
-    ?.mapboxPublicToken ?? null;
+const MAPBOX_PUBLIC_TOKEN = extraString("mapboxPublicToken");
 
 if (MAPBOX_PUBLIC_TOKEN) {
   Mapbox.setAccessToken(MAPBOX_PUBLIC_TOKEN);

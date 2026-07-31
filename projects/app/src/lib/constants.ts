@@ -1,5 +1,5 @@
-import Constants from "expo-constants";
 import { getEnv } from "./env";
+import { extraString } from "./expoExtra";
 
 export const MAX_SAVES = 5;
 /**
@@ -30,7 +30,11 @@ const STAGING_API_URL = "https://apistaging-7l7vojyykq-uc.a.run.app";
 // URL when USE_LOCAL_API=1 is set (the default for `yarn dev2`). For
 // `yarn dev:prod` and for production binaries, devApiUrl is null and we
 // fall back to the env-appropriate production API.
-const devApiUrl = (Constants.expoConfig?.extra as { devApiUrl?: string | null } | undefined)?.devApiUrl;
+//
+// Read through extraString: the "null" case arrives as a truthy empty object
+// `{}` (see lib/expoExtra.ts), so a bare truthiness check would have made
+// `yarn dev:prod` use `{}` as its API base URL.
+const devApiUrl = extraString("devApiUrl");
 
 function resolveApiBaseUrl(): string {
   // @ts-ignore: __DEV__ is defined by React Native at runtime

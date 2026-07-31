@@ -1,7 +1,7 @@
 import * as Updates from "expo-updates";
-import Constants from "expo-constants";
 import type { TraceEnv } from "@trace/shared";
 import { getItemRaw, setItemRaw } from "./storage";
+import { extraString } from "./expoExtra";
 
 /**
  * Per-device staging/prod environment switch.
@@ -95,10 +95,10 @@ export async function initEnvFromStorage(): Promise<void> {
 function defaultEnvForBuild(): TraceEnv {
   // @ts-ignore: __DEV__ is defined by React Native at runtime
   if (!__DEV__) return "prod";
-  const devApiUrl = (Constants.expoConfig?.extra as
-    | { devApiUrl?: string | null }
-    | undefined)?.devApiUrl;
-  return devApiUrl ? "staging" : "prod";
+  // extraString, not a bare truthiness check: the absent case arrives as a
+  // truthy `{}` (see lib/expoExtra.ts), which would have made `yarn dev:prod`
+  // default to staging despite deliberately pointing at production.
+  return extraString("devApiUrl") ? "staging" : "prod";
 }
 
 /**
