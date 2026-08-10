@@ -66,11 +66,21 @@ export type AnalyticsEventName =
   // can distinguish "API broke" from "user bounced before swiping."
   | "deck_rendered"
   | "deals_load_failed"
-  // Explore map view. `explore_map_opened` is the adoption signal — if
-  // nobody flips the toggle, the map isn't worth its build cost.
+  // Explore map view. `explore_map_opened` carries a `source` prop:
+  //   "default" — the map is now Explore's landing view, so this fires once
+  //               per visit and effectively measures Explore traffic.
+  //   "pill"    — the user deliberately came back to the map from the list.
+  //               This is the intent signal, and the only one comparable to
+  //               the pre-default baseline (4 openers in 5 days, Aug 2026).
+  // Always filter by source before trending this event across that change,
+  // or the switch to map-as-default reads as a huge adoption jump that is
+  // purely definitional.
+  //
   // `explore_map_locked_pin_tapped` measures whether the map works as an
   // upsell surface: free users see every destination pinned, but locked
-  // pins show a lock instead of a price and route to the paywall.
+  // pins show a lock instead of a price and route to the paywall. It is
+  // unaffected by the default-view change, so it stays the cleanest read on
+  // whether the map earns its build cost.
   | "explore_map_opened"
   | "explore_map_locked_pin_tapped"
   // Fired when a user searches a place we don't have a deal for and taps

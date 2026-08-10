@@ -243,11 +243,23 @@ export default function ExploreScreen() {
   // Map is the default view, so its initial appearance isn't driven by the
   // "Map" pill (goToMap) — log it separately, once, the first time deals are
   // ready so explore_map_opened still counts default landings, not just taps.
+  //
+  // `source` is what keeps this readable: since the map became the default,
+  // "opened" covers both landing on Explore at all (source: "default") and
+  // deliberately returning to the map from the list (source: "pill"). Those
+  // are very different signals — the pre-default baseline of 4 openers in 5
+  // days measured intent, whereas default landings measure Explore traffic.
+  // Without the split, the metric would appear to explode on the day this
+  // ships for purely definitional reasons. Filter to source == "pill" for a
+  // like-for-like comparison against that baseline.
   const defaultMapOpenLogged = useRef(false);
   useEffect(() => {
     if (!loading && viewMode === "map" && !defaultMapOpenLogged.current) {
       defaultMapOpenLogged.current = true;
-      logEvent("explore_map_opened", { deal_count: filteredDeals.length });
+      logEvent("explore_map_opened", {
+        deal_count: filteredDeals.length,
+        source: "default",
+      });
     }
   }, [loading, viewMode, filteredDeals.length]);
 
@@ -435,7 +447,12 @@ export default function ExploreScreen() {
   }, [filteredDeals, deals, isPremium]);
 
   const goToMap = useCallback(() => {
-    logEvent("explore_map_opened", { deal_count: filteredDeals.length });
+    // source: "pill" — a deliberate return to the map from the list. This is
+    // the intent signal; see the note on the default-landing log above.
+    logEvent("explore_map_opened", {
+      deal_count: filteredDeals.length,
+      source: "pill",
+    });
     setViewMode("map");
   }, [filteredDeals.length]);
 
