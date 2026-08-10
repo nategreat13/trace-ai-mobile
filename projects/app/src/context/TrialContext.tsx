@@ -88,23 +88,30 @@ export function TrialProvider({ children }: { children: React.ReactNode }) {
 
         const packages = offerings?.current?.availablePackages ?? [];
 
-        // Eligibility — platform-aware, mirroring useIAP. Global across
-        // products; the store enforces real per-product eligibility at
-        // purchase.
-        let eligible = true;
+        // Eligibility — platform-aware, mirroring useIAP, and resolved PER
+        // PRODUCT. This used to collapse to one boolean with `.some()`, which
+        // meant "eligible for anything" was read as "eligible for everything".
+        // App Store intro offers are scoped to a subscription group, so a user
+        // who already used the Premium trial is ineligible there while still
+        // eligible for Business — and buildTier(), which is explicitly
+        // per-tier, would still have advertised a Premium trial the payment
+        // sheet then charges for. Android always reports UNKNOWN (documented
+        // RC behavior) and Play enforces eligibility at purchase, so every
+        // product is treated as eligible there.
+        let eligibleFor: (productId: string | undefined) => boolean = () => true;
         if (Platform.OS !== "android") {
           try {
             const eligibility =
               await Purchases.checkTrialOrIntroductoryPriceEligibility([
                 ...PRODUCT_IDS,
               ]);
-            eligible = Object.values(eligibility).some(
-              (e) =>
-                e.status ===
-                INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
-            );
+            eligibleFor = (productId) =>
+              !!productId &&
+              eligibility[productId]?.status ===
+                INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
           } catch {
-            eligible = false;
+            // Can't confirm → advertise nothing, rather than risk a mismatch.
+            eligibleFor = () => false;
           }
         }
 
@@ -114,7 +121,7 @@ export function TrialProvider({ children }: { children: React.ReactNode }) {
               p.product.identifier.includes(idFragment) && packageHasFreeTrial(p)
           );
           const intro = pkg?.product.introPrice;
-          if (!eligible || !intro) return EMPTY_TIER;
+          if (!intro || !eligibleFor(pkg?.product.identifier)) return EMPTY_TIER;
           return {
             available: true,
             label: formatTrialLength(intro),

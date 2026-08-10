@@ -68,7 +68,7 @@ export default function PaywallScreen() {
     premiumMonthlyPackage,
     businessAnnualPackage,
     businessMonthlyPackage,
-    trialEligible,
+    isTrialEligibleFor,
     loading,
     purchasing,
     error,
@@ -113,6 +113,13 @@ export default function PaywallScreen() {
   // promise a trial the purchase sheet won't honor. Also excludes existing
   // premium users and current-plan/downgrade selections.
   //
+  // Eligibility is checked for THIS product, not globally. App Store intro
+  // offers are scoped to a subscription group, so a user who already used the
+  // Premium trial stays eligible for Business — and the previous global flag
+  // would have let the Premium paywall promise a trial that Apple then charges
+  // for. `introPrice` alone doesn't catch it: the product carries the offer
+  // regardless of whether this particular user can still claim it.
+  //
   // NOTE: this block (and the useRef/useEffect below) MUST stay above the
   // `if (loading)` / `if (!hasAnyPackage)` early returns further down —
   // hooks cannot run conditionally or React will throw on the loading→ready
@@ -120,7 +127,7 @@ export default function PaywallScreen() {
   const introPrice = selectedPkg?.product.introPrice ?? null;
   const hasFreeTrial =
     trialsEnabledByRemote(offerings?.current) &&
-    trialEligible &&
+    isTrialEligibleFor(selectedPkg?.product.identifier) &&
     !!introPrice &&
     introPrice.price === 0 &&
     !hasPremium &&
@@ -144,12 +151,19 @@ export default function PaywallScreen() {
   const handlePurchase = async () => {
     if (!selectedPkg) return;
 
+    // entry_point is stamped on both of these (as it already was on
+    // paywall_viewed and trial_offer_shown) so the funnel can be read per
+    // surface. Without it, every CTA tap and purchase we have ever recorded is
+    // unattributable — we could see which paywalls got *shown* but never which
+    // ones actually earned money, which is exactly the question that decides
+    // where the paywall should fire.
     logEvent("paywall_cta_tapped", {
       tier: isBusinessPaywall ? "business" : "premium",
       billing: billingPeriod,
       product_id: selectedPkg.product.identifier,
       is_trial: hasFreeTrial,
       trial_length: hasFreeTrial ? trialLengthLabel : null,
+      entry_point: entryPoint,
     });
     logEvent("purchase_initiated", {
       tier: isBusinessPaywall ? "business" : "premium",
@@ -157,12 +171,14 @@ export default function PaywallScreen() {
       product_id: selectedPkg.product.identifier,
       is_trial: hasFreeTrial,
       trial_length: hasFreeTrial ? trialLengthLabel : null,
+      entry_point: entryPoint,
     });
 
     const purchasedTier = isBusinessPaywall ? "business" : "premium";
     const info = await purchase(selectedPkg, {
       tier: purchasedTier,
       billing: billingPeriod,
+      entryPoint,
     });
     if (!info) return;
 

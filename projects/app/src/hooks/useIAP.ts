@@ -24,6 +24,8 @@ import { logEvent } from "../lib/analytics";
 interface PurchaseContext {
   tier?: "premium" | "business";
   billing?: "monthly" | "annual";
+  /** Which paywall surface this purchase started from (see PaywallScreen). */
+  entryPoint?: string | null;
 }
 
 interface UseIAPResult {
@@ -32,7 +34,21 @@ interface UseIAPResult {
   premiumMonthlyPackage: PurchasesPackage | null;
   businessAnnualPackage: PurchasesPackage | null;
   businessMonthlyPackage: PurchasesPackage | null;
+  /**
+   * True when the user is intro-eligible for *at least one* product. Kept for
+   * coarse callers (e.g. "should we mention trials at all"), but do NOT use it
+   * to decide whether to advertise a trial on a specific product — use
+   * `isTrialEligibleFor(productId)` instead. See the note on the eligibility
+   * effect below for why the difference matters.
+   */
   trialEligible: boolean;
+  /**
+   * Per-product intro eligibility. This is the correct gate for trial copy on
+   * a paywall, because App Store intro offers are scoped to a subscription
+   * group — a user can be ineligible for Premium while still eligible for
+   * Business. Unknown products return false (fail closed).
+   */
+  isTrialEligibleFor: (productId: string | null | undefined) => boolean;
   loading: boolean;
   purchasing: boolean;
   error: string | null;
@@ -58,7 +74,11 @@ export function useIAP(): UseIAPResult {
   // came back — firing a false-positive `trial_offer_shown` (and a flash of
   // trial copy) for users who turn out ineligible. Starting false means the
   // trial only ever surfaces after eligibility is confirmed.
-  const [trialEligible, setTrialEligible] = useState(false);
+  //
+  // Keyed by product identifier rather than a single boolean: intro offers are
+  // scoped to an App Store subscription group, so eligibility genuinely
+  // differs per product. Empty map = nothing eligible yet.
+  const [trialEligibility, setTrialEligibility] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,18 +105,35 @@ export function useIAP(): UseIAPResult {
         //    Android as eligible here and let the paywall's introPrice gate
         //    (product actually carries a free offer) decide whether a trial
         //    is shown.
+        //
+        // Results are kept PER PRODUCT. They used to be collapsed with
+        // `.some()` into one boolean, which quietly meant "eligible for
+        // anything" was treated as "eligible for everything". Intro offers are
+        // scoped to an App Store subscription group, so a user who burned their
+        // trial on Premium is ineligible there while still eligible for
+        // Business — and the collapsed flag would let the Premium paywall
+        // advertise a free trial that the payment sheet then refuses to honor.
+        // The user sees "Start 7-day free trial", taps, and Apple asks for
+        // $9.99 today. That mismatch is a well-known cause of purchase
+        // abandonment, and it gets more likely as more trials expire.
         try {
           if (Platform.OS === "android") {
-            if (!cancelled) setTrialEligible(true);
+            // Play enforces eligibility at purchase; assume eligible for all.
+            const all: Record<string, boolean> = {};
+            for (const id of PRODUCT_IDS) all[id] = true;
+            if (!cancelled) setTrialEligibility(all);
           } else {
             const eligibility =
               await Purchases.checkTrialOrIntroductoryPriceEligibility([
                 ...PRODUCT_IDS,
               ]);
-            const eligible = Object.values(eligibility).some(
-              (e) => e.status === INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE
-            );
-            if (!cancelled) setTrialEligible(eligible);
+            const map: Record<string, boolean> = {};
+            for (const id of PRODUCT_IDS) {
+              map[id] =
+                eligibility[id]?.status ===
+                INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
+            }
+            if (!cancelled) setTrialEligibility(map);
           }
         } catch {
           // If we can't confirm eligibility, default to NOT eligible so the
@@ -104,7 +141,7 @@ export function useIAP(): UseIAPResult {
           // grant (a mismatch at the App Store sheet is a top cause of
           // purchase abandonment). The paywall additionally gates the trial
           // CTA on the selected product carrying a real free intro offer.
-          if (!cancelled) setTrialEligible(false);
+          if (!cancelled) setTrialEligibility({});
         }
       } catch (err: any) {
         console.error("[useIAP] Failed to load offerings:", err);
@@ -153,10 +190,15 @@ export function useIAP(): UseIAPResult {
         : productId.includes("monthly")
         ? "monthly"
         : undefined;
+      // entry_point rides along on every outcome event (completed / failed /
+      // canceled / trial_started), not just the initiation. Attributing where a
+      // purchase *started* but not where it *finished* leaves the only question
+      // that matters — which surface actually earns money — unanswerable.
       const baseProps = {
         tier: context.tier ?? inferredTier ?? null,
         billing: context.billing ?? inferredBilling ?? null,
         product_id: productId,
+        entry_point: context.entryPoint ?? null,
       };
 
       setPurchasing(true);
@@ -229,6 +271,15 @@ export function useIAP(): UseIAPResult {
     }
   }, []);
 
+  // Fail closed on unknown/missing ids: an id we have no answer for must not
+  // be advertised as trial-eligible.
+  const isTrialEligibleFor = useCallback(
+    (productId: string | null | undefined) =>
+      !!productId && trialEligibility[productId] === true,
+    [trialEligibility]
+  );
+  const trialEligible = Object.values(trialEligibility).some(Boolean);
+
   return {
     offerings,
     premiumAnnualPackage,
@@ -236,6 +287,7 @@ export function useIAP(): UseIAPResult {
     businessAnnualPackage,
     businessMonthlyPackage,
     trialEligible,
+    isTrialEligibleFor,
     loading,
     purchasing,
     error,
