@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -69,9 +69,9 @@ export default function ExploreScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
-  // List is home (Going-style). A floating "Map" pill dives into the map;
-  // from the map, swiping up on the bottom handle brings the list back.
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  // Map is home. A floating "List" pill drops into the list view; from the
+  // list, tapping "Map" (or swiping up on the bottom handle) returns to the map.
+  const [viewMode, setViewMode] = useState<"list" | "map">("map");
   const [showFilters, setShowFilters] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [pendingAlertDest, setPendingAlertDest] = useState<{ label: string; code?: string } | null>(null);
@@ -144,7 +144,6 @@ export default function ExploreScreen() {
   useEffect(() => {
     loadDeals();
   }, [profile?.id]);
-
 
   useFocusEffect(
     useCallback(() => {
@@ -240,6 +239,17 @@ export default function ExploreScreen() {
 
     return { filteredDeals: deduped, dealVariants: variantsMap };
   }, [deals, searchTerm, filters]);
+
+  // Map is the default view, so its initial appearance isn't driven by the
+  // "Map" pill (goToMap) — log it separately, once, the first time deals are
+  // ready so explore_map_opened still counts default landings, not just taps.
+  const defaultMapOpenLogged = useRef(false);
+  useEffect(() => {
+    if (!loading && viewMode === "map" && !defaultMapOpenLogged.current) {
+      defaultMapOpenLogged.current = true;
+      logEvent("explore_map_opened", { deal_count: filteredDeals.length });
+    }
+  }, [loading, viewMode, filteredDeals.length]);
 
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
