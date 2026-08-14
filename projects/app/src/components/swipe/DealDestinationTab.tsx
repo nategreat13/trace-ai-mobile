@@ -14,6 +14,7 @@ import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import { useDestinationInfo } from "../../hooks/useDestinationInfo";
 import { DestinationInfo } from "../../lib/destinationData";
+import NeighborhoodsMap from "./NeighborhoodsMap";
 
 // ── Tag → travel style mapping for For You personalization ──────────────────
 const TAG_MAP: Record<string, string[]> = {
@@ -265,9 +266,23 @@ export default function DealDestinationTab({ deal, userProfile }: Props) {
   const dealTypes: string[] = userProfile?.dealTypes ?? [];
   const forYouItems = getForYouItems(info, dealTypes);
   const isInternational = !!(info.essentials);
+  // Content generated before the lat/lng schema bump (pre-_v2 cache docs)
+  // won't have coordinates — skip the section entirely rather than leaving
+  // a header with nothing under it (NeighborhoodsMap itself renders null
+  // in that case).
+  const hasMapPoints =
+    info.neighborhoods.some((n) => typeof n.lat === "number" && typeof n.lng === "number") ||
+    info.thingsToDo.some((t) => typeof t.lat === "number" && typeof t.lng === "number");
 
   return (
     <View style={styles.root}>
+
+      {/* ── Map ──────────────────────────────────────────────────────── */}
+      {hasMapPoints && (
+        <Section title="On the Map" theme={theme}>
+          <NeighborhoodsMap neighborhoods={info.neighborhoods} thingsToDo={info.thingsToDo} />
+        </Section>
+      )}
 
       {/* ── For You ─────────────────────────────────────────────────── */}
       {forYouItems.length > 0 && (

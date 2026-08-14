@@ -24,12 +24,19 @@ export interface DestinationInfo {
     emoji: string;
     vibe: string;
     description: string;
+    // Optional — absent on any content generated before the map schema
+    // bump (pre-_v2 cache docs), and the map section hides itself when
+    // no entry in either array has coordinates.
+    lat?: number;
+    lng?: number;
   }>;
   thingsToDo: Array<{
     name: string;
     emoji: string;
     description: string;
     tags: string[];
+    lat?: number;
+    lng?: number;
   }>;
   dining: {
     budget: Array<{ name: string; type: string }>;

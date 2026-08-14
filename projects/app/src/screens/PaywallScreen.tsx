@@ -57,6 +57,7 @@ export default function PaywallScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "Paywall">>();
   const entryPoint = route.params?.entryPoint ?? "unknown";
   const tierParam = route.params?.tier ?? "premium";
+  const personalizedSub = route.params?.personalizedSub ?? null;
   const isBusinessPaywall = tierParam === "business";
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -317,12 +318,6 @@ export default function PaywallScreen() {
           headline: "Get notified the\nmoment deals drop",
           sub: null,
         };
-      case "fifth_save":
-        return {
-          eyebrow: "NICE TASTE",
-          headline: "We'll watch these\ndeals for you",
-          sub: null,
-        };
       // Arrived by tapping a locked pin on the Explore map — they're
       // looking at a specific place they want, so name that intent
       // rather than pitching alerts generically.
@@ -332,6 +327,15 @@ export default function PaywallScreen() {
           headline: "Unlock every\ndeal on the map",
           sub: null,
         };
+      // Arrived by tapping Book Now on a deal — the single highest
+      // purchase-intent moment in the app. Name the exact fear (missing
+      // this fare) instead of the generic alerts pitch.
+      case "book_now_intent":
+        return {
+          eyebrow: "DON'T MISS IT",
+          headline: "Get alerted if this\nprice comes back",
+          sub: null,
+        };
       default:
         return {
           eyebrow: "TRACE PREMIUM",
@@ -339,7 +343,12 @@ export default function PaywallScreen() {
           sub: null,
         };
     }
-  })();
+  })() as { eyebrow: string; headline: string; sub: string | null };
+  // Computed, per-user sub line (e.g. "You've saved 3 trips under $500...")
+  // takes priority over the entry point's static sub when present — every
+  // static case above sets sub: null today, so this is the only source of
+  // hero sub-copy in practice.
+  if (personalizedSub) heroContent.sub = personalizedSub;
 
   // Price label + per-period label for the CTA
   const priceString = selectedPkg?.product.priceString ?? "";
@@ -389,6 +398,11 @@ export default function PaywallScreen() {
           <Text style={{ fontSize: 26, fontWeight: "900", color: theme.foreground, lineHeight: 32 }}>
             {heroContent.headline}
           </Text>
+          {!!heroContent.sub && (
+            <Text style={{ fontSize: 14, color: theme.mutedForeground, marginTop: 8, lineHeight: 20 }}>
+              {heroContent.sub}
+            </Text>
+          )}
         </View>
 
         {/* Free-trial callout — tappable CTA */}

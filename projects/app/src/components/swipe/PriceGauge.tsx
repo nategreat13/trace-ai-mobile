@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, LayoutChangeEvent } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 interface PriceGaugeProps {
@@ -35,6 +35,16 @@ export default function PriceGauge({
     ? TYPICAL_POSITION * (1 - clampedDiscount / MAX_SCALE_DISCOUNT)
     : TYPICAL_POSITION;
 
+  // React Native's `transform` doesn't support percentage values (no
+  // translateX(-50%) like CSS), so centering a label under an X% marker
+  // needs actual measured widths, not a flex-ratio approximation — flex
+  // shares only line up with dealPosition when the label has ~zero width,
+  // and get worse the closer dealPosition is to the middle/right of the bar.
+  const [rowWidth, setRowWidth] = useState(0);
+  const [labelWidth, setLabelWidth] = useState(0);
+  const measured = rowWidth > 0 && labelWidth > 0;
+  const labelLeft = measured ? dealPosition * rowWidth - labelWidth / 2 : 0;
+
   return (
     <View style={styles.container}>
       <View style={styles.track}>
@@ -55,10 +65,21 @@ export default function PriceGauge({
         )}
         <View style={[styles.marker, { left: `${dealPosition * 100}%`, backgroundColor: foreground }]} />
       </View>
-      <View style={styles.labelRow}>
-        <Text style={[styles.labelText, { color: foreground }]}>This deal · ${price}</Text>
+      <View style={styles.labelRow} onLayout={(e: LayoutChangeEvent) => setRowWidth(e.nativeEvent.layout.width)}>
+        <Text
+          style={[
+            styles.labelText,
+            { color: foreground, left: labelLeft, opacity: measured ? 1 : 0 },
+          ]}
+          numberOfLines={1}
+          onLayout={(e: LayoutChangeEvent) => setLabelWidth(e.nativeEvent.layout.width)}
+        >
+          This deal · ${price}
+        </Text>
         {hasDiscount && (
-          <Text style={[styles.labelTextMuted, { color: mutedForeground }]}>Typical · ${originalPrice}</Text>
+          <Text style={[styles.labelTextMuted, { color: mutedForeground }]} numberOfLines={1}>
+            Typical · ${originalPrice}
+          </Text>
         )}
       </View>
     </View>
@@ -89,15 +110,22 @@ const styles = StyleSheet.create({
     top: 0,
   },
   labelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+    // `labelText` is absolutely positioned so it can land at an exact
+    // pixel offset — a plain flex row would collapse to 0 height with only
+    // absolutely-positioned children, so this needs an explicit height.
+    height: 15,
     marginTop: 6,
   },
   labelText: {
+    position: "absolute",
+    top: 0,
     fontSize: 11,
     fontWeight: "700",
   },
   labelTextMuted: {
+    position: "absolute",
+    top: 0,
+    right: 0,
     fontSize: 11,
     fontWeight: "600",
   },

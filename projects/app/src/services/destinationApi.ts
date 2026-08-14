@@ -59,6 +59,15 @@ function destinationKey(deal: Deal): string {
  * AND distinguishable from real content (e.g. a banner saying "We
  * couldn't load specific tips for this destination").
  */
+// The server's own Anthropic call regularly takes 60-90s on a cache miss
+// (see ANTHROPIC_TIMEOUT_MS in destination-info.ts — it allows up to 280s).
+// Without an explicit client-side timeout, `fetch` falls back to the
+// platform default (~60s on iOS), which cuts off slow-but-otherwise-
+// successful generations right in the middle of that normal range — the
+// user sees "Couldn't load destination info" for a request that would
+// have come back fine given another 10-20s. This gives it real headroom.
+const DESTINATION_INFO_TIMEOUT_MS = 120_000;
+
 export async function fetchDestinationInfo(deal: Deal): Promise<DestinationInfo> {
   const isDomestic = deal.domestic_or_international?.toLowerCase() === "domestic";
   const month = extractMonth(deal.travel_window || deal.dateString);
@@ -69,7 +78,19 @@ export async function fetchDestinationInfo(deal: Deal): Promise<DestinationInfo>
   });
   const url = `${API_BASE_URL}/destination-info/${encodeURIComponent(destinationKey(deal))}?${params}`;
 
-  const response = await fetch(url);
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), DESTINATION_INFO_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: ac.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`destination-info client_timeout for ${deal.destination}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     // Server returns 504 specifically for AbortController timeouts
     // (see projects/server/src/routes/destination-info.ts). Surface

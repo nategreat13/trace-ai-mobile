@@ -13,7 +13,7 @@ import {
   Share,
 } from "react-native";
 import ShareNamePromptModal from "../ShareNamePromptModal";
-import Reanimated, { FadeIn } from "react-native-reanimated";
+import Reanimated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -27,9 +27,13 @@ import {
   Share2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import { logEvent } from "../../lib/analytics";
+import { useAuth } from "../../context/AuthContext";
+import type { RootStackParamList } from "../../navigation/types";
 import WeatherPreview from "./WeatherPreview";
 import DealInterestingFacts from "./DealInterestingFacts";
 import DealTravelTips from "./DealTravelTips";
@@ -198,9 +202,18 @@ export default function ExpandedDeal({
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { isPremium } = useAuth();
 
   const [saved, setSaved] = useState(false);
   const saveScale = useRef(new Animated.Value(1)).current;
+
+  // Book Now is the single highest real purchase-intent signal in the app —
+  // someone actively trying to buy a flight — and previously got zero
+  // special treatment. Shown alongside (never instead of) the actual book
+  // action below; auto-dismisses like the removed fifth-save trial banner
+  // did, same visual pattern.
+  const [showBookIntentBanner, setShowBookIntentBanner] = useState(false);
 
   // Analytics: a deal's detail view was opened. Fires once each time the
   // modal transitions to visible (keyed on deal id so re-opening a
@@ -612,10 +625,12 @@ export default function ExpandedDeal({
               </TouchableOpacity>
             )}
 
-            <Animated.View style={{ flex: 1, height: 50, transform: [{ scale: saveScale }] }}>
+            <Animated.View style={{ width: 50, height: 50, transform: [{ scale: saveScale }] }}>
               <TouchableOpacity
                 onPress={handleSave}
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={saved ? "Saved" : "Save"}
                 style={[
                   styles.saveButton,
                   saved
@@ -624,48 +639,90 @@ export default function ExpandedDeal({
                 ]}
               >
                 {saved
-                  ? <BookmarkCheck size={16} color="#fff" />
-                  : <Bookmark size={16} color={theme.foreground} />
+                  ? <BookmarkCheck size={18} color="#fff" />
+                  : <Bookmark size={18} color={theme.foreground} />
                 }
-                <Text style={[styles.saveButtonText, { color: saved ? "#fff" : theme.foreground }]}>
-                  {saved ? "Saved!" : "Save"}
-                </Text>
               </TouchableOpacity>
             </Animated.View>
 
-            <View style={styles.bookButtonWrap}>
-              <TouchableOpacity
-                onPress={() => {
-                  // Analytics: the user tapped through to the deal's booking
-                  // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
-                  logEvent("deal_book_tapped", {
-                    deal_id: deal.id,
-                    destination_code: deal.destination_code ?? null,
-                    price: deal.price ?? null,
-                    deal_type: deal.deal_type ?? null,
-                    domestic_or_international: deal.domestic_or_international ?? null,
-                  });
-                  onBook();
-                }}
-                activeOpacity={0.8}
-                style={styles.bookButton}
+            <TouchableOpacity
+              onPress={() => {
+                // Analytics: the user tapped through to the deal's booking
+                // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
+                logEvent("deal_book_tapped", {
+                  deal_id: deal.id,
+                  destination_code: deal.destination_code ?? null,
+                  price: deal.price ?? null,
+                  deal_type: deal.deal_type ?? null,
+                  domestic_or_international: deal.domestic_or_international ?? null,
+                });
+                // Never block the actual booking attempt — the intent
+                // banner shows alongside it, not instead of it.
+                onBook();
+                if (!isPremium) {
+                  setShowBookIntentBanner(true);
+                  setTimeout(() => setShowBookIntentBanner(false), 5000);
+                }
+              }}
+              activeOpacity={0.8}
+              style={styles.bookButton}
+            >
+              <LinearGradient
+                colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.bookGradient}
               >
-                <LinearGradient
-                  colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.bookGradient}
-                >
-                  <ExternalLink size={16} color="#ffffff" />
-                  <Text style={styles.bookButtonText}>Book Now</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-              <Text style={[styles.bookOnGoogleText, { color: theme.mutedForeground }]}>
-                Book on Google
-              </Text>
-            </View>
+                <ExternalLink size={16} color="#ffffff" />
+                <Text style={styles.bookButtonText}>Book Now</Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
+
+        {showBookIntentBanner && (
+          <Reanimated.View
+            entering={FadeInDown.duration(300)}
+            exiting={FadeOut.duration(300)}
+            style={{
+              position: "absolute",
+              // The fixed bottom action bar (save/book buttons) sits below
+              // this at bottom:0 with its own height — clear it instead of
+              // overlapping the buttons.
+              bottom: insets.bottom + 110,
+              left: 16,
+              right: 16,
+              zIndex: 20,
+            }}
+          >
+            <TouchableOpacity
+              onPress={() => {
+                setShowBookIntentBanner(false);
+                onClose();
+                navigation.navigate("Paywall", { entryPoint: "book_now_intent" });
+              }}
+              activeOpacity={0.9}
+              style={{
+                backgroundColor: colors.brand.traceRed,
+                borderRadius: 16,
+                paddingVertical: 14,
+                paddingHorizontal: 18,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.25,
+                shadowRadius: 10,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff", flex: 1 }}>
+                ✈️ Get alerted if this price comes back
+              </Text>
+              <Text style={{ fontSize: 18, color: "#fff", marginLeft: 8 }}>→</Text>
+            </TouchableOpacity>
+          </Reanimated.View>
+        )}
 
         <TouchableOpacity
           onPress={onClose}
@@ -1028,22 +1085,17 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
   },
-  buttonRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  buttonRow: { flexDirection: "row", gap: 12 },
   saveButton: {
-    flex: 1,
+    width: 50,
     height: 50,
     borderRadius: 14,
     borderWidth: 3,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-  },
-  saveButtonText: { fontSize: 15, fontWeight: "700" },
-  bookButtonWrap: {
-    flex: 2,
   },
   bookButton: {
+    flex: 1,
     height: 50,
     borderRadius: 14,
     overflow: "hidden",
@@ -1061,12 +1113,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   bookButtonText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
-  bookOnGoogleText: {
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "center",
-    marginTop: 6,
-  },
 
   // ── Sharing ───────────────────────────────────────────────────────────────
   sharedBanner: {

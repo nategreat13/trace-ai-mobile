@@ -28,6 +28,22 @@ const LEFT_INDICATOR_OUTPUT = [1, 0, 0];
 const RIGHT_INDICATOR_INPUT = [0, 50, 150];
 const RIGHT_INDICATOR_OUTPUT = [0, 0, 1];
 
+// Real per-deal values seen in production: "24 hours", "48 hours", "1 week",
+// "2 weeks", "30 days". A plain word match on "day" gets this backwards —
+// "30 days" contains "day" but is the LEAST urgent value in that set, while
+// "48 hours" (genuinely the most urgent) doesn't contain "day" at all.
+// Parsing to a real hour count avoids that trap.
+const URGENT_WITHIN_HOURS = 72;
+function parseDurationHours(text: string | undefined | null): number | null {
+  if (!text) return null;
+  const match = text.match(/(\d+)\s*(hour|day|week|month)/i);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  const perUnit: Record<string, number> = { hour: 1, day: 24, week: 24 * 7, month: 24 * 30 };
+  const hours = perUnit[match[2].toLowerCase()];
+  return hours ? n * hours : null;
+}
+
 // ── Rotation / scale ────────────────────────────────────────────────────
 const ROTATION_INPUT = [-300, 0, 300];
 const ROTATION_OUTPUT = [-30, 0, 30];
@@ -253,6 +269,24 @@ export default function SwipeCard({
   const formattedPrice = `$${deal.price}`;
 
   const isHotDeal = deal.discount_pct >= 40;
+  // `deal.urgency` is never anything but the mapper's hardcoded "medium"
+  // fallback in practice — the real deal feed has no urgency field, so this
+  // never fires. `price_will_last` (e.g. "2 weeks", "48 hours") is real and
+  // always populated, but only worth calling out when it's genuinely soon —
+  // every deal has SOME value here, so a bare truthy check would badge
+  // every single card and stop meaning anything.
+  const priceWillLastHours = parseDurationHours(deal.price_will_last);
+  const hasRealUrgency = priceWillLastHours !== null && priceWillLastHours <= URGENT_WITHIN_HOURS;
+
+  // Short, specific reason this deal is worth a look — previously only
+  // shown one tap deep in the expanded view, meaning the card everyone
+  // actually sees hundreds of times over never explained why any single
+  // deal mattered. `vibe_description`/`ai_insight` are never populated by
+  // the real feed (mapper fallback fields that don't match reality). The
+  // full `experiences[0].description` sentence read as bulky wall-of-text
+  // on a card — the `title` (e.g. "🎨 Explore the Louvre") is the same
+  // real per-deal data, already short and already has its own emoji.
+  const cardReason = deal.experiences?.[0]?.title?.trim() || "";
 
   const isBookSoon = (() => {
     if (!deal.dateString) return false;
@@ -311,9 +345,11 @@ export default function SwipeCard({
             <View style={[styles.urgencyBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
               <Text style={styles.urgencyText}>⭐ Picked for you</Text>
             </View>
-          ) : (isHotDeal || isBookSoon) ? (
+          ) : (hasRealUrgency || isHotDeal || isBookSoon) ? (
             <View style={styles.urgencyBadge}>
-              <Text style={styles.urgencyText}>{isHotDeal ? "🔥 Hot deal" : "⏰ Book soon"}</Text>
+              <Text style={styles.urgencyText}>
+                {hasRealUrgency ? `⏳ Gone in ${deal.price_will_last}` : isHotDeal ? "🔥 Hot deal" : "⏰ Book soon"}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -340,6 +376,13 @@ export default function SwipeCard({
           <Text style={styles.destination} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {deal.destination}
           </Text>
+
+          {/* Why this deal — a real, specific detail, not just a price tag */}
+          {!!cardReason && (
+            <Text style={styles.reasonText} numberOfLines={1}>
+              {cardReason}
+            </Text>
+          )}
 
           {/* Price row */}
           <View style={styles.priceRow}>
@@ -511,6 +554,15 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
     letterSpacing: -0.5,
+  },
+  reasonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.85)",
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   priceRow: {
     flexDirection: "row",

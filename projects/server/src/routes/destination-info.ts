@@ -58,7 +58,11 @@ destinationInfoRoutes.get(
       return;
     }
 
-    const cacheKey = `${destinationCode.toUpperCase()}_${isDomestic ? "domestic" : "international"}_${month}`;
+    // _v2 forces a fresh generation for every destination once — the schema
+    // gained lat/lng per neighborhood/thing-to-do (for the deal-page map),
+    // and pre-existing _v1 cache docs don't have those fields. Bump again
+    // if the schema changes in a way old cached docs can't satisfy.
+    const cacheKey = `${destinationCode.toUpperCase()}_${isDomestic ? "domestic" : "international"}_${month}_v2`;
     const t0 = Date.now();
     // `phase` carries through the catch so we know which step failed
     // without parsing the message string. Updated as the request
@@ -316,7 +320,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       "name": "neighborhood name",
       "emoji": "single emoji",
       "vibe": "2-4 word vibe",
-      "description": "2-3 sentences — specific, opinionated, what to actually do and when"
+      "description": "2-3 sentences — specific, opinionated, what to actually do and when",
+      "lat": <approximate latitude of this neighborhood's center, as a number>,
+      "lng": <approximate longitude of this neighborhood's center, as a number>
     }
   ],
   "thingsToDo": [
@@ -324,7 +330,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       "name": "activity name",
       "emoji": "single emoji",
       "description": "one sentence — what makes it worth doing",
-      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"]
+      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"],
+      "lat": <approximate latitude of this place, as a number>,
+      "lng": <approximate longitude of this place, as a number>
     }
   ],
   "dining": {
@@ -352,6 +360,7 @@ Rules:
 - 3-4 neighborhoods, 5-6 things to do, 2-3 dining per tier, 3 daily budget tiers, 2-3 getting around, 2-4 day trips, 4-5 things to avoid
 - Weather must be accurate for ${destination} specifically in ${monthLabel !== "any" ? monthLabel : "a typical month"} — not generic regional data
 - Things to do must be tagged accurately so we can personalize for different traveler types
+- lat/lng on neighborhoods and things to do must be real coordinates for that actual place in ${destination} — these plot pins on a map, so approximate-but-correct beats a rounded city-center guess
 - Be specific and opinionated. Name real places. No generic advice.`;
 }
 
@@ -386,7 +395,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       "name": "neighborhood name",
       "emoji": "single emoji",
       "vibe": "2-4 word vibe",
-      "description": "2-3 sentences — specific, opinionated, what to actually do and when"
+      "description": "2-3 sentences — specific, opinionated, what to actually do and when",
+      "lat": <approximate latitude of this neighborhood's center, as a number>,
+      "lng": <approximate longitude of this neighborhood's center, as a number>
     }
   ],
   "thingsToDo": [
@@ -394,7 +405,9 @@ Return ONLY valid JSON with this exact structure (no markdown, no explanation):
       "name": "activity name",
       "emoji": "single emoji",
       "description": "one sentence — what makes it worth doing",
-      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"]
+      "tags": ["one or more of: adventure, culture, food, relaxation, luxury, family, romantic"],
+      "lat": <approximate latitude of this place, as a number>,
+      "lng": <approximate longitude of this place, as a number>
     }
   ],
   "dining": {
@@ -422,5 +435,6 @@ Rules:
 - 3-4 neighborhoods, 5-6 things to do, 2-3 dining per tier, 3 daily budget tiers, 2-3 getting around, 2-4 day trips, 4-5 things to avoid
 - Weather must be accurate for ${destination} specifically in ${monthLabel !== "any" ? monthLabel : "a typical month"} — not generic regional data
 - Things to do must be tagged accurately so we can personalize for different traveler types
+- lat/lng on neighborhoods and things to do must be real coordinates for that actual place in ${destination} — these plot pins on a map, so approximate-but-correct beats a rounded city-center guess
 - Be specific and opinionated. Name real places. No generic advice.`;
 }

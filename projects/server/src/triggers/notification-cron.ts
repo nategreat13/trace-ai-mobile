@@ -776,109 +776,11 @@ async function runDailyNotifications() {
       }
     }
 
-    // ─── Deal alert match (premium/business users with saved alerts) ─
-    {
-      const alertsSnap = await colRef("dealAlerts")
-        .where("status", "==", "active")
-        .get();
-
-      if (!alertsSnap.empty) {
-        type AlertRecord = { id: string; destination: string; month: string | null };
-        type DealRecord = { destination?: string; dealPriceUSD?: number; price?: number; percentOff?: number; discount_pct?: number; travel_window?: string; dateString?: string; monthType?: string };
-
-        // Group active alerts by userId.
-        const alertsByUser = new Map<string, AlertRecord[]>();
-        for (const doc of alertsSnap.docs) {
-          const data = doc.data() as { userId?: string; destination?: string; month?: string | null };
-          if (!data.userId || !data.destination) continue;
-          if (!alertsByUser.has(data.userId)) alertsByUser.set(data.userId, []);
-          alertsByUser.get(data.userId)!.push({ id: doc.id, destination: data.destination, month: data.month ?? null });
-        }
-
-        // Cache deal fetches by home airport to avoid redundant API calls.
-        const dealsByAirport = new Map<string, DealRecord[]>();
-        const fetchDeals = async (airport: string): Promise<DealRecord[]> => {
-          if (dealsByAirport.has(airport)) return dealsByAirport.get(airport)!;
-          try {
-            const res = await fetch(`${DEALS_API_BASE}/deals/${airport}?limit=500`, {
-              headers: { "x-api-key": DEALS_API_KEY },
-            });
-            if (!res.ok) { dealsByAirport.set(airport, []); return []; }
-            const raw = await res.json() as unknown;
-            const list: DealRecord[] = Array.isArray(raw)
-              ? (raw as DealRecord[])
-              : (((raw as Record<string, unknown>).deals as DealRecord[]) ?? []);
-            dealsByAirport.set(airport, list);
-            return list;
-          } catch {
-            dealsByAirport.set(airport, []);
-            return [];
-          }
-        };
-
-        let sent = 0;
-        for (const [userId, alerts] of alertsByUser) {
-          const profileSnap = await colRef("userProfiles")
-            .where("userId", "==", userId)
-            .limit(1)
-            .select("homeAirport", "subscriptionStatus", "notificationsEnabled", "notificationPreferences")
-            .get();
-          if (profileSnap.empty) continue;
-          const profile = profileSnap.docs[0].data() as {
-            homeAirport?: string;
-            subscriptionStatus?: string;
-            notificationsEnabled?: boolean;
-            notificationPreferences?: NotificationPrefs;
-          };
-          if (!profile.notificationsEnabled) continue;
-          if (profile.subscriptionStatus !== "premium" && profile.subscriptionStatus !== "business") continue;
-          if (!profile.homeAirport) continue;
-
-          const deals = await fetchDeals(profile.homeAirport);
-
-          for (const alert of alerts) {
-            const alertDest = alert.destination.toLowerCase();
-            const match = deals.find((d) => {
-              const dealDest = (d.destination ?? "").toLowerCase();
-              const destMatch = dealDest.includes(alertDest) || alertDest.includes(dealDest);
-              if (!destMatch) return false;
-              if (!alert.month) return true;
-              const travelWindow = d.dateString ?? d.monthType ?? d.travel_window ?? "";
-              return travelWindow.toLowerCase().includes(alert.month.toLowerCase());
-            });
-            if (!match) continue;
-
-            const matchedPrice = match.dealPriceUSD ?? match.price ?? 0;
-            const matchedDiscount = Math.round(match.percentOff ?? match.discount_pct ?? 0);
-            await sendForTemplate(userId, "deal_alert_match", {
-              destination: alert.destination,
-              price: matchedPrice,
-              discount: matchedDiscount,
-            }, profile.notificationPreferences);
-            // Store matched deal snapshot so the app can show a tappable deal card.
-            await colRef("dealAlerts").doc(alert.id).update({
-              status: "matched",
-              matchedAt: new Date(),
-              matchedDeal: {
-                destination: match.destination ?? alert.destination,
-                price: matchedPrice,
-                discount: matchedDiscount,
-                url: (match as any).url ?? null,
-                imageUrl: (match as any).image_url ?? null,
-                airlines: (match as any).airlines ?? null,
-                travelWindow: (match as any).travel_window ?? (match as any).dateString ?? null,
-                origin: (match as any).origin ?? null,
-                destinationCode: (match as any).destination_code ?? null,
-              },
-            });
-            sent++;
-          }
-        }
-        console.log(`[cron] deal_alert_match: sent ${sent} notifications, scanned ${alertsSnap.size} active alerts`);
-      } else {
-        console.log("[cron] deal_alert_match: no active alerts");
-      }
-    }
+    // Deal alert match now runs on its own more-frequent schedule (see
+    // runDealAlertMatching / dealAlertMatchTrigger below) — moved out of
+    // the once-daily cron because our own paywall/upsell copy promises
+    // alerts "the moment" a price drops, and a 24-hour-old match doesn't
+    // back that up.
 
     // ─── Cleanup stale matched alerts ────────────────────────────
     // Remove matched alerts where the deal is no longer in the live API
@@ -923,6 +825,135 @@ async function runDailyNotifications() {
       }
     }
 }
+
+/**
+ * Matches active deal alerts (premium/business users) against the live
+ * deal feed and sends a push the moment one hits. Split out of
+ * runDailyNotifications into its own more-frequent schedule — alerts are
+ * Premium's entire differentiator, advertised as "the moment deals drop,"
+ * and a once-a-day check meant a real match could sit unsent for up to
+ * 23 hours. Every 4 hours keeps the promise honest without hammering the
+ * deals API/Firestore the way an every-few-minutes schedule would.
+ */
+async function runDealAlertMatching() {
+  const alertsSnap = await colRef("dealAlerts")
+    .where("status", "==", "active")
+    .get();
+
+  if (alertsSnap.empty) {
+    console.log("[cron] deal_alert_match: no active alerts");
+    return;
+  }
+
+  type AlertRecord = { id: string; destination: string; month: string | null };
+  type DealRecord = { destination?: string; dealPriceUSD?: number; price?: number; percentOff?: number; discount_pct?: number; travel_window?: string; dateString?: string; monthType?: string };
+
+  // Group active alerts by userId.
+  const alertsByUser = new Map<string, AlertRecord[]>();
+  for (const doc of alertsSnap.docs) {
+    const data = doc.data() as { userId?: string; destination?: string; month?: string | null };
+    if (!data.userId || !data.destination) continue;
+    if (!alertsByUser.has(data.userId)) alertsByUser.set(data.userId, []);
+    alertsByUser.get(data.userId)!.push({ id: doc.id, destination: data.destination, month: data.month ?? null });
+  }
+
+  // Cache deal fetches by home airport to avoid redundant API calls.
+  const dealsByAirport = new Map<string, DealRecord[]>();
+  const fetchDeals = async (airport: string): Promise<DealRecord[]> => {
+    if (dealsByAirport.has(airport)) return dealsByAirport.get(airport)!;
+    try {
+      const res = await fetch(`${DEALS_API_BASE}/deals/${airport}?limit=500`, {
+        headers: { "x-api-key": DEALS_API_KEY },
+      });
+      if (!res.ok) { dealsByAirport.set(airport, []); return []; }
+      const raw = await res.json() as unknown;
+      const list: DealRecord[] = Array.isArray(raw)
+        ? (raw as DealRecord[])
+        : (((raw as Record<string, unknown>).deals as DealRecord[]) ?? []);
+      dealsByAirport.set(airport, list);
+      return list;
+    } catch {
+      dealsByAirport.set(airport, []);
+      return [];
+    }
+  };
+
+  let sent = 0;
+  for (const [userId, alerts] of alertsByUser) {
+    const profileSnap = await colRef("userProfiles")
+      .where("userId", "==", userId)
+      .limit(1)
+      .select("homeAirport", "subscriptionStatus", "notificationsEnabled", "notificationPreferences")
+      .get();
+    if (profileSnap.empty) continue;
+    const profile = profileSnap.docs[0].data() as {
+      homeAirport?: string;
+      subscriptionStatus?: string;
+      notificationsEnabled?: boolean;
+      notificationPreferences?: NotificationPrefs;
+    };
+    if (!profile.notificationsEnabled) continue;
+    if (profile.subscriptionStatus !== "premium" && profile.subscriptionStatus !== "business") continue;
+    if (!profile.homeAirport) continue;
+
+    const deals = await fetchDeals(profile.homeAirport);
+
+    for (const alert of alerts) {
+      const alertDest = alert.destination.toLowerCase();
+      const match = deals.find((d) => {
+        const dealDest = (d.destination ?? "").toLowerCase();
+        const destMatch = dealDest.includes(alertDest) || alertDest.includes(dealDest);
+        if (!destMatch) return false;
+        if (!alert.month) return true;
+        const travelWindow = d.dateString ?? d.monthType ?? d.travel_window ?? "";
+        return travelWindow.toLowerCase().includes(alert.month.toLowerCase());
+      });
+      if (!match) continue;
+
+      const matchedPrice = match.dealPriceUSD ?? match.price ?? 0;
+      const matchedDiscount = Math.round(match.percentOff ?? match.discount_pct ?? 0);
+      await sendForTemplate(userId, "deal_alert_match", {
+        destination: alert.destination,
+        price: matchedPrice,
+        discount: matchedDiscount,
+      }, profile.notificationPreferences);
+      // Store matched deal snapshot so the app can show a tappable deal card.
+      await colRef("dealAlerts").doc(alert.id).update({
+        status: "matched",
+        matchedAt: new Date(),
+        matchedDeal: {
+          destination: match.destination ?? alert.destination,
+          price: matchedPrice,
+          discount: matchedDiscount,
+          url: (match as any).url ?? null,
+          imageUrl: (match as any).image_url ?? null,
+          airlines: (match as any).airlines ?? null,
+          travelWindow: (match as any).travel_window ?? (match as any).dateString ?? null,
+          origin: (match as any).origin ?? null,
+          destinationCode: (match as any).destination_code ?? null,
+        },
+      });
+      sent++;
+    }
+  }
+  console.log(`[cron] deal_alert_match: sent ${sent} notifications, scanned ${alertsSnap.size} active alerts`);
+}
+
+export const dealAlertMatchTrigger = onSchedule(
+  { schedule: "0 */4 * * *", timeZone: "UTC" },
+  async () => runWithEnv("prod", () => runDealAlertMatching())
+);
+
+/**
+ * Staging counterpart, same on/off gate as dailyStagingNotificationTriggers.
+ */
+export const dealAlertMatchStagingTrigger =
+  process.env.ENABLE_STAGING_CRON === "1"
+    ? onSchedule(
+        { schedule: "0 */4 * * *", timeZone: "UTC" },
+        async () => runWithEnv("staging", () => runDealAlertMatching())
+      )
+    : null;
 
 /**
  * Optional staging cron. Off by default (decision 6: "Off"). Enable on a

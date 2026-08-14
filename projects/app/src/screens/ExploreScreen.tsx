@@ -75,6 +75,21 @@ export default function ExploreScreen() {
   const [showFilters, setShowFilters] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [pendingAlertDest, setPendingAlertDest] = useState<{ label: string; code?: string } | null>(null);
+  // Debounced echo of free-typed search text, fed to the map as a fallback
+  // searchTarget when no suggestion has been picked — without this, typing
+  // a place with no active deal (e.g. "Berlin") never reaches the map's
+  // existing alert-pin flow, since nothing becomes tappable to set
+  // pendingAlertDest. 3+ chars avoids geocoding on every first keystroke.
+  const [debouncedMapSearch, setDebouncedMapSearch] = useState("");
+  useEffect(() => {
+    const term = searchTerm.trim();
+    if (term.length < 3) {
+      setDebouncedMapSearch("");
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedMapSearch(term), 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<Record<string, number>>({});
   const [filters, setFilters] = useState<ExploreFilterState>({
     search: "",
@@ -1018,7 +1033,7 @@ export default function ExploreScreen() {
       {viewMode === "map" && (
         <DealsMap
           deals={mapDeals}
-          searchTarget={pendingAlertDest?.label ?? null}
+          searchTarget={pendingAlertDest?.label ?? (debouncedMapSearch || null)}
           savedDealIds={savedDealIds}
           onSaveDeal={(deal) => handleSave(deal)}
           onSelectDeal={(deal) => setExpandedDeal(deal)}

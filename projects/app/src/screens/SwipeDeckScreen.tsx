@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import Animated, {
   FadeIn,
-  FadeInDown,
   FadeOut,
   useSharedValue,
   useAnimatedStyle,
@@ -120,7 +119,7 @@ export default function SwipeDeckScreen() {
   const isFocused = useIsFocused();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { user, profile, isPremium, isTrialPeriod } = useAuth();
+  const { user, profile, isPremium, isTrialPeriod, daysSinceLastSeen } = useAuth();
   const { updateProfile } = useProfile();
   const { play } = useSounds();
   const { deals, premiumDeals, loading, showingAllDeals, reload } = useDealFetch(
@@ -132,6 +131,17 @@ export default function SwipeDeckScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [deckPhase, setDeckPhase] = useState<"swiping" | "expanding" | "exhausted">("swiping");
   const [allSwipes, setAllSwipes] = useState<any[]>([]);
+
+  // Personalized upsell copy: only used when there's enough real signal to
+  // feel earned, not generic ("You've saved 1 trip" reads hollow). Null
+  // below the threshold falls straight back to the standard premium copy.
+  const personalizedSub = useMemo(() => {
+    const savedUnder500 = allSwipes.filter(
+      (s: any) => s.action === "super" && typeof s.price === "number" && s.price < 500
+    ).length;
+    if (savedUnder500 < 2) return null;
+    return `You've saved ${savedUnder500} trips under $500 — get alerted the moment prices like these come back.`;
+  }, [allSwipes]);
   // Targeted, not a blind broadcast: a button-triggered swipe is addressed
   // to a specific card (a deal id, or the literal "upsell" for the upsell
   // card). Each card only reacts if the trigger's targetId matches its own
@@ -150,8 +160,12 @@ export default function SwipeDeckScreen() {
   // every UPSELL_CARD_INTERVAL swipes starting at UPSELL_CARD_START (see
   // handleSwipe). Doesn't touch currentIndex/visibleDeals, so the real
   // deal flow is unaffected.
-  const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | null>(null);
+  const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | "welcome_back" | null>(null);
   const isBusinessMember = profile?.subscriptionStatus === "business";
+  // Guards the "welcome back" copy variant to the first upsell card of a
+  // session only — later milestones in the same session fall back to the
+  // standard premium pitch rather than repeating the away-time framing.
+  const welcomeBackShownThisSession = useRef(false);
 
   // Undo state — also tracks the Firestore doc ID of a saved deal so undo can delete it
   const [lastSwipedDeal, setLastSwipedDeal] = useState<{ deal: Deal; action: string } | null>(null);
@@ -185,8 +199,6 @@ export default function SwipeDeckScreen() {
   // Dashboard tooltip — shown once after user's first-ever save
   const [showDashboardTooltip, setShowDashboardTooltip] = useState(false);
   const dashboardTooltipShown = useRef(false);
-  const [showTrialBanner, setShowTrialBanner] = useState(false);
-  const sessionSaveCount = useRef(0);
 
   // Fire `deck_rendered` exactly once per mount, the first time we have
   // at least one card actually visible. Closes the v1.3.2 blind spot on
@@ -450,7 +462,17 @@ export default function SwipeDeckScreen() {
           setUpsellVariant("business");
           logEvent("upsell_card_shown", { variant: "business" });
         } else {
-          const variant = wantsBusiness ? "business" : "premium";
+          // A free user who's been away 3+ days gets the loss-aversion
+          // "welcome back" framing on their first upsell card of the
+          // session; every later milestone this session (and any returning
+          // user under the threshold) gets the standard pitch.
+          const wantsWelcomeBack =
+            !wantsBusiness &&
+            !welcomeBackShownThisSession.current &&
+            daysSinceLastSeen !== null &&
+            daysSinceLastSeen >= 3;
+          if (wantsWelcomeBack) welcomeBackShownThisSession.current = true;
+          const variant = wantsBusiness ? "business" : wantsWelcomeBack ? "welcome_back" : "premium";
           setUpsellVariant(variant);
           logEvent("upsell_card_shown", { variant });
         }
@@ -527,14 +549,6 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowDashboardTooltip(false), 4000);
       }
 
-      if (normalizedAction === "right" && !isPremium) {
-        sessionSaveCount.current += 1;
-        if (sessionSaveCount.current === 5) {
-          setShowTrialBanner(true);
-          setTimeout(() => setShowTrialBanner(false), 5000);
-        }
-      }
-
       // Level up every 25 swipes
       const didLevelUp = newSwipeCount % 25 === 0;
       if (didLevelUp) {
@@ -590,7 +604,7 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
-    [currentIndex, visibleDeals, activeDeals, profile, user, allSwipes, isPremium, isBusinessMember, deckMode, destFilter, shownTutorialTypes]
+    [currentIndex, visibleDeals, activeDeals, profile, user, allSwipes, isPremium, isBusinessMember, deckMode, destFilter, shownTutorialTypes, daysSinceLastSeen]
   );
 
   const handleButtonSwipe = (action: "left" | "right") => {
@@ -600,16 +614,23 @@ export default function SwipeDeckScreen() {
     setTimeout(() => setTriggerSwipe(null), 400);
   };
 
-  const openUpsellPaywall = useCallback((variant: "premium" | "business") => {
+  const openUpsellPaywall = useCallback((variant: "premium" | "business" | "welcome_back") => {
     logEvent("upsell_card_tapped", { variant });
     setUpsellVariant(null);
+    // welcome_back routes to the same paywall copy as premium — it's the
+    // same product pitch, just framed differently on the card itself.
+    // personalizedSub only forwarded for the plain premium case — not
+    // stacked with the business pitch or the welcome-back framing.
     navigation.navigate(
       "Paywall",
       variant === "business"
         ? { entryPoint: "swipe_upsell_business", tier: "business" }
-        : { entryPoint: "swipe_upsell_premium" }
+        : {
+            entryPoint: "swipe_upsell_premium",
+            personalizedSub: variant === "premium" ? personalizedSub ?? undefined : undefined,
+          }
     );
-  }, [navigation]);
+  }, [navigation, personalizedSub]);
 
   const handleCenterButton = () => {
     if (upsellVariant) {
@@ -914,6 +935,7 @@ export default function SwipeDeckScreen() {
               // nothing should be swiping them.
               <UpsellSwipeCard
                 variant={upsellVariant}
+                personalizedSub={upsellVariant === "premium" ? personalizedSub : null}
                 triggerSwipe={triggerSwipe?.targetId === "upsell" ? triggerSwipe.direction : null}
                 onDismiss={() => {
                   logEvent("upsell_card_dismissed", { variant: upsellVariant });
@@ -940,47 +962,6 @@ export default function SwipeDeckScreen() {
                   />
                 ))}
               </>
-            )}
-
-            {/* Trial banner — appears after 5th save for free users */}
-            {showTrialBanner && (
-              <Animated.View
-                entering={FadeInDown.duration(300)}
-                exiting={FadeOut.duration(300)}
-                style={{
-                  position: "absolute",
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                  zIndex: 20,
-                }}
-              >
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowTrialBanner(false);
-                    navigation.navigate("Paywall", { entryPoint: "fifth_save" });
-                  }}
-                  activeOpacity={0.9}
-                  style={{
-                    backgroundColor: colors.brand.traceRed,
-                    borderRadius: 16,
-                    paddingVertical: 14,
-                    paddingHorizontal: 18,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 10,
-                  }}
-                >
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff", flex: 1 }}>
-                    ✨ Want alerts if this price drops? Start your free 7-day trial
-                  </Text>
-                  <Text style={{ fontSize: 18, color: "#fff", marginLeft: 8 }}>→</Text>
-                </TouchableOpacity>
-              </Animated.View>
             )}
           </View>
 

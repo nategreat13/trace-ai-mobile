@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { onAuthStateChanged, User } from "firebase/auth";
 import type { CustomerInfo } from "react-native-purchases";
@@ -23,6 +23,13 @@ interface AuthContextType {
   isTrialPeriod: boolean;
   /** When the current trial/paid period ends (from RevenueCat), or null. */
   trialEndsAt: Date | null;
+  /**
+   * Days since the user's PREVIOUS visit (captured before this session's own
+   * lastSeenAt mirror overwrites it) — null for a first-ever session or once
+   * that value can't be determined. Used to spot "returning" users for
+   * re-engagement copy.
+   */
+  daysSinceLastSeen: number | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -33,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   isPremium: false,
   isTrialPeriod: false,
   trialEndsAt: null,
+  daysSinceLastSeen: null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -42,6 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Live RevenueCat entitlement snapshot — the payments source of truth.
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
 
+  // Captures profile.lastSeenAt the first time a profile loads in this app
+  // session — i.e. before AnalyticsLifecycle's cold-launch mirror overwrites
+  // it — so it holds the timestamp from the user's PREVIOUS visit. Reset on
+  // logout so a different user signing in on the same device gets their own.
+  const previousLastSeenRef = useRef<Date | null>(null);
+  const previousLastSeenCaptured = useRef(false);
+
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("[AuthContext] onAuthStateChanged:", firebaseUser?.uid);
@@ -50,6 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(null);
         setCustomerInfo(null);
         logOutIAP();
+        previousLastSeenRef.current = null;
+        previousLastSeenCaptured.current = false;
         setLoading(false);
         return;
       }
@@ -111,6 +128,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user, loading]);
 
+  // Runs on every profile change but only ever captures once (per login) —
+  // AnalyticsLifecycle can't write its own lastSeenAt mirror until a profile
+  // id exists, so the first non-null profile we see here is guaranteed to
+  // predate that overwrite.
+  useEffect(() => {
+    if (previousLastSeenCaptured.current || !profile) return;
+    previousLastSeenCaptured.current = true;
+    const raw = profile.lastSeenAt as unknown as { toDate?: () => Date } | Date | undefined;
+    previousLastSeenRef.current =
+      raw instanceof Date ? raw : typeof raw?.toDate === "function" ? raw.toDate() : null;
+  }, [profile]);
+
+  const daysSinceLastSeen = previousLastSeenRef.current
+    ? Math.floor((Date.now() - previousLastSeenRef.current.getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+
   const entState = readEntitlementState(customerInfo);
 
   // Premium access is the union of the Firestore profile (webhook-maintained,
@@ -141,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, profile, setProfile, loading, isPremium, isTrialPeriod, trialEndsAt }}
+      value={{ user, profile, setProfile, loading, isPremium, isTrialPeriod, trialEndsAt, daysSinceLastSeen }}
     >
       {children}
     </AuthContext.Provider>

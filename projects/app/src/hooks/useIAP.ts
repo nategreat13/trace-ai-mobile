@@ -122,6 +122,7 @@ export function useIAP(): UseIAPResult {
             const all: Record<string, boolean> = {};
             for (const id of PRODUCT_IDS) all[id] = true;
             if (!cancelled) setTrialEligibility(all);
+            logEvent("trial_eligibility_checked", { platform: "android", ...all });
           } else {
             const eligibility =
               await Purchases.checkTrialOrIntroductoryPriceEligibility([
@@ -134,14 +135,23 @@ export function useIAP(): UseIAPResult {
                 INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
             }
             if (!cancelled) setTrialEligibility(map);
+            logEvent("trial_eligibility_checked", { platform: "ios", ...map });
           }
-        } catch {
+        } catch (err: any) {
           // If we can't confirm eligibility, default to NOT eligible so the
           // paywall never advertises a free trial the store won't actually
           // grant (a mismatch at the App Store sheet is a top cause of
           // purchase abandonment). The paywall additionally gates the trial
           // CTA on the selected product carrying a real free intro offer.
+          //
+          // This used to fail completely silently — no event, no error log —
+          // which meant an outage here (RevenueCat/StoreKit hiccup) would
+          // look identical to "nobody wants a trial" in every funnel report.
           if (!cancelled) setTrialEligibility({});
+          logEvent("trial_eligibility_check_failed", {
+            platform: Platform.OS,
+            message: err?.message ?? String(err),
+          });
         }
       } catch (err: any) {
         console.error("[useIAP] Failed to load offerings:", err);

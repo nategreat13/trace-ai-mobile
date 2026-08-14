@@ -95,6 +95,15 @@ export type AnalyticsEventName =
   // eligibility resolves asynchronously after offerings load — so this is
   // the true "a trial was offered" funnel signal.
   | "trial_offer_shown"
+  // iOS-only visibility into `Purchases.checkTrialOrIntroductoryPriceEligibility`
+  // (useIAP.ts). This call decides whether the paywall CAN show a trial CTA
+  // at all — it fails closed (nobody eligible) on any error, silently, with
+  // no prior logging. `_failed` fires on that error path; `_checked` fires
+  // on every resolution (success or fallback-empty) with the per-product
+  // result, so "zero trials" can be told apart from "the eligibility check
+  // itself is broken" instead of just guessing.
+  | "trial_eligibility_checked"
+  | "trial_eligibility_check_failed"
   | "paywall_cta_tapped"
   | "paywall_restore_tapped"
   | "paywall_dismissed"

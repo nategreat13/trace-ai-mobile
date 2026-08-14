@@ -28,10 +28,18 @@ const SCALE_INPUT = [-300, 0, 300];
 const SCALE_OUTPUT = [0.95, 1, 0.95];
 
 interface UpsellSwipeCardProps {
-  variant: "premium" | "business";
+  variant: "premium" | "business" | "welcome_back";
   onDismiss: () => void;
   onUpgrade: () => void;
   triggerSwipe: "left" | "right" | null;
+  /**
+   * Overrides content.sub with a computed, per-user sentence (e.g. "You've
+   * saved 3 trips under $500 — get alerted the moment prices like these
+   * come back") when there's enough real signal to make the pitch feel
+   * earned instead of generic. Only ever passed for the plain "premium"
+   * variant — not stacked with business/welcome_back framing.
+   */
+  personalizedSub?: string | null;
 }
 
 // Bullets are deliberately limited to benefits that are actually real
@@ -82,6 +90,19 @@ const CONTENT = {
     // The cabin photo already fills this card's upper half.
     notifications: false,
   },
+};
+
+// Shown instead of the standard premium pitch for the first upsell card of a
+// session, to a free user who's been away a few days — same mechanism, same
+// visual (the mock notification stack already sells "alerts, any
+// destination"), just loss-aversion framing instead of the generic pitch.
+// No discount lever available, so this leans entirely on "you missed
+// something" rather than price.
+const WELCOME_BACK_CONTENT: (typeof CONTENT)["premium"] = {
+  ...CONTENT.premium,
+  eyebrow: "WHILE YOU WERE AWAY",
+  headline: "New deals dropped\nsince your last visit.",
+  sub: "Turn on Premium alerts and never miss the next one.",
 };
 
 interface MockNotif {
@@ -166,8 +187,10 @@ export default function UpsellSwipeCard({
   onDismiss,
   onUpgrade,
   triggerSwipe,
+  personalizedSub,
 }: UpsellSwipeCardProps) {
-  const content = CONTENT[variant];
+  const baseContent = variant === "welcome_back" ? WELCOME_BACK_CONTENT : CONTENT[variant];
+  const content = personalizedSub ? { ...baseContent, sub: personalizedSub } : baseContent;
   const { profile } = useAuth();
 
   // firstName is optional on UserProfile (and absent for guests), so every

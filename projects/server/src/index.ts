@@ -127,7 +127,15 @@ export { onClientEvent, onStagingClientEvent } from "./triggers/client-events";
 // The staging variant (`dailyStagingNotificationTriggers`) is gated on
 // `ENABLE_STAGING_CRON=1` and exports as `null` otherwise — kept this
 // way so toggling staging cron is a single env-var flip, no code change.
+//
+// `dealAlertMatchTrigger` is split out onto its own every-4-hours schedule
+// (same on/off staging gate) — deal alerts are Premium's entire
+// differentiator and were previously only checked once a day alongside
+// everything else here, well short of the "the moment it drops" promise
+// on the paywall.
 export {
   dailyNotificationTriggers,
   dailyStagingNotificationTriggers,
+  dealAlertMatchTrigger,
+  dealAlertMatchStagingTrigger,
 } from "./triggers/notification-cron";

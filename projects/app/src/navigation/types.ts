@@ -14,7 +14,14 @@ export type RootStackParamList = {
   Onboarding: undefined;
   NotificationsPermission: undefined;
   MainTabs: NavigatorScreenParams<TabParamList>;
-  Paywall: { entryPoint?: string; tier?: "premium" | "business" } | undefined;
+  Paywall:
+    | {
+        entryPoint?: string;
+        tier?: "premium" | "business";
+        /** Computed, per-user sub line (e.g. "You've saved 3 trips under $500...") — overrides the entry point's default static sub when present. */
+        personalizedSub?: string;
+      }
+    | undefined;
   PremiumWelcome: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;
