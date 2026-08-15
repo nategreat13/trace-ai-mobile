@@ -31,12 +31,24 @@ if (MAPBOX_PUBLIC_TOKEN) {
 // styles — this is a "look at the whole world" travel map.
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v12";
 
-// Default view: anchored on the Americas but zoomed out enough to catch
-// the Atlantic and western Europe, so both the unlocked domestic pins and
-// some aspirational international/locked ones are visible without panning —
-// which is exactly what makes the upsell land. Not the full disorienting
-// globe, not just the US.
-const INITIAL_CENTER: [number, number] = [-55, 30];
+// Default view: centred on the continental US.
+//
+// This was previously [-55, 30], chosen to frame the Americas and western
+// Europe together so domestic and aspirational/locked pins were both visible
+// without panning. The framing worked, but -55/30 is a point in the open
+// Atlantic off Bermuda, so the map opened on empty ocean — the first thing a
+// user saw was water, with the pins pushed out to the edges.
+//
+// Centring on the US instead puts the pins the user can actually act on in
+// the middle of the screen. The zoom is deliberately left at 2.2 rather than
+// tightened: at this level the international/locked pins are still on screen
+// toward the edges, which is what gives the "N more deals with Premium"
+// banner something to point at. Zooming further in would open on the US more
+// emphatically but cost the upsell its visible teasers.
+// Slightly west of the true geographic centre (~-98.6): on a narrow phone
+// viewport at this zoom, centring there clipped the west-coast price pins off
+// the left edge, and those are unlocked deals the user can act on immediately.
+const INITIAL_CENTER: [number, number] = [-102, 39.5];
 const INITIAL_ZOOM = 2.2;
 const SEARCH_ZOOM = 4.4;
 
