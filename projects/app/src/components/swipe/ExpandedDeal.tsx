@@ -11,6 +11,7 @@ import {
   StatusBar,
   Animated,
   Share,
+  AppState,
 } from "react-native";
 import ShareNamePromptModal from "../ShareNamePromptModal";
 import Reanimated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
@@ -210,10 +211,57 @@ export default function ExpandedDeal({
 
   // Book Now is the single highest real purchase-intent signal in the app —
   // someone actively trying to buy a flight — and previously got zero
-  // special treatment. Shown alongside (never instead of) the actual book
-  // action below; auto-dismisses like the removed fifth-save trial banner
-  // did, same visual pattern.
+  // special treatment.
+  //
+  // The banner is deliberately shown when the user comes BACK, not as they
+  // leave. Booking calls Linking.openURL, which backgrounds the app: showing
+  // the banner on tap rendered it behind Safari, where its auto-dismiss timer
+  // then expired before the user ever returned — so it was invisible in normal
+  // use, whatever the copy said about appearing "alongside" the book action.
+  // Returning is also simply the better moment: they have just seen a real
+  // price, so "get alerted if this price comes back" is the thought already in
+  // their head.
   const [showBookIntentBanner, setShowBookIntentBanner] = useState(false);
+  // Set on tap, consumed on the next foreground. A ref (not state) so arming
+  // it can't trigger a re-render mid-navigation.
+  const pendingBookIntentRef = useRef(false);
+  const bannerHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const revealBookIntentBanner = () => {
+    setShowBookIntentBanner(true);
+    if (bannerHideTimerRef.current) clearTimeout(bannerHideTimerRef.current);
+    // Longer than the original 5s: the user is re-orienting after an app
+    // switch, so the first second or two of this window isn't really reading time.
+    bannerHideTimerRef.current = setTimeout(
+      () => setShowBookIntentBanner(false),
+      15000
+    );
+  };
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next !== "active") return;
+      if (!pendingBookIntentRef.current) return;
+      pendingBookIntentRef.current = false;
+      // Only if they're still on this deal and still not premium — they may
+      // have subscribed on the booking site's page, or closed the sheet.
+      if (!isPremium) revealBookIntentBanner();
+    });
+    return () => {
+      sub.remove();
+      if (bannerHideTimerRef.current) clearTimeout(bannerHideTimerRef.current);
+    };
+  }, [isPremium]);
+
+  // Arming is pointless once the sheet is closed — drop any pending intent so
+  // the banner can't surface over an unrelated deal later.
+  useEffect(() => {
+    if (!visible) {
+      pendingBookIntentRef.current = false;
+      setShowBookIntentBanner(false);
+      if (bannerHideTimerRef.current) clearTimeout(bannerHideTimerRef.current);
+    }
+  }, [visible]);
 
   // Analytics: a deal's detail view was opened. Fires once each time the
   // modal transitions to visible (keyed on deal id so re-opening a
@@ -656,12 +704,18 @@ export default function ExpandedDeal({
                   deal_type: deal.deal_type ?? null,
                   domestic_or_international: deal.domestic_or_international ?? null,
                 });
-                // Never block the actual booking attempt — the intent
-                // banner shows alongside it, not instead of it.
+                // Never block the actual booking attempt.
                 onBook();
                 if (!isPremium) {
-                  setShowBookIntentBanner(true);
-                  setTimeout(() => setShowBookIntentBanner(false), 5000);
+                  if (deal.url) {
+                    // onBook will hand us off to the browser — arm the banner
+                    // for whenever they come back (see revealBookIntentBanner).
+                    pendingBookIntentRef.current = true;
+                  } else {
+                    // No URL means onBook is a no-op and we never leave the
+                    // app, so there is no "return" to wait for — show it now.
+                    revealBookIntentBanner();
+                  }
                 }
               }}
               activeOpacity={0.8}
@@ -697,6 +751,7 @@ export default function ExpandedDeal({
           >
             <TouchableOpacity
               onPress={() => {
+                if (bannerHideTimerRef.current) clearTimeout(bannerHideTimerRef.current);
                 setShowBookIntentBanner(false);
                 onClose();
                 navigation.navigate("Paywall", { entryPoint: "book_now_intent" });
