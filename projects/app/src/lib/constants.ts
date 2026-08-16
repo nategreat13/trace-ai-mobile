@@ -9,8 +9,15 @@ export const MAX_SAVES = 5;
  * Premium, 15 = Business, 20 = Premium, ...); Premium-but-not-Business
  * users only ever see the Business pitch, since Premium's moot for them.
  */
+// Cut from every 5 swipes to every 25 on 2026-08-16. At the observed 26.1
+// swipes per active user, an interval of 5 meant 4-5 upsell cards each —
+// and in the Jul 23-Aug 15 window those cards were 81% of all paywall
+// impressions while producing zero CTA taps. That is banner blindness, and
+// the cost isn't just the wasted impressions: a user who has swiped past
+// five upsell cards is trained to swipe past the Book Now banner too.
+// At 25 the average user sees ~1 and heavy users still see them periodically.
 export const UPSELL_CARD_START = 10;
-export const UPSELL_CARD_INTERVAL = 5;
+export const UPSELL_CARD_INTERVAL = 25;
 
 /**
  * Cloud Function URLs.

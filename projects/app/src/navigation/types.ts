@@ -20,6 +20,14 @@ export type RootStackParamList = {
         tier?: "premium" | "business";
         /** Computed, per-user sub line (e.g. "You've saved 3 trips under $500...") — overrides the entry point's default static sub when present. */
         personalizedSub?: string;
+        /**
+         * Live "what you're missing right now" stat, e.g. "You're seeing 5 of
+         * 340 destinations". Computed by the calling screen from data it
+         * already holds, so the paywall never fetches to render it — when the
+         * caller can't compute one, the row is simply omitted. Rendered as a
+         * highlighted row above the feature list.
+         */
+        lockedStat?: string;
       }
     | undefined;
   PremiumWelcome: undefined;

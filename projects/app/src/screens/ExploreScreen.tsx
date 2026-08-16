@@ -281,7 +281,10 @@ export default function ExploreScreen() {
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
     if (!isPremium && savedDealIds.size >= 3) {
-      navigation.navigate("Paywall", { entryPoint: "explore_save_limit" });
+      navigation.navigate("Paywall", {
+        entryPoint: "explore_save_limit",
+        lockedStat: "You've used all 3 of your free saves",
+      });
       return;
     }
     await saveDeal({
@@ -359,7 +362,7 @@ export default function ExploreScreen() {
 
   const handleCreateAlert = async (dest: { label: string; code?: string }) => {
     if (!user) return;
-    if (!isPremium) { navigation.navigate("Paywall", { entryPoint: "explore_create_alert" }); return; }
+    if (!isPremium) { navigation.navigate("Paywall", { entryPoint: "explore_create_alert", lockedStat }); return; }
     await createDealAlert({
       userId: user.uid,
       destination: dest.label,
@@ -461,6 +464,23 @@ export default function ExploreScreen() {
     }));
   }, [filteredDeals, deals, isPremium]);
 
+  /**
+   * Live "what you're missing" line for the paywall, computed from the deal
+   * universe this screen already holds — no extra fetch, and the paywall
+   * degrades to its static copy when this is null.
+   *
+   * The count is distinct destinations, matching what a user actually
+   * perceives on the map (pins are per-destination, not per-deal), and the
+   * free number is the same 5 that `mapDeals` unlocks above.
+   */
+  const lockedStat: string | undefined = useMemo(() => {
+    if (isPremium) return undefined;
+    const distinct = new Set(deals.map((d) => d.destination).filter(Boolean)).size;
+    // Below ~10 the comparison reads as trivial ("3 of 7") and undersells.
+    if (distinct < 10) return undefined;
+    return `You're seeing 5 of ${distinct} destinations`;
+  }, [deals, isPremium]);
+
   const goToMap = useCallback(() => {
     // source: "pill" — a deliberate return to the map from the list. This is
     // the intent signal; see the note on the default-landing log above.
@@ -513,7 +533,7 @@ export default function ExploreScreen() {
         {/* Image */}
         <TouchableOpacity
           activeOpacity={0.85}
-          onPress={() => isBlurred ? navigation.navigate("Paywall", { entryPoint: "explore_blurred_deal" }) : setExpandedDeal(deal)}
+          onPress={() => isBlurred ? navigation.navigate("Paywall", { entryPoint: "explore_blurred_deal", lockedStat }) : setExpandedDeal(deal)}
         >
           <View style={{ position: "relative", height: 200 }}>
             <Image
@@ -682,7 +702,7 @@ export default function ExploreScreen() {
         end={{ x: 1, y: 0 }}
         style={{ borderRadius: 12, width: "100%" }}
       >
-        <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_view_plans" })} style={{ paddingVertical: 14, alignItems: "center" }}>
+        <TouchableOpacity onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_view_plans", lockedStat })} style={{ paddingVertical: 14, alignItems: "center" }}>
           <Text style={{ color: "#fff", fontSize: 15, fontWeight: "700" }}>
             {trialAvailable ? `Start ${trialLabel} free trial` : "View Plans"}
           </Text>
@@ -978,7 +998,12 @@ export default function ExploreScreen() {
       {!isPremium && savedDealIds.size === 2 && (
         <Animated.View entering={FadeIn.duration(300)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("Paywall", { entryPoint: "explore_one_save_left" })}
+            onPress={() =>
+              navigation.navigate("Paywall", {
+                entryPoint: "explore_one_save_left",
+                lockedStat: "You have 1 free save left",
+              })
+            }
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -1039,7 +1064,7 @@ export default function ExploreScreen() {
           onSelectDeal={(deal) => setExpandedDeal(deal)}
           onLockedPress={() => {
             logEvent("explore_map_locked_pin_tapped", {});
-            navigation.navigate("Paywall", { entryPoint: "explore_map_locked_pin" });
+            navigation.navigate("Paywall", { entryPoint: "explore_map_locked_pin", lockedStat });
           }}
           onRequestAlert={(destination) => {
             logEvent("explore_map_alert_requested", { destination });

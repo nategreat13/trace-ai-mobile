@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { X, Bell, Users, Crown, Clock, Sparkles } from "lucide-react-native";
+import { X, Bell, Users, Crown, Clock, Sparkles, Map, Search, Bookmark } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -58,6 +58,7 @@ export default function PaywallScreen() {
   const entryPoint = route.params?.entryPoint ?? "unknown";
   const tierParam = route.params?.tier ?? "premium";
   const personalizedSub = route.params?.personalizedSub ?? null;
+  const lockedStat = route.params?.lockedStat ?? null;
   const isBusinessPaywall = tierParam === "business";
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -511,6 +512,34 @@ export default function PaywallScreen() {
           </View>
         )}
 
+        {/* Live "what you're missing right now" stat. Only rendered when the
+            calling screen could compute one from data it already had — a
+            concrete number ("5 of 340") is far harder to dismiss than a
+            static bullet, and it's the user's own situation rather than a
+            generic claim. */}
+        {lockedStat && (
+          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+            <View
+              style={{
+                backgroundColor: accent + "14",
+                borderColor: accent + "33",
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <Sparkles color={accent} size={16} />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground, flex: 1 }}>
+                {lockedStat}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Features */}
         <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
           <Text
@@ -531,9 +560,21 @@ export default function PaywallScreen() {
               { icon: Clock, title: "48-hour early access before anyone else" },
               { icon: Sparkles, title: "Everything in Premium" },
             ];
+            // Every line below maps to a real gate in the code. "Full Explore
+            // access" used to stand in for three separate limits (map pins,
+            // search/filters, save cap) and sold none of them — free users
+            // couldn't tell what they were missing, so the offer read as two
+            // vague bullets. Naming the actual limit next to the actual
+            // unlock is the whole pitch.
+            //   - map:    ExploreScreen mapDeals() unlocks 5 cheapest domestic
+            //   - search: ExploreScreen listData() locks all filtered results
+            //   - saves:  ExploreScreen handleSave() caps free at 3
+            //   - alerts: 4-hour scheduled matching (shipped Aug 14)
             let features = [
-              { icon: Bell, title: "Deal alerts for any destination" },
-              { icon: Users, title: "Full Explore access" },
+              { icon: Bell, title: "Price-drop alerts on any route, checked every 4 hours" },
+              { icon: Map, title: "Every destination on the map — free shows 5" },
+              { icon: Search, title: "Search and filter the full deal feed" },
+              { icon: Bookmark, title: "Unlimited saved trips — free stops at 3" },
             ];
             if (entryPoint === "explore_upgrade" || entryPoint === "deal_alert_match" || entryPoint === "swipe_upsell_premium") {
               const alerts = features.find((f) => f.title.startsWith("Deal alerts"))!;
