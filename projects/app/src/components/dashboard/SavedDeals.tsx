@@ -16,7 +16,11 @@ import {
   Trash2,
   Search,
 } from "lucide-react-native";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../../theme/colors";
+import { useAuth } from "../../context/AuthContext";
+import type { RootStackParamList } from "../../navigation/types";
 import type { SavedDeal } from "@trace/shared";
 
 interface SavedDealEntry {
@@ -47,6 +51,18 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
   const [sortBy, setSortBy] = useState<SortMode>("date");
   const [searchQuery, setSearchQuery] = useState("");
   const [showSortMenu, setShowSortMenu] = useState(false);
+
+  // Searching and sorting your saved list is premium. Both controls stay
+  // visible rather than hidden — a locked control the user reaches for is an
+  // upsell; a missing one is just a feature they never knew existed.
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { isPremium } = useAuth();
+  const goToPaywall = (entryPoint: string) => {
+    navigation.navigate("Paywall", {
+      entryPoint,
+      lockedStat: `You've saved ${deals.length} ${deals.length === 1 ? "trip" : "trips"}`,
+    });
+  };
 
   const filtered = useMemo(() => {
     // Dedup by originalDealId — keep only the most-recently-saved copy.
@@ -213,15 +229,23 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
         <View style={{ position: "relative" }}>
           <TouchableOpacity
             style={[styles.sortButton, { backgroundColor: `${colors.brand.traceRed}15` }]}
-            onPress={() => setShowSortMenu((v) => !v)}
+            onPress={() =>
+              isPremium ? setShowSortMenu((v) => !v) : goToPaywall("saved_sort_locked")
+            }
             activeOpacity={0.7}
           >
+            {/* Free users see the sort they're actually on ("Recently saved")
+                rather than a bare "Sort", so the list never looks arbitrarily
+                ordered — the lock says they can't change it, not that they
+                don't know what it is. */}
             <Text style={[styles.sortButtonText, { color: colors.brand.traceRed }]}>
               {activeSortLabel}
             </Text>
-            <Text style={{ fontSize: 10, color: colors.brand.traceRed, marginLeft: 2 }}>▾</Text>
+            <Text style={{ fontSize: 10, color: colors.brand.traceRed, marginLeft: 2 }}>
+              {isPremium ? "▾" : "🔒"}
+            </Text>
           </TouchableOpacity>
-          {showSortMenu && (
+          {isPremium && showSortMenu && (
             <View style={[styles.sortMenu, { backgroundColor: theme.card, borderColor: theme.border }]}>
               {SORT_OPTIONS.map((opt) => (
                 <TouchableOpacity
@@ -247,20 +271,37 @@ export default function SavedDeals({ deals, onDelete, onBook }: SavedDealsProps)
         </View>
       </View>
 
-      {/* Search bar */}
-      <View style={[styles.searchBar, { backgroundColor: theme.muted, borderColor: theme.border }]}>
-        <Search size={14} color={theme.mutedForeground} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.foreground }]}
-          placeholder="Search destinations…"
-          placeholderTextColor={theme.mutedForeground}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          returnKeyType="search"
-          clearButtonMode="while-editing"
-          autoCorrect={false}
-        />
-      </View>
+      {/* Search bar. For free users this is a button, not an input — tapping
+          it opens the paywall rather than focusing a field that would then
+          refuse to filter anything. Never render a control that accepts input
+          and silently ignores it. */}
+      {isPremium ? (
+        <View style={[styles.searchBar, { backgroundColor: theme.muted, borderColor: theme.border }]}>
+          <Search size={14} color={theme.mutedForeground} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.foreground }]}
+            placeholder="Search destinations…"
+            placeholderTextColor={theme.mutedForeground}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+            autoCorrect={false}
+          />
+        </View>
+      ) : (
+        <TouchableOpacity
+          onPress={() => goToPaywall("saved_search_locked")}
+          activeOpacity={0.7}
+          style={[styles.searchBar, { backgroundColor: theme.muted, borderColor: theme.border }]}
+        >
+          <Search size={14} color={theme.mutedForeground} />
+          <Text style={[styles.searchInput, { color: theme.mutedForeground }]}>
+            Search your saved trips
+          </Text>
+          <Text style={{ fontSize: 12 }}>🔒</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Results */}
       {filtered.length === 0 ? (

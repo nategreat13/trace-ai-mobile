@@ -38,12 +38,16 @@ import {
 } from "../services/firestore";
 import {
   UPSELL_CARD_START,
-  UPSELL_CARD_INTERVAL,
+  upsellCardAt,
+  ASSISTANT_CARD_AT,
+  upsellWaitSeconds,
   ALL_BADGES,
+  LEVEL_TITLES,
 } from "../lib/constants";
 import { getItem, setItem } from "../lib/storage";
 import SwipeCard from "../components/swipe/SwipeCard";
 import UpsellSwipeCard from "../components/swipe/UpsellSwipeCard";
+import AssistantSwipeCard from "../components/swipe/AssistantSwipeCard";
 import SwipeTutorial from "../components/swipe/SwipeTutorial";
 import DashboardTooltip from "../components/swipe/DashboardTooltip";
 import HowToSwipeModal from "../components/swipe/HowToSwipeModal";
@@ -161,6 +165,21 @@ export default function SwipeDeckScreen() {
   // handleSwipe). Doesn't touch currentIndex/visibleDeals, so the real
   // deal flow is unaffected.
   const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | "welcome_back" | null>(null);
+  // Countdown length for the card currently showing — escalates with how many
+  // cards this user has already sat through. See upsellWaitSeconds.
+  const [upsellWait, setUpsellWait] = useState(5);
+  // Assistant card, shown at most once per session. The ref is mount-scoped,
+  // which is exactly the lifetime we want — it resets on a fresh session and
+  // can't fire twice within one.
+  const [showAssistantCard, setShowAssistantCard] = useState(false);
+  const assistantShownRef = useRef(false);
+
+  // The upsell card survives a trip to the paywall (see openUpsellPaywall), so
+  // this is what retires it on a successful purchase — otherwise a user who
+  // just paid comes back to the card that sold them.
+  useEffect(() => {
+    if (isPremium) setUpsellVariant(null);
+  }, [isPremium]);
   const isBusinessMember = profile?.subscriptionStatus === "business";
   // Guards the "welcome back" copy variant to the first upsell card of a
   // session only — later milestones in the same session fall back to the
@@ -180,6 +199,13 @@ export default function SwipeDeckScreen() {
 
   // Badge/Level notification state
   const [unlockedBadge, setUnlockedBadge] = useState<{ name: string; emoji: string; description: string } | null>(null);
+  // Badges whose toast has already been shown this mount. Seeded from the
+  // profile so a badge earned in an earlier session can't re-announce itself
+  // on a cold start either.
+  const shownBadgeIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const id of profile?.badges ?? []) shownBadgeIds.current.add(id);
+  }, [profile?.badges]);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [newLevel, setNewLevel] = useState(1);
   // Snapshot of swipeCount at the moment of leveling up. The
@@ -440,8 +466,10 @@ export default function SwipeDeckScreen() {
       const newSwipeCount = (profile.swipeCount || 0) + 1;
       const newDailySwipes = (profile.dailySwipesToday || 0) + 1;
 
-      // Premium/business upsell card — fires every UPSELL_CARD_INTERVAL
-      // swipes starting at UPSELL_CARD_START (10, 15, 20, 25, ...). Free
+      const upsellHit = upsellCardAt(newSwipeCount);
+
+      // Premium/business upsell card — fires on the cycling 12/10/8 cadence
+      // (swipes 12, 22, 30, 42, 52, 60, ...) — see upsellCardAt. Free
       // users alternate Premium/Business each time (10=Premium,
       // 15=Business, 20=Premium, ...) rather than only ever seeing
       // Premium — some free users are exactly the traveler who'd go
@@ -453,9 +481,22 @@ export default function SwipeDeckScreen() {
       // rather than depending on those writes succeeding (the card's own
       // exit animation already completed by this point regardless of what
       // happens further down this async function).
-      if (newSwipeCount >= UPSELL_CARD_START && newSwipeCount % UPSELL_CARD_INTERVAL === 0) {
-        const cyclesSinceStart = newSwipeCount / UPSELL_CARD_INTERVAL;
-        const wantsBusiness = cyclesSinceStart % 2 === 1;
+      // One-time travel-assistant card. Checked before the upsell cadence so
+      // the two can never land on the same swipe.
+      // Once per SESSION, not once per user: it's a prompt that catches
+      // intent, and intent is per-visit — someone opening the app on Tuesday
+      // may well have a different trip in mind than on Monday. The ref is
+      // scoped to this mount, so it naturally resets on a fresh session while
+      // never repeating within one.
+      if (newSwipeCount === ASSISTANT_CARD_AT && !assistantShownRef.current) {
+        assistantShownRef.current = true;
+        setShowAssistantCard(true);
+        logEvent("assistant_card_shown", { is_premium: isPremium });
+      } else if (upsellHit.show) {
+        // Ordinal (1st card, 2nd card, …) drives both which tier is pitched
+        // and how long the countdown runs — see upsellWaitSeconds.
+        setUpsellWait(upsellWaitSeconds(upsellHit.ordinal));
+        const wantsBusiness = upsellHit.ordinal % 2 === 0;
         if (isBusinessMember) {
           // top tier — nothing to upsell
         } else if (isPremium) {
@@ -549,10 +590,20 @@ export default function SwipeDeckScreen() {
         setTimeout(() => setShowDashboardTooltip(false), 4000);
       }
 
-      // Level up every 25 swipes
+      // Level up every 25 swipes.
+      //
+      // LEVEL_TITLES tops out at 10 ("Trace Legend"), and getLevelInfo clamps
+      // the index — so past level 10 the level number keeps incrementing but
+      // the title never changes, and this fired a "Trace Legend!" celebration
+      // every 25 swipes forever. The level still increments (it's shown on the
+      // profile and gates a badge), but there's nothing to announce once the
+      // title has stopped changing.
+      const prevLevel = profile.dealHunterLevel || 1;
+      const alreadyMaxLevel = prevLevel >= LEVEL_TITLES.length;
       const didLevelUp = newSwipeCount % 25 === 0;
+      const shouldAnnounceLevelUp = didLevelUp && !alreadyMaxLevel;
       if (didLevelUp) {
-        const lvl = (profile.dealHunterLevel || 1) + 1;
+        const lvl = prevLevel + 1;
         updates.dealHunterLevel = lvl;
         setNewLevel(lvl);
         // Snapshot the count at level-up time so the modal renders
@@ -585,10 +636,19 @@ export default function SwipeDeckScreen() {
         let newBadges = [...(profile.badges || [])];
         for (const badge of ALL_BADGES) {
           if (newBadges.includes(badge.id)) continue;
+          // Second guard, in-memory. `profile.badges` above comes from a
+          // closure over Firestore-backed state, so between awarding a badge
+          // and the write round-tripping back through the AuthContext
+          // subscription, `profile` still lacks it — and every swipe in that
+          // window re-detects the same badge as newly earned and re-shows the
+          // toast. That's why Trace Legend kept reappearing. A ref updates
+          // synchronously and closes the window.
+          if (shownBadgeIds.current.has(badge.id)) continue;
           const wasEarned = badge.requirement(profile, allSwipes);
           const isNowEarned = badge.requirement(updatedProfile, newSwipes);
           if (!wasEarned && isNowEarned) {
             newBadges = [...newBadges, badge.id];
+            shownBadgeIds.current.add(badge.id);
             await updateProfile({ badges: newBadges });
             // Show badge notification
             setUnlockedBadge({ name: badge.name, emoji: badge.emoji, description: badge.desc });
@@ -600,7 +660,7 @@ export default function SwipeDeckScreen() {
       }
 
       // Show level up notification after badge (slight delay)
-      if (didLevelUp) {
+      if (shouldAnnounceLevelUp) {
         setTimeout(() => setShowLevelUp(true), unlockedBadge ? 3600 : 300);
       }
     },
@@ -616,7 +676,12 @@ export default function SwipeDeckScreen() {
 
   const openUpsellPaywall = useCallback((variant: "premium" | "business" | "welcome_back") => {
     logEvent("upsell_card_tapped", { variant });
-    setUpsellVariant(null);
+    // Deliberately does NOT clear the card. Tapping through to the paywall
+    // and backing out used to drop the user straight onto the next deal,
+    // which made "look at the price, then decide" a one-way door and let the
+    // countdown be skipped entirely by opening the paywall and dismissing it.
+    // The card stays until its timer genuinely completes; the effect below
+    // clears it if they actually subscribe.
     // welcome_back routes to the same paywall copy as premium — it's the
     // same product pitch, just framed differently on the card itself.
     // personalizedSub only forwarded for the plain premium case — not
@@ -739,7 +804,15 @@ export default function SwipeDeckScreen() {
       </View>
 
 
-      {/* Search destination chip */}
+      {/* Search destination chip.
+
+          Hidden while an upsell card is up. The upsell is meant to occupy
+          everything between the app header and the tab bar, so the swipe
+          affordances around it (this chip, the undo row, the pass/save
+          buttons) all stand down while it's showing — leaving them visible
+          gave the eye somewhere else to go, which is how the card ended up
+          swiped past without being read. */}
+      {!upsellVariant && (
       <TouchableOpacity
         onPress={() => navigation.navigate("MainTabs", { screen: "Explore" })}
         style={{
@@ -761,6 +834,7 @@ export default function SwipeDeckScreen() {
           Search a destination
         </Text>
       </TouchableOpacity>
+      )}
 
       {/* Business toggle */}
       {isBusinessMember && premiumDeals.length > 0 && (
@@ -929,12 +1003,44 @@ export default function SwipeDeckScreen() {
                   <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Show All Deals</Text>
                 </TouchableOpacity>
               </Animated.View>
+            ) : showAssistantCard ? (
+              <AssistantSwipeCard
+                triggerSwipe={triggerSwipe?.targetId === "assistant" ? triggerSwipe.direction : null}
+                onDismiss={() => {
+                  logEvent("assistant_card_dismissed", {});
+                  setShowAssistantCard(false);
+                }}
+                onSubmit={(destination) => {
+                  logEvent("assistant_card_submitted", { destination });
+                  setShowAssistantCard(false);
+                  navigation.navigate("MainTabs", {
+                    screen: "Explore",
+                    params: { search: destination },
+                  });
+                }}
+                onUpgrade={(destination) => {
+                  logEvent("assistant_card_upgrade_tapped", {
+                    has_destination: !!destination,
+                  });
+                  setShowAssistantCard(false);
+                  navigation.navigate("Paywall", {
+                    entryPoint: "assistant_card",
+                    // Carry the place they typed into the offer, so the
+                    // paywall answers their request instead of pitching a
+                    // feature at them.
+                    personalizedSub: destination
+                      ? `We'll watch ${destination} for you and alert you the moment a fare drops.`
+                      : undefined,
+                  });
+                }}
+              />
             ) : upsellVariant ? (
               // While the upsell card is showing, the real cards aren't
               // rendered at all — no reason for them to exist while
               // nothing should be swiping them.
               <UpsellSwipeCard
                 variant={upsellVariant}
+                waitSeconds={upsellWait}
                 personalizedSub={upsellVariant === "premium" ? personalizedSub : null}
                 triggerSwipe={triggerSwipe?.targetId === "upsell" ? triggerSwipe.direction : null}
                 onDismiss={() => {
@@ -965,8 +1071,9 @@ export default function SwipeDeckScreen() {
             )}
           </View>
 
-          {/* Undo button — just below the card */}
-          <View style={{ height: 32, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8, marginTop: 6 }}>
+          {/* Undo button — just below the card. Hidden under the upsell card
+              (see the search chip above for why). */}
+          <View style={{ height: upsellVariant ? 0 : 32, justifyContent: "center", alignItems: "flex-end", paddingHorizontal: 8, marginTop: upsellVariant ? 0 : 6, overflow: "hidden" }}>
             {lastSwipedDeal && (
               <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
                 <TouchableOpacity
@@ -983,7 +1090,10 @@ export default function SwipeDeckScreen() {
           </View>
 
 
-          {/* Action buttons */}
+          {/* Action buttons. Collapsed under the upsell card — the card owns
+              its own dismiss/upgrade gesture, and the pass button would
+              otherwise be a one-tap bypass of the countdown. */}
+          {!upsellVariant && (
           <View
             style={{
               flexDirection: "row",
@@ -1061,6 +1171,7 @@ export default function SwipeDeckScreen() {
               />
             </TouchableOpacity>
           </View>
+          )}
 
         </View>
       )}

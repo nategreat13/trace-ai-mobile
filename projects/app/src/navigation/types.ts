@@ -2,7 +2,8 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 
 export type TabParamList = {
   SwipeDeck: undefined;
-  Explore: undefined;
+  /** `search` pre-fills the destination search — used by the assistant card. */
+  Explore: { search?: string } | undefined;
   Dashboard: { tab?: "saved" | "alerts"; alertSaved?: boolean } | undefined;
   Upgrade: undefined;
   Profile: undefined;

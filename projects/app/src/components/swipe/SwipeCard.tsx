@@ -34,6 +34,22 @@ const RIGHT_INDICATOR_OUTPUT = [0, 0, 1];
 // "48 hours" (genuinely the most urgent) doesn't contain "day" at all.
 // Parsing to a real hour count avoids that trap.
 const URGENT_WITHIN_HOURS = 72;
+
+/**
+ * Discount badge colour, banded so the size of a saving is readable at a
+ * glance instead of every deal wearing the same green.
+ *
+ * Deeper green reads as "better" without needing a legend, and the bands are
+ * far enough apart (base / 30 / 40) that adjacent cards in a deck are visibly
+ * different rather than looking like a rendering inconsistency. 40% is also
+ * the existing `isHotDeal` threshold, so the strongest shade lines up with
+ * the urgency treatment already on the card.
+ */
+function discountShade(pct: number): string {
+  if (pct >= 40) return "#15803d"; // deepest — matches isHotDeal
+  if (pct >= 30) return "#22a355";
+  return colors.brand.traceGreen;
+}
 function parseDurationHours(text: string | undefined | null): number | null {
   if (!text) return null;
   const match = text.match(/(\d+)\s*(hour|day|week|month)/i);
@@ -269,6 +285,7 @@ export default function SwipeCard({
   const formattedPrice = `$${deal.price}`;
 
   const isHotDeal = deal.discount_pct >= 40;
+
   // `deal.urgency` is never anything but the mapper's hardcoded "medium"
   // fallback in practice — the real deal feed has no urgency field, so this
   // never fires. `price_will_last` (e.g. "2 weeks", "48 hours") is real and
@@ -277,16 +294,6 @@ export default function SwipeCard({
   // every single card and stop meaning anything.
   const priceWillLastHours = parseDurationHours(deal.price_will_last);
   const hasRealUrgency = priceWillLastHours !== null && priceWillLastHours <= URGENT_WITHIN_HOURS;
-
-  // Short, specific reason this deal is worth a look — previously only
-  // shown one tap deep in the expanded view, meaning the card everyone
-  // actually sees hundreds of times over never explained why any single
-  // deal mattered. `vibe_description`/`ai_insight` are never populated by
-  // the real feed (mapper fallback fields that don't match reality). The
-  // full `experiences[0].description` sentence read as bulky wall-of-text
-  // on a card — the `title` (e.g. "🎨 Explore the Louvre") is the same
-  // real per-deal data, already short and already has its own emoji.
-  const cardReason = deal.experiences?.[0]?.title?.trim() || "";
 
   const isBookSoon = (() => {
     if (!deal.dateString) return false;
@@ -377,13 +384,6 @@ export default function SwipeCard({
             {deal.destination}
           </Text>
 
-          {/* Why this deal — a real, specific detail, not just a price tag */}
-          {!!cardReason && (
-            <Text style={styles.reasonText} numberOfLines={1}>
-              {cardReason}
-            </Text>
-          )}
-
           {/* Price row */}
           <View style={styles.priceRow}>
             <View style={styles.priceLeft}>
@@ -394,22 +394,20 @@ export default function SwipeCard({
             </View>
             <View style={styles.priceRight}>
               {deal.original_price > deal.price && (
-                <View style={styles.discountBadge}>
+                <View style={[styles.discountBadge, { backgroundColor: discountShade(deal.discount_pct) }]}>
                   <Text style={styles.discountBadgeText}>{Math.round(deal.discount_pct)}% off</Text>
                 </View>
               )}
             </View>
           </View>
 
-          {/* Info pills */}
-          {(!!deal.airlines || !!deal.duration || !!deal.travel_window) && (
+          {/* Info pills. The airline pill and the one-line "why this deal"
+              snippet above were both removed deliberately — the card carries
+              destination, price, discount and dates, and everything past that
+              was competing for the same glance. Airline is still on the
+              expanded deal view for anyone who wants it. */}
+          {(!!deal.duration || !!deal.travel_window) && (
             <View style={styles.pillsRow}>
-              {!!deal.airlines && (
-                <View style={styles.infoPill}>
-                  <Text style={styles.pillIcon}>✈️</Text>
-                  <Text style={styles.pillText}>{deal.airlines}</Text>
-                </View>
-              )}
               {!!deal.duration && (
                 <View style={styles.infoPill}>
                   <Text style={styles.pillIcon}>⏱</Text>
@@ -554,15 +552,6 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
     letterSpacing: -0.5,
-  },
-  reasonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.85)",
-    marginBottom: 8,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
   priceRow: {
     flexDirection: "row",

@@ -58,6 +58,11 @@ export type AnalyticsEventName =
   // Premium/business in-deck upsell card (every UPSELL_CARD_INTERVAL swipes)
   | "upsell_card_shown"
   | "upsell_card_tapped"
+  // One-time in-deck travel-assistant card (ASSISTANT_CARD_AT)
+  | "assistant_card_shown"
+  | "assistant_card_dismissed"
+  | "assistant_card_submitted"
+  | "assistant_card_upgrade_tapped"
   | "upsell_card_dismissed"
   // Deck readiness — close the blind spot on why ~38% of v1.3.2 cohort
   // never swiped. `deck_rendered` fires once per SwipeDeck mount when

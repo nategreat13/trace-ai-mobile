@@ -114,6 +114,28 @@ async function geocode(query: string): Promise<[number, number] | null> {
   }
 }
 
+/**
+ * Reverse-geocode [lng, lat] to a human place name, for the long-press-to-
+ * request-alerts gesture. Prefers the coarsest useful name (place → region →
+ * country) so a long-press in open countryside still returns something a user
+ * recognises rather than a street.
+ */
+async function reverseGeocode(lng: number, lat: number): Promise<string | null> {
+  if (!MAPBOX_PUBLIC_TOKEN) return null;
+  try {
+    const url =
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json` +
+      `?access_token=${MAPBOX_PUBLIC_TOKEN}&limit=1&types=place,locality,region,country`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const name = json?.features?.[0]?.text;
+    return typeof name === "string" && name.trim() ? name.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function DealsMap({
   deals,
   onSelectDeal,
@@ -128,6 +150,9 @@ export default function DealsMap({
   const cameraRef = useRef<Camera>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [alertPin, setAlertPin] = useState<{ name: string; lng: number; lat: number } | null>(null);
+  // Destination name when the active search resolved to a locked pin — drives
+  // the named variant of the locked banner.
+  const [searchLockedName, setSearchLockedName] = useState<string | null>(null);
 
   const { unlocked, locked, unmapped } = useMemo(() => {
     const u: Pin[] = [];
@@ -177,6 +202,7 @@ export default function DealsMap({
   useEffect(() => {
     if (!searchTarget) {
       setAlertPin(null);
+      setSearchLockedName(null);
       return;
     }
     let cancelled = false;
@@ -190,8 +216,15 @@ export default function DealsMap({
       });
       setAlertPin(null);
       setSelectedId(match.deal.id);
+      // Someone who searched a place by name and landed on a locked pin has
+      // told us exactly what they want. The generic "N more deals with
+      // Premium" banner wastes that; name the place instead.
+      setSearchLockedName(
+        locked.some((p) => p.deal.id === match.deal.id) ? match.deal.destination : null
+      );
       return;
     }
+    setSearchLockedName(null);
     // No deal for this place — resolve coords (local table, else geocode)
     // and drop an alert pin the user can tap to request alerts.
     (async () => {
@@ -233,6 +266,26 @@ export default function DealsMap({
         logoEnabled={false}
         attributionEnabled={false}
         onPress={() => setSelectedId(null)}
+        /* Long-press anywhere → drop a pin there and offer alerts for it.
+           Reverse-geocoding gives a real place name; if that fails we still
+           drop the pin with coordinates so the gesture never silently does
+           nothing. This reuses the same alert-pin card the "searched a place
+           we don't serve" flow uses, so there's one upsell surface, not two. */
+        onLongPress={async (feature) => {
+          // GeoJSON Position is number[] — length isn't guaranteed by the
+          // type, so check it rather than asserting a tuple.
+          const coords = feature?.geometry?.coordinates as number[] | undefined;
+          if (!coords || coords.length < 2) return;
+          const [lng, lat] = coords;
+          const name = await reverseGeocode(lng, lat);
+          cameraRef.current?.setCamera({
+            centerCoordinate: [lng, lat],
+            zoomLevel: SEARCH_ZOOM,
+            animationDuration: 700,
+          });
+          setAlertPin({ name: name ?? `${lat.toFixed(2)}, ${lng.toFixed(2)}`, lng, lat });
+          setSelectedId(ALERT_ID);
+        }}
       >
         <Camera
           ref={cameraRef}
@@ -305,12 +358,15 @@ export default function DealsMap({
         )}
       </MapView>
 
-      {/* Locked-count upsell banner. */}
-      {locked.length > 0 && (
+      {/* Locked upsell banner. Names the searched destination when the search
+          landed on a locked pin, otherwise falls back to the overall count. */}
+      {(searchLockedName || locked.length > 0) && (
         <Pressable onPress={onLockedPress} style={[styles.lockedBanner, { top: 12 }]}>
           <Lock size={13} color="#fff" />
-          <Text style={styles.lockedBannerText}>
-            {locked.length} more {locked.length === 1 ? "deal" : "deals"} with Premium
+          <Text style={styles.lockedBannerText} numberOfLines={1}>
+            {searchLockedName
+              ? `All ${searchLockedName} deals locked — unlock`
+              : `${locked.length} more ${locked.length === 1 ? "deal" : "deals"} with Premium`}
           </Text>
           <ArrowRight size={14} color="#fff" />
         </Pressable>

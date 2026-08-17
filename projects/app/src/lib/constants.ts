@@ -9,15 +9,94 @@ export const MAX_SAVES = 5;
  * Premium, 15 = Business, 20 = Premium, ...); Premium-but-not-Business
  * users only ever see the Business pitch, since Premium's moot for them.
  */
-// Cut from every 5 swipes to every 25 on 2026-08-16. At the observed 26.1
-// swipes per active user, an interval of 5 meant 4-5 upsell cards each —
-// and in the Jul 23-Aug 15 window those cards were 81% of all paywall
-// impressions while producing zero CTA taps. That is banner blindness, and
-// the cost isn't just the wasted impressions: a user who has swiped past
-// five upsell cards is trained to swipe past the Book Now banner too.
-// At 25 the average user sees ~1 and heavy users still see them periodically.
-export const UPSELL_CARD_START = 10;
-export const UPSELL_CARD_INTERVAL = 25;
+// Cadence history, because this number has moved twice in one day:
+//   5  — original. At 26.1 swipes per active user that's 4-5 cards each.
+//        Those cards were 81% of all paywall impressions in the Jul 23-Aug 15
+//        window and produced zero CTA taps: pure banner blindness.
+//   25 — cut 5x on 2026-08-16 on the theory that frequency was the problem.
+//   12 — brief intermediate. The card is no longer passive (see
+//        UPSELL_CARD_WAIT_SECONDS below), so the 0-for-75 result no longer
+//        condemns showing it more often — that result measured a card users
+//        could ignore, and this one they can't.
+//   8  — brief, Trevor's call.
+//   12/10/8 cycling — current. See UPSELL_CARD_GAPS.
+//
+// Engagement is the one metric currently working (26.1 swipes/user, up 2.3x),
+// and this taxes it directly. If swipes or saves per active user fall against
+// that baseline, widen the gaps first: it's the cheapest lever here and needs
+// no other changes.
+export const UPSELL_CARD_START = 12;
+
+/**
+ * Gaps between upsell cards, cycled: 12 swipes, then 10, then 8, then back to
+ * 12. Tightening within each cycle leans on the user's own momentum — someone
+ * still swiping after the second card is engaged — while the reset keeps it
+ * from settling into a fixed rhythm users learn to tune out.
+ *
+ * Trigger points are cumulative: 12, 22, 30, then 42, 52, 60, and so on.
+ */
+export const UPSELL_CARD_GAPS = [12, 10, 8] as const;
+
+const UPSELL_CYCLE_LENGTH = UPSELL_CARD_GAPS.reduce<number>((a, b) => a + b, 0); // 30
+
+/** Offsets within one cycle at which a card fires: [12, 22, 30]. */
+const UPSELL_CYCLE_OFFSETS = UPSELL_CARD_GAPS.reduce<number[]>(
+  (acc, gap) => [...acc, (acc[acc.length - 1] ?? 0) + gap],
+  []
+);
+
+/**
+ * Whether a card fires at this lifetime swipe count, and if so which
+ * appearance it is (1-based). The ordinal drives the escalating wait below.
+ */
+export function upsellCardAt(swipeCount: number): { show: boolean; ordinal: number } {
+  if (swipeCount < UPSELL_CYCLE_OFFSETS[0]) return { show: false, ordinal: 0 };
+  const completedCycles = Math.floor((swipeCount - 1) / UPSELL_CYCLE_LENGTH);
+  const posInCycle = swipeCount - completedCycles * UPSELL_CYCLE_LENGTH;
+  const idx = UPSELL_CYCLE_OFFSETS.indexOf(posInCycle);
+  if (idx === -1) return { show: false, ordinal: 0 };
+  return {
+    show: true,
+    ordinal: completedCycles * UPSELL_CARD_GAPS.length + idx + 1,
+  };
+}
+
+/**
+ * Seconds to wait on the Nth upsell card. The first two stay short so the
+ * mechanic introduces itself gently, then it tightens — same logic as the
+ * shrinking gaps, and it only reaches 10s for users who are clearly still
+ * engaged after four cards.
+ */
+/**
+ * Lifetime swipe count at which the one-time travel-assistant card appears.
+ *
+ * 17 sits between upsell cards (12 and 22) on purpose: the assistant card is
+ * the one break in the deck that isn't selling anything to a paying user, and
+ * landing it adjacent to an upsell would colour it as one.
+ */
+export const ASSISTANT_CARD_AT = 17;
+
+export function upsellWaitSeconds(ordinal: number): number {
+  if (ordinal <= 2) return 5;
+  if (ordinal <= 4) return 7;
+  return 10;
+}
+
+/**
+ * Seconds a free user must wait on an upsell card before they can swipe past
+ * it. Upgrading (tap, or swipe right) is never blocked — only dismissal is,
+ * since the whole mechanic is "pay to skip the wait".
+ *
+ * This is a softer restatement of the daily swipe cap removed in the July
+ * rework. That cap was 28% of paywall views and the app made money while it
+ * existed; revenue went to zero within days of the last capped users
+ * updating. A few seconds recreates the "blocked from what I want" moment
+ * that made the cap convert, without ending the session the way a hard daily
+ * limit did.
+ *
+ * Keep this short. The failure mode isn't annoyance, it's app-close.
+ */
+export const UPSELL_CARD_WAIT_SECONDS = 5;
 
 /**
  * Cloud Function URLs.

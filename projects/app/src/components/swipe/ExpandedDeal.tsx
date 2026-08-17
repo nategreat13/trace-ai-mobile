@@ -14,7 +14,15 @@ import {
   AppState,
 } from "react-native";
 import ShareNamePromptModal from "../ShareNamePromptModal";
-import Reanimated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
+import Reanimated, {
+  FadeIn,
+  FadeInDown,
+  FadeOut,
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  runOnJS,
+} from "react-native-reanimated";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -28,6 +36,7 @@ import {
   Share2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Deal } from "@trace/shared";
@@ -43,6 +52,13 @@ import PriceGauge from "./PriceGauge";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 const HERO_HEIGHT = SCREEN_HEIGHT * 0.65;
+
+// Swipe-to-dismiss tuning. ACTIVATE is how far right the finger must travel
+// before the pan takes over from the ScrollView; THRESHOLD is how far it must
+// end up to actually close.
+const DISMISS_ACTIVATE_X = 18;
+const DISMISS_THRESHOLD_X = SCREEN_WIDTH * 0.3;
+const DISMISS_VELOCITY = 700;
 
 interface ExpandedDealProps {
   deal: Deal;
@@ -204,10 +220,104 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isPremium } = useAuth();
+  const { isPremium, profile } = useAuth();
+
+  // Personalization for the locked-guide panel. Both degrade to null rather
+  // than to a placeholder — a guide pitch that says "your undefined travel
+  // style" is worse than the generic line.
+  const guideFirstName = profile?.firstName?.trim() || null;
+  const guideStylePhrase = React.useMemo(() => {
+    // dealTypes are the travel types picked during onboarding, and they're
+    // the same field the guide's "For You" section actually filters on — so
+    // naming them here describes real behavior rather than flattering the user.
+    const types = (profile?.dealTypes ?? [])
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
+    if (types.length === 0) return null;
+    if (types.length === 1) return types[0];
+    if (types.length === 2) return `${types[0]} and ${types[1]}`;
+    return `${types[0]}, ${types[1]} and ${types[2]}`;
+  }, [profile?.dealTypes]);
+
+  /**
+   * Body copy for the locked guide panel.
+   *
+   * Cycles through several phrasings rather than showing one fixed sentence,
+   * because a user who opens six deals in a session sees this six times — an
+   * identical sentence each time reads as boilerplate, which undercuts the
+   * "written for you" claim it's making. Keyed off the destination so a given
+   * place always gets the same line (stable across re-renders and re-opens,
+   * and varied across the deals in a session).
+   *
+   * Every variant that mentions tailoring is backed by real behavior: the
+   * guide's "For You" section filters on the user's onboarding dealTypes.
+   */
+  const guideBody = React.useMemo(() => {
+    const dest = deal.destination;
+    const style = guideStylePhrase;
+    const variants = style
+      ? [
+          `We're putting together a full ${dest} guide built around your ${style} travel style — neighborhoods, food, and what's actually worth your time.`,
+          `Your ${dest} guide is written around ${style} travel: where to stay, where to eat, and what to skip.`,
+          `A complete ${dest} guide, picked for ${style} trips — neighborhoods, local food, and the things worth planning around.`,
+          `Everything you'd want before landing in ${dest}, filtered down to your ${style} preferences.`,
+        ]
+      : [
+          `We're putting together a full ${dest} guide — neighborhoods, food, and what's actually worth your time.`,
+          `Your ${dest} guide covers where to stay, where to eat, and what to skip.`,
+          `A complete ${dest} guide: neighborhoods, local food, and the things worth planning around.`,
+          `Everything you'd want to know before landing in ${dest}, in one place.`,
+        ];
+    // Cheap stable hash of the destination — same place, same line.
+    let h = 0;
+    for (let i = 0; i < dest.length; i++) h = (h * 31 + dest.charCodeAt(i)) | 0;
+    return variants[Math.abs(h) % variants.length];
+  }, [deal.destination, guideStylePhrase]);
 
   const [saved, setSaved] = useState(false);
   const saveScale = useRef(new Animated.Value(1)).current;
+
+  /**
+   * Swipe either direction to close, alongside the X button.
+   *
+   * `activeOffsetX([-X, X])` with `failOffsetY` is what lets this coexist with
+   * the vertical ScrollView underneath: the pan only claims the gesture after
+   * clear horizontal travel, and yields outright once the finger has moved
+   * vertically, so ordinary scrolling never trips it.
+   *
+   * Both directions dismiss because this screen is reached by tapping a card
+   * in a left/right swipe deck — the hand is already in that motion, and
+   * users reflexively swipe whichever way is comfortable to get back.
+   */
+  const dismissX = useSharedValue(0);
+  const dismissStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dismissX.value }],
+  }));
+  const dismissGesture = Gesture.Pan()
+    .activeOffsetX([-DISMISS_ACTIVATE_X, DISMISS_ACTIVATE_X])
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => {
+      dismissX.value = e.translationX;
+    })
+    .onEnd((e) => {
+      const past = Math.abs(e.translationX) > DISMISS_THRESHOLD_X;
+      const fast = Math.abs(e.velocityX) > DISMISS_VELOCITY;
+      if (past || fast) {
+        // Exit the way the finger was already travelling.
+        const dir = e.translationX < 0 ? -SCREEN_WIDTH : SCREEN_WIDTH;
+        dismissX.value = withTiming(dir, { duration: 180 }, () => {
+          runOnJS(onClose)();
+        });
+        return;
+      }
+      dismissX.value = withTiming(0, { duration: 180 });
+    });
+
+  // Reset the offset whenever the sheet reopens — otherwise a dismissed card
+  // reopens already translated off-screen.
+  useEffect(() => {
+    if (visible) dismissX.value = 0;
+  }, [visible, dismissX]);
 
   // Book Now is the single highest real purchase-intent signal in the app —
   // someone actively trying to buy a flight — and previously got zero
@@ -329,9 +439,10 @@ export default function ExpandedDeal({
       onRequestClose={onClose}
     >
       <StatusBar barStyle="light-content" />
+      <GestureDetector gesture={dismissGesture}>
       <Reanimated.View
         entering={FadeIn.duration(300)}
-        style={[styles.container, { backgroundColor: theme.background }]}
+        style={[styles.container, { backgroundColor: theme.background }, dismissStyle]}
       >
         <ScrollView
           style={styles.scrollView}
@@ -421,7 +532,10 @@ export default function ExpandedDeal({
                   style={[styles.tabPill, activeTab === tab && { backgroundColor: theme.card }]}
                 >
                   <Text style={[styles.tabPillText, { color: activeTab === tab ? theme.foreground : theme.mutedForeground }]}>
-                    {tab === "flight" ? "✈️  Flight" : "🗺️  Destination"}
+                    {tab === "flight"
+                      ? "✈️  Flight"
+                      : `🗺️  ${deal.destination_code ? `Your ${deal.destination_code} Guide` : "Travel Guide"}`}
+                    {tab === "destination" && !isPremium ? "  🔒" : ""}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -429,7 +543,51 @@ export default function ExpandedDeal({
           </View>
 
           {activeTab === "destination" ? (
-            <DealDestinationTab deal={deal} userProfile={userProfile} />
+            isPremium ? (
+              <DealDestinationTab deal={deal} userProfile={userProfile} />
+            ) : (
+              /* Locked destination guide.
+
+                 Deliberately does NOT render DealDestinationTab. That
+                 component calls useDestinationInfo, which fetches (and on a
+                 cache miss, generates) the guide — so rendering it for a user
+                 who can't read it means paying to produce content nobody sees.
+
+                 The tailoring claim below is real, not marketing: the guide's
+                 "For You" section is built by getForYouItems(info, dealTypes)
+                 from the travel types the user picked during onboarding. Keep
+                 that true if the personalization ever changes. */
+              <View style={styles.lockedTabPanel}>
+                <Text style={styles.lockedTabEmoji}>🗺️</Text>
+                <Text style={[styles.lockedTabTitle, { color: theme.foreground }]}>
+                  {guideFirstName
+                    ? `${guideFirstName}, your ${deal.destination} guide is ready`
+                    : `Your ${deal.destination} guide is ready`}
+                </Text>
+                <Text style={[styles.lockedTabBody, { color: theme.mutedForeground }]}>
+                  {guideBody}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    onClose();
+                    navigation.navigate("Paywall", { entryPoint: "deal_destination_locked" });
+                  }}
+                  activeOpacity={0.85}
+                  style={styles.lockedTabCta}
+                >
+                  <LinearGradient
+                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.lockedTabCtaInner}
+                  >
+                    <Text style={styles.lockedTabCtaText}>
+                      Unlock Your {deal.destination} Guide
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            )
           ) : (
             <>
           {/* ── Content ───────────────────────────────────────────────── */}
@@ -576,7 +734,13 @@ export default function ExpandedDeal({
             )}
 
             {/* Weather */}
-            <WeatherPreview deal={deal} />
+            <WeatherPreview
+              deal={deal}
+              onUpsell={() => {
+                onClose();
+                navigation.navigate("Paywall", { entryPoint: "weather_pack_locked" });
+              }}
+            />
 
             {/* Personal AI Fit */}
             {!!userProfile && !!fitData && (() => {
@@ -605,6 +769,35 @@ export default function ExpandedDeal({
                         : <Text key={i}>{seg.text}</Text>
                     )}
                   </Reanimated.Text>
+
+                  {/* "Show me more like this" — only on a Strong Match, and
+                      only for free users.
+
+                      Gating on green is the point. On a mixed or good match
+                      the offer is asking them to pay for more of something
+                      they're lukewarm on, which reads as a nag; on a strong
+                      match we've just told them this one fits, so "there are
+                      more like it, they're locked" is the natural next
+                      sentence rather than an interruption. */}
+                  {!isPremium && fitData.level.color === "green" && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        onClose();
+                        navigation.navigate("Paywall", {
+                          entryPoint: "ai_fit_strong_match",
+                          lockedStat: `${deal.destination} is a strong match for how you travel`,
+                        });
+                      }}
+                      activeOpacity={0.85}
+                      style={[styles.fitUpsellBtn, { borderColor: theme.border }]}
+                    >
+                      <Sparkles size={13} color={colors.brand.traceRed} />
+                      <Text style={[styles.fitUpsellText, { color: colors.brand.traceRed }]}>
+                        See every strong match for you
+                      </Text>
+                      <ExternalLink size={12} color={colors.brand.traceRed} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               );
             })()}
@@ -799,6 +992,7 @@ export default function ExpandedDeal({
           }}
         />
       </Reanimated.View>
+      </GestureDetector>
     </Modal>
   );
 }
@@ -914,6 +1108,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "rgba(255,255,255,0.75)",
+  },
+
+  fitUpsellBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  fitUpsellText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  // ── Locked destination tab ────────────────────────────────────────────────
+  lockedTabPanel: {
+    paddingHorizontal: 28,
+    paddingTop: 40,
+    paddingBottom: 48,
+    alignItems: "center",
+  },
+  lockedTabEmoji: {
+    fontSize: 40,
+    marginBottom: 14,
+  },
+  lockedTabTitle: {
+    fontSize: 19,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  lockedTabBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: "center",
+    marginBottom: 22,
+  },
+  lockedTabCta: {
+    alignSelf: "stretch",
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  lockedTabCtaInner: {
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  lockedTabCtaText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "800",
   },
 
   // ── Tab row ───────────────────────────────────────────────────────────────

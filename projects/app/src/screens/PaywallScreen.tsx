@@ -59,6 +59,10 @@ export default function PaywallScreen() {
   const tierParam = route.params?.tier ?? "premium";
   const personalizedSub = route.params?.personalizedSub ?? null;
   const lockedStat = route.params?.lockedStat ?? null;
+  // The post-onboarding paywall is the one view the user didn't ask for. It
+  // gets a de-emphasized (never hidden) close affordance — see the close
+  // button below.
+  const isForcedView = entryPoint === "post_onboarding";
   const isBusinessPaywall = tierParam === "business";
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -337,6 +341,61 @@ export default function PaywallScreen() {
           headline: "Get alerted if this\nprice comes back",
           sub: null,
         };
+      // From the in-deck assistant card — they were about to name a place.
+      case "assistant_card":
+        return {
+          eyebrow: "TELL US WHERE",
+          headline: "Name it. We'll\nwatch it for you.",
+          sub: null,
+        };
+      // Tapped the blurred packing/climate rows on a deal.
+      case "weather_pack_locked":
+        return {
+          eyebrow: "TRIP PREP",
+          headline: "Know what to pack\nbefore you go",
+          sub: null,
+        };
+      // Came from a Strong Match on a deal they were already reading. The
+      // pitch is more of the same, not the feature list.
+      case "ai_fit_strong_match":
+        return {
+          eyebrow: "STRONG MATCH",
+          headline: "See every deal\nbuilt for you",
+          sub: null,
+        };
+      // Reached for filters on the Explore list. They're trying to narrow to
+      // what they actually want, so name that rather than the feature.
+      case "explore_filters_locked":
+        return {
+          eyebrow: "FILTERS",
+          headline: "Search for exactly\nwhat you want",
+          sub: null,
+        };
+      // Reached for search or sort on their own saved list. They already have
+      // a collection worth organising, so pitch control of it, not discovery.
+      case "saved_search_locked":
+      case "saved_sort_locked":
+        return {
+          eyebrow: "YOUR SAVED TRIPS",
+          headline: "Find any trip\nyou've saved",
+          sub: null,
+        };
+      // Tapped the locked Destination tab on a deal — they want the guide for
+      // that specific place, so lead with the guide rather than alerts.
+      case "deal_destination_locked":
+        return {
+          eyebrow: "DESTINATION GUIDES",
+          headline: "Know where to stay\nbefore you book",
+          sub: null,
+        };
+      // Forced view after onboarding. They haven't used the app yet, so
+      // there's no earned context to lean on — lead with the promise.
+      case "post_onboarding":
+        return {
+          eyebrow: "START FREE",
+          headline: "Cheap flights find\nyou from now on",
+          sub: null,
+        };
       default:
         return {
           eyebrow: "TRACE PREMIUM",
@@ -371,9 +430,22 @@ export default function PaywallScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Close button */}
+      {/* Close button.
+
+          On the forced post-onboarding view this is deliberately de-emphasized
+          — no filled chip, muted glyph — so the offer reads as the primary
+          action rather than something to dismiss reflexively.
+
+          What it deliberately is NOT: hidden, delayed, shrunk, or moved off
+          the safe area. Apple rejects subscription screens without an obvious
+          way out (a common 3.1.2 / HIG rejection), so the tap target stays a
+          full 44pt via hitSlop and the glyph keeps real contrast. Lower
+          visual weight is fine; hard to leave is not. */}
       <TouchableOpacity
         onPress={() => navigation.goBack()}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
         style={{
           position: "absolute",
           top: 56,
@@ -382,17 +454,32 @@ export default function PaywallScreen() {
           width: 36,
           height: 36,
           borderRadius: 18,
-          backgroundColor: theme.muted,
+          backgroundColor: isForcedView ? "transparent" : theme.muted,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <X color={theme.foreground} size={20} />
+        <X color={isForcedView ? theme.mutedForeground : theme.foreground} size={20} />
       </TouchableOpacity>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }} scrollEnabled={false}>
-        {/* Compact header */}
-        <View style={{ paddingHorizontal: 24, paddingTop: 56, paddingBottom: 20 }}>
+      {/* Sizing intent: everything fits on one screen with no scrolling, so
+          the CTA is always in view. The spacing below is tuned for that.
+
+          Scrolling is nonetheless ENABLED, deliberately. It was hard-disabled
+          before, and when this screen gained the locked-stat row and two more
+          feature lines the last row and part of the CTA went off the bottom
+          with no way to reach them — an unreachable buy button on the one
+          screen that takes money. Scroll costs nothing when content fits (a
+          ScrollView only scrolls on overflow) and saves small devices and
+          large accessibility text sizes when it doesn't. Keep it enabled. */}
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 140 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Compact header. Top padding clears the absolutely-positioned close
+            button at top:56 — don't drop it below ~52 or the eyebrow slides
+            under the X. */}
+        <View style={{ paddingHorizontal: 24, paddingTop: 54, paddingBottom: 14 }}>
           <Text style={{ fontSize: 14, fontWeight: "700", color: accent, marginBottom: 6 }}>
             {heroContent.eyebrow}
           </Text>
@@ -518,14 +605,14 @@ export default function PaywallScreen() {
             static bullet, and it's the user's own situation rather than a
             generic claim. */}
         {lockedStat && (
-          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
+          <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
             <View
               style={{
                 backgroundColor: accent + "14",
                 borderColor: accent + "33",
                 borderWidth: 1,
                 borderRadius: 12,
-                paddingVertical: 12,
+                paddingVertical: 10,
                 paddingHorizontal: 14,
                 flexDirection: "row",
                 alignItems: "center",
@@ -541,7 +628,7 @@ export default function PaywallScreen() {
         )}
 
         {/* Features */}
-        <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
+        <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
           <Text
             style={{
               fontSize: 12,
@@ -570,21 +657,40 @@ export default function PaywallScreen() {
             //   - search: ExploreScreen listData() locks all filtered results
             //   - saves:  ExploreScreen handleSave() caps free at 3
             //   - alerts: 4-hour scheduled matching (shipped Aug 14)
-            let features = [
-              { icon: Bell, title: "Price-drop alerts on any route, checked every 4 hours" },
-              { icon: Map, title: "Every destination on the map — free shows 5" },
+            // Alerts is deliberately first. There used to be a reorder block
+            // here that hoisted it for alert-driven entry points by matching
+            // on `title.startsWith("Deal alerts")` — when the copy above was
+            // rewritten, that string stopped matching, `.find()` returned
+            // undefined, and a non-null assertion pushed `undefined` into the
+            // array. Every alert-entry paywall then crashed on `f.icon`.
+            // Ordering the source array correctly removes the failure mode
+            // rather than re-fixing the string.
+            // Named for the user's own airport where we have it — "every SLC
+            // deal" is a concrete promise in a way "any route" isn't.
+            //
+            // ACCURACY NOTE: "in real time" overstates the mechanism. Alerts
+            // run on a 4-hour scheduled match (runDealAlertMatching), so the
+            // real worst case is a few hours, not real time. Trevor was told
+            // this and chose the wording deliberately on 2026-08-16. Leaving
+            // the note so nobody "fixes" the schedule to match the copy, and
+            // so it's easy to find if App Review ever asks — subscription
+            // descriptions are covered by guideline 3.1.2.
+            const origin = profile?.homeAirport?.trim();
+            return [
+              {
+                icon: Bell,
+                title: origin
+                  ? `Every ${origin} deal, in real time`
+                  : "Every deal on your route, in real time",
+              },
+              { icon: Map, title: "Every destination on the map, unlocked" },
               { icon: Search, title: "Search and filter the full deal feed" },
-              { icon: Bookmark, title: "Unlimited saved trips — free stops at 3" },
+              { icon: Bookmark, title: "Save unlimited trips" },
             ];
-            if (entryPoint === "explore_upgrade" || entryPoint === "deal_alert_match" || entryPoint === "swipe_upsell_premium") {
-              const alerts = features.find((f) => f.title.startsWith("Deal alerts"))!;
-              features = [alerts, ...features.filter((f) => !f.title.startsWith("Deal alerts"))];
-            }
-            return features;
           })().map((f, i) => (
             <View
               key={i}
-              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 6 }}
             >
               <f.icon color={accent} size={18} />
               <Text style={{ fontSize: 15, color: theme.foreground, flex: 1 }}>

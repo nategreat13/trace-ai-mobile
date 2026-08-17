@@ -24,14 +24,30 @@ export default function TabNavigator() {
   const { profile } = useAuth();
   const isBusinessUser = profile?.subscriptionStatus === "business";
 
-  // Forced trial exposure DISABLED (v1.3.3 cohort): opening the paywall
-  // immediately after onboarding put the annual offer in front of users
-  // before they'd swiped a single deal — 100% saw it, but every purchase
-  // attempt was canceled at Apple's sheet and core swipe/save engagement
-  // collapsed (0 saves). Trial exposure now happens only after the user
-  // hits the 5-swipe daily limit (auto-opens the paywall in SwipeDeckScreen),
-  // i.e. after they've felt the value. Pass `true` to re-enable.
-  usePostOnboardingPaywall(false);
+  // Forced trial exposure RE-ENABLED 2026-08-16.
+  //
+  // History, because this flag has been flipped before and the reasoning
+  // matters: it was disabled after the v1.3.3 cohort, where opening the
+  // paywall immediately after onboarding put the ANNUAL offer in front of
+  // users before they'd swiped a single deal — 100% saw it, every purchase
+  // attempt was canceled at Apple's sheet, and swipe/save engagement
+  // collapsed to 0 saves. The comment here then said trial exposure would
+  // instead happen when a user hit the 5-swipe daily limit.
+  //
+  // That replacement no longer exists. The daily swipe cap was removed in
+  // the July monetization rework, which silently deleted the only remaining
+  // forced trial exposure in the app — and revenue went to zero within days
+  // of the last capped users updating (0 purchases, 0 trials, n=172).
+  //
+  // Two things differ from the v1.3.3 attempt: the paywall now defaults to
+  // the MONTHLY offer rather than annual (the annual sticker price is the
+  // leading suspect for those canceled sheets), and it now names four real
+  // limits instead of two vague ones.
+  //
+  // The v1.3.3 engagement collapse is still the risk to watch. If saves per
+  // active user drop against the current 7.6 baseline, this is the first
+  // thing to turn back off — it's a one-word change.
+  usePostOnboardingPaywall(true);
 
   // Push soft prompt fires once the user has swiped a few deals or saved
   // one, whichever comes first — gating it on saves alone only ever asked

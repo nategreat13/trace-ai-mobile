@@ -20,6 +20,10 @@ const TYPICAL_POSITION = 0.85;
 // Matches the existing "Hot Deal" tier (>=40%) landing solidly in the green,
 // "Good Deal" (>=20%) landing in the amber, and anything under that reading
 // close to typical.
+
+// Minimum breathing room between the "This deal" label and the "Typical"
+// label when the deal marker sits close to the typical anchor.
+const LABEL_MIN_GAP = 10;
 const MAX_SCALE_DISCOUNT = 80;
 
 export default function PriceGauge({
@@ -42,8 +46,20 @@ export default function PriceGauge({
   // and get worse the closer dealPosition is to the middle/right of the bar.
   const [rowWidth, setRowWidth] = useState(0);
   const [labelWidth, setLabelWidth] = useState(0);
+  const [typicalWidth, setTypicalWidth] = useState(0);
   const measured = rowWidth > 0 && labelWidth > 0;
-  const labelLeft = measured ? dealPosition * rowWidth - labelWidth / 2 : 0;
+
+  // Centering alone isn't enough. "Typical · $X" is pinned to right:0, and on
+  // a small discount the deal marker sits close to it — the centered label
+  // then runs straight underneath the typical label and the two render on top
+  // of each other. Clamp into the space actually available: never past the
+  // left edge, never into the typical label's box (plus a gap).
+  const rawLeft = measured ? dealPosition * rowWidth - labelWidth / 2 : 0;
+  const maxLeft = Math.max(
+    0,
+    rowWidth - labelWidth - (hasDiscount ? typicalWidth + LABEL_MIN_GAP : 0)
+  );
+  const labelLeft = measured ? Math.max(0, Math.min(rawLeft, maxLeft)) : 0;
 
   return (
     <View style={styles.container}>
@@ -77,7 +93,11 @@ export default function PriceGauge({
           This deal · ${price}
         </Text>
         {hasDiscount && (
-          <Text style={[styles.labelTextMuted, { color: mutedForeground }]} numberOfLines={1}>
+          <Text
+            style={[styles.labelTextMuted, { color: mutedForeground }]}
+            numberOfLines={1}
+            onLayout={(e: LayoutChangeEvent) => setTypicalWidth(e.nativeEvent.layout.width)}
+          >
             Typical · ${originalPrice}
           </Text>
         )}

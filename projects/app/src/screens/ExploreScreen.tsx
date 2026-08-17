@@ -23,7 +23,8 @@ import Animated, {
 
 const SCREEN_H = Dimensions.get("window").height;
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
 import { Search, SlidersHorizontal, Bookmark, BookmarkCheck, X, Bell, BellRing, List, Map as MapIcon } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
@@ -42,7 +43,7 @@ import { logEvent } from "../lib/analytics";
 import { AIRPORTS } from "../components/onboarding/AirportInput";
 import type { Deal } from "@trace/shared";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { RootStackParamList } from "../navigation/types";
+import type { RootStackParamList, TabParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -68,6 +69,17 @@ export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Pre-filled destination from the in-deck assistant card. Applied once per
+  // arrival and then cleared from the route, so navigating back to Explore
+  // later doesn't silently re-apply a search the user has since moved on from.
+  const route = useRoute<RouteProp<TabParamList, "Explore">>();
+  const incomingSearch = route.params?.search;
+  useEffect(() => {
+    if (!incomingSearch) return;
+    setSearchTerm(incomingSearch);
+    navigation.setParams({ search: undefined } as never);
+  }, [incomingSearch]);
   const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
   // Map is home. A floating "List" pill drops into the list view; from the
   // list, tapping "Map" (or swiping up on the bottom handle) returns to the map.
@@ -362,7 +374,19 @@ export default function ExploreScreen() {
 
   const handleCreateAlert = async (dest: { label: string; code?: string }) => {
     if (!user) return;
-    if (!isPremium) { navigation.navigate("Paywall", { entryPoint: "explore_create_alert", lockedStat }); return; }
+    if (!isPremium) {
+      // Searching a destination we have nothing for is the strongest intent
+      // signal in the app — stronger than Book Now, because the user has just
+      // named the place unprompted rather than reacting to what we showed
+      // them. Carry that destination into the paywall so the offer is about
+      // their trip instead of about the feature. The 4-hour cadence is real
+      // (deal alerts moved to a 4-hour schedule on Aug 14).
+      navigation.navigate("Paywall", {
+        entryPoint: "explore_create_alert",
+        personalizedSub: `We check ${dest.label} every 4 hours. Turn on alerts and you'll know the moment a fare drops — before it's gone.`,
+      });
+      return;
+    }
     await createDealAlert({
       userId: user.uid,
       destination: dest.label,
@@ -785,8 +809,20 @@ export default function ExploreScreen() {
               </TouchableOpacity>
             )}
           </View>
+          {/* Filters are premium. Free users get 5 curated picks, and letting
+              them filter that set produced the worst of both worlds — a
+              control that appears to work while every result it can return is
+              locked anyway. Opening the paywall instead states the trade
+              honestly at the moment they reach for it. */}
           <TouchableOpacity
-            onPress={() => setShowFilters(true)}
+            onPress={() =>
+              isPremium
+                ? setShowFilters(true)
+                : navigation.navigate("Paywall", {
+                    entryPoint: "explore_filters_locked",
+                    lockedStat,
+                  })
+            }
             style={{
               width: 48,
               height: 48,
@@ -800,6 +836,9 @@ export default function ExploreScreen() {
               color={hasActiveFilters ? "#fff" : theme.mutedForeground}
               size={20}
             />
+            {!isPremium && (
+              <Text style={{ position: "absolute", top: 4, right: 4, fontSize: 9 }}>🔒</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -1120,10 +1159,12 @@ export default function ExploreScreen() {
                 <View style={{ alignItems: "center", marginBottom: 24 }}>
                   <Text style={{ fontSize: 40, marginBottom: 12 }}>✈️</Text>
                   <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, marginBottom: 6 }}>
-                    No deals for "{pendingAlertDest.label}" right now
+                    No deals to {pendingAlertDest.label} right now
                   </Text>
-                  <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center" }}>
-                    Get notified the moment one pops up on our radar
+                  <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 19 }}>
+                    {isPremium
+                      ? "We'll check every 4 hours and ping you the moment the price drops."
+                      : `Premium checks ${pendingAlertDest.label} every 4 hours and alerts you the moment a fare drops.`}
                   </Text>
                 </View>
                 <LinearGradient
@@ -1137,7 +1178,9 @@ export default function ExploreScreen() {
                   >
                     <BellRing size={16} color="#fff" />
                     <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
-                      {isPremium ? `Alert me for ${pendingAlertDest.label}` : `Upgrade to get alerts${pendingAlertDest.code ? ` · ${pendingAlertDest.code}` : ""}`}
+                      {isPremium
+                        ? `Alert me for ${pendingAlertDest.label}`
+                        : `Alert me when ${pendingAlertDest.label} drops`}
                     </Text>
                   </TouchableOpacity>
                 </LinearGradient>
@@ -1175,10 +1218,12 @@ export default function ExploreScreen() {
               <View style={{ alignItems: "center", marginBottom: 24 }}>
                 <Text style={{ fontSize: 40, marginBottom: 12 }}>✈️</Text>
                 <Text style={{ fontSize: 17, fontWeight: "700", color: theme.foreground, marginBottom: 6 }}>
-                  No deals for "{searchTerm}" right now
+                  No deals to {searchTerm} right now
                 </Text>
-                <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center" }}>
-                  Get notified the moment one pops up on our radar
+                <Text style={{ fontSize: 13, color: theme.mutedForeground, textAlign: "center", lineHeight: 19 }}>
+                  {isPremium
+                    ? "Pick a destination below and we'll watch it for you."
+                    : "Pick a destination below — Premium checks it every 4 hours and alerts you the moment a fare drops."}
                 </Text>
               </View>
 

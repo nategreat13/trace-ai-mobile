@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, useColorScheme, TouchableOpacity } from "react-
 import { Cloud, Sun, CloudRain, CloudSnow, ChevronDown, ChevronUp } from "lucide-react-native";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
+import { useAuth } from "../../context/AuthContext";
 
 // ── Weather data by region and month ────────────────────────────────────────
 interface WeatherEntry {
@@ -217,9 +218,12 @@ function WeatherIcon({ type }: { type: string }) {
 // ── Component ───────────────────────────────────────────────────────────────
 interface WeatherPreviewProps {
   deal: Deal;
+  /** Opens the paywall when a free user taps the locked packing/climate rows. */
+  onUpsell?: () => void;
 }
 
-export default function WeatherPreview({ deal }: WeatherPreviewProps) {
+export default function WeatherPreview({ deal, onUpsell }: WeatherPreviewProps) {
+  const { isPremium } = useAuth();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const [expanded, setExpanded] = useState(false);
@@ -299,16 +303,55 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
             );
           })()}
 
-          {/* What to pack */}
-          <View style={[styles.expandedRow, { borderTopColor: dividerColor }]}>
-            <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>What to pack</Text>
-            <Text style={[styles.expandedValue, { color: theme.foreground }]}>{packingTip}</Text>
-          </View>
+          {/* What to pack + Local climate — premium.
 
-          {/* Local climate */}
-          <View style={[styles.expandedRow, { borderTopColor: dividerColor }]}>
-            <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>Local climate</Text>
-            <Text style={[styles.expandedValue, { color: theme.foreground }]}>{data.details}</Text>
+              Free users see the rows with the real text rendered underneath a
+              scrim rather than replaced by a placeholder: the point is that
+              there is genuinely something specific there, which a "locked"
+              stub doesn't convey. No expo-blur here — it's a native module
+              and would force a runtimeVersion bump, so this is a layered
+              scrim, which reads the same at this text size. */}
+          <View style={{ position: "relative" }}>
+            <View
+              style={[styles.expandedRow, { borderTopColor: dividerColor }]}
+              pointerEvents={isPremium ? "auto" : "none"}
+            >
+              <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>What to pack</Text>
+              <Text style={[styles.expandedValue, { color: theme.foreground }]}>{packingTip}</Text>
+            </View>
+
+            <View
+              style={[styles.expandedRow, { borderTopColor: dividerColor }]}
+              pointerEvents={isPremium ? "auto" : "none"}
+            >
+              <Text style={[styles.expandedLabel, { color: theme.mutedForeground }]}>Local climate</Text>
+              <Text style={[styles.expandedValue, { color: theme.foreground }]}>{data.details}</Text>
+            </View>
+
+            {!isPremium && (
+              <>
+                <View
+                  style={[
+                    StyleSheet.absoluteFillObject,
+                    { backgroundColor: scheme === "dark" ? "rgba(16,16,22,0.86)" : "rgba(255,255,255,0.88)" },
+                  ]}
+                  pointerEvents="none"
+                />
+                <TouchableOpacity
+                  onPress={onUpsell}
+                  activeOpacity={0.85}
+                  style={[StyleSheet.absoluteFillObject, styles.weatherLockOverlay]}
+                >
+                  <Text style={styles.weatherLockEmoji}>🧳</Text>
+                  <Text style={[styles.weatherLockText, { color: theme.foreground }]}>
+                    Packing list &amp; climate
+                  </Text>
+                  <Text style={[styles.weatherLockCta, { color: colors.brand.traceRed }]}>
+                    Unlock with Premium →
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
         </View>
@@ -318,6 +361,22 @@ export default function WeatherPreview({ deal }: WeatherPreviewProps) {
 }
 
 const styles = StyleSheet.create({
+  weatherLockOverlay: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+  },
+  weatherLockEmoji: {
+    fontSize: 20,
+  },
+  weatherLockText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  weatherLockCta: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
   container: {
     borderRadius: 16,
     padding: 16,
