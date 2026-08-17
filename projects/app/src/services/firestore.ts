@@ -233,7 +233,34 @@ export function subscribeToSavedDeals(
 
 // ──── Deal Alerts ────
 
+/**
+ * Create a deal alert, or return the existing one for the same destination.
+ *
+ * This used to be a bare addDoc, which let a user stack any number of alerts
+ * on one destination just by tapping "Alert me for X" more than once. The
+ * matcher sends one push per alert document, so those duplicates surfaced as
+ * several identical notifications arriving in the same second.
+ *
+ * Matching is on destination + month, compared case-insensitively, because
+ * that pair is what the matcher itself keys on.
+ */
 export async function createDealAlert(data: Omit<DealAlert, "id" | "createdAt">): Promise<string> {
+  const existing = await getDocs(
+    query(envCollection("dealAlerts"), where("userId", "==", data.userId))
+  );
+  const wantDest = (data.destination ?? "").trim().toLowerCase();
+  const wantMonth = ((data as { month?: string | null }).month ?? "")
+    .toString()
+    .trim()
+    .toLowerCase();
+  const dupe = existing.docs.find((d) => {
+    const v = d.data() as { destination?: string; month?: string | null };
+    const haveDest = (v.destination ?? "").trim().toLowerCase();
+    const haveMonth = (v.month ?? "").toString().trim().toLowerCase();
+    return haveDest === wantDest && haveMonth === wantMonth;
+  });
+  if (dupe) return dupe.id;
+
   const ref = await addDoc(envCollection("dealAlerts"), stripUndefined({
     ...data,
     createdAt: Timestamp.now(),

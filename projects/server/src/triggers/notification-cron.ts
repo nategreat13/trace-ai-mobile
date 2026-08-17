@@ -879,6 +879,7 @@ async function runDealAlertMatching() {
   };
 
   let sent = 0;
+  let suppressed = 0;
   for (const [userId, alerts] of alertsByUser) {
     const profileSnap = await colRef("userProfiles")
       .where("userId", "==", userId)
@@ -898,8 +899,22 @@ async function runDealAlertMatching() {
 
     const deals = await fetchDeals(profile.homeAirport);
 
+    // One push per destination+month, however many alert docs back it.
+    //
+    // createDealAlert was a bare addDoc with no uniqueness check, so tapping
+    // "Alert me for X" twice created two documents — and this loop sent one
+    // push per document. A user with five Saint Lucia alerts got five
+    // identical notifications in the same run, at the same second.
+    //
+    // The client now refuses to create the duplicate, but that does nothing
+    // for the duplicates already in production, so the guard has to live
+    // here too. Every matching doc still gets its status and snapshot
+    // updated — only the push is collapsed — so the alerts tab stays correct.
+    const notifiedKeys = new Set<string>();
+
     for (const alert of alerts) {
       const alertDest = alert.destination.toLowerCase();
+      const dedupeKey = `${alertDest}|${alert.month?.toLowerCase() ?? ""}`;
       const match = deals.find((d) => {
         const dealDest = (d.destination ?? "").toLowerCase();
         const destMatch = dealDest.includes(alertDest) || alertDest.includes(dealDest);
@@ -912,11 +927,17 @@ async function runDealAlertMatching() {
 
       const matchedPrice = match.dealPriceUSD ?? match.price ?? 0;
       const matchedDiscount = Math.round(match.percentOff ?? match.discount_pct ?? 0);
-      await sendForTemplate(userId, "deal_alert_match", {
-        destination: alert.destination,
-        price: matchedPrice,
-        discount: matchedDiscount,
-      }, profile.notificationPreferences);
+      if (!notifiedKeys.has(dedupeKey)) {
+        notifiedKeys.add(dedupeKey);
+        await sendForTemplate(userId, "deal_alert_match", {
+          destination: alert.destination,
+          price: matchedPrice,
+          discount: matchedDiscount,
+        }, profile.notificationPreferences);
+        sent++;
+      } else {
+        suppressed++;
+      }
       // Store matched deal snapshot so the app can show a tappable deal card.
       await colRef("dealAlerts").doc(alert.id).update({
         status: "matched",
@@ -933,10 +954,11 @@ async function runDealAlertMatching() {
           destinationCode: (match as any).destination_code ?? null,
         },
       });
-      sent++;
     }
   }
-  console.log(`[cron] deal_alert_match: sent ${sent} notifications, scanned ${alertsSnap.size} active alerts`);
+  console.log(
+    `[cron] deal_alert_match: sent ${sent} notifications (${suppressed} duplicate-destination pushes suppressed), scanned ${alertsSnap.size} active alerts`
+  );
 }
 
 export const dealAlertMatchTrigger = onSchedule(
