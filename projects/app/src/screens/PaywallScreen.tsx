@@ -13,7 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
-import { X, Bell, Users, Crown, Clock, Sparkles, Map, Search, Bookmark } from "lucide-react-native";
+import { X, Bell, Users, Crown, Clock, Sparkles, Map, Search, BookOpen } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -685,7 +685,16 @@ export default function PaywallScreen() {
               },
               { icon: Map, title: "Every destination on the map, unlocked" },
               { icon: Search, title: "Search and filter the full deal feed" },
-              { icon: Bookmark, title: "Save unlimited trips" },
+              // Was "Save unlimited trips" until 2026-08-17. Saving is now
+              // unlimited for free users too (see ExploreScreen.handleSave),
+              // so that line advertised something nobody was gated from —
+              // and the four-real-limits premise only holds if every line is
+              // a limit we actually enforce. The destination guide is one we
+              // do enforce (ExpandedDeal locks the tab behind isPremium) and
+              // it was already being sold on the in-deck upsell card, so this
+              // also makes the two lists agree, which the card's comment
+              // claimed they did.
+              { icon: BookOpen, title: "Personal travel guides, unlocked" },
             ];
           })().map((f, i) => (
             <View
