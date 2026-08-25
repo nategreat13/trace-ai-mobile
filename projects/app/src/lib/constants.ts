@@ -14,10 +14,13 @@ export const MAX_SAVES = 5;
 //        Those cards were 81% of all paywall impressions in the Jul 23-Aug 15
 //        window and produced zero CTA taps: pure banner blindness.
 //   25 — cut 5x on 2026-08-16 on the theory that frequency was the problem.
-//   12 — brief intermediate. The card is no longer passive (see
-//        UPSELL_CARD_WAIT_SECONDS below), so the 0-for-75 result no longer
-//        condemns showing it more often — that result measured a card users
-//        could ignore, and this one they can't.
+//   12 — brief intermediate. The card briefly gained a countdown-dismiss-lock
+//        here, so the 0-for-75 result no longer condemned showing it more
+//        often — that result measured a card users could ignore, and this
+//        one they couldn't. The lock was removed again on 2026-08-24 (see
+//        MAX_DAILY_SWIPES) in favor of a real daily cap as the app's one
+//        hard-stop, rather than a popup timer that only cost a few seconds
+//        to wait out.
 //   8  — brief, Trevor's call.
 //   12/10/8 cycling — current. See UPSELL_CARD_GAPS.
 //
@@ -62,12 +65,6 @@ export function upsellCardAt(swipeCount: number): { show: boolean; ordinal: numb
 }
 
 /**
- * Seconds to wait on the Nth upsell card. The first two stay short so the
- * mechanic introduces itself gently, then it tightens — same logic as the
- * shrinking gaps, and it only reaches 10s for users who are clearly still
- * engaged after four cards.
- */
-/**
  * Lifetime swipe count at which the one-time travel-assistant card appears.
  *
  * 17 sits between upsell cards (12 and 22) on purpose: the assistant card is
@@ -76,27 +73,25 @@ export function upsellCardAt(swipeCount: number): { show: boolean; ordinal: numb
  */
 export const ASSISTANT_CARD_AT = 17;
 
-export function upsellWaitSeconds(ordinal: number): number {
-  if (ordinal <= 2) return 5;
-  if (ordinal <= 4) return 7;
-  return 10;
-}
-
 /**
- * Seconds a free user must wait on an upsell card before they can swipe past
- * it. Upgrading (tap, or swipe right) is never blocked — only dismissal is,
- * since the whole mechanic is "pay to skip the wait".
+ * Free daily swipe limit. Reintroduced 2026-08-24 as the app's one real
+ * hard-stop, replacing the upsell card's countdown-dismiss-lock (removed the
+ * same day — a few seconds is a trivial cost, so it taught "wait costs
+ * nothing, paying costs money" rather than creating real urgency).
  *
- * This is a softer restatement of the daily swipe cap removed in the July
- * rework. That cap was 28% of paywall views and the app made money while it
- * existed; revenue went to zero within days of the last capped users
- * updating. A few seconds recreates the "blocked from what I want" moment
- * that made the cap convert, without ending the session the way a hard daily
- * limit did.
+ * Not a re-run of the old 10/day cap that was removed in July: that number
+ * caught brand-new users 1-5 minutes into their first-ever session, and five
+ * of six June trials it produced were impulse-taps that cancelled and never
+ * opened the app again. 25 sits below the current no-cap daily average
+ * (21-26 swipes/active user) so it's still a real limit, but well above 10 —
+ * intended to catch people who've swiped enough in one sitting to have
+ * actually formed an opinion of the product, not everyone on day one.
  *
- * Keep this short. The failure mode isn't annoyance, it's app-close.
+ * `dailySwipesToday`/`dailySwipeWindowStart` (SwipeDeckScreen.tsx) were kept
+ * live as an engagement signal the whole time the cap was gone, so this only
+ * needed a gate + a screen, not new tracking.
  */
-export const UPSELL_CARD_WAIT_SECONDS = 5;
+export const MAX_DAILY_SWIPES = 25;
 
 /**
  * Cloud Function URLs.

@@ -341,6 +341,15 @@ export default function PaywallScreen() {
           headline: "Get alerted if this\nprice comes back",
           sub: null,
         };
+      // Hit the daily swipe cap — name the real, specific thing that just
+      // happened rather than a generic pitch. The limit screen already told
+      // them the number; no need to repeat it here.
+      case "daily_swipe_cap":
+        return {
+          eyebrow: "TODAY'S LIMIT",
+          headline: "Keep swiping.\nNo daily limit.",
+          sub: null,
+        };
       // From the in-deck assistant card — they were about to name a place.
       case "assistant_card":
         return {

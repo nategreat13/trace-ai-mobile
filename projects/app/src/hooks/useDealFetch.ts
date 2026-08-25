@@ -172,9 +172,11 @@ export function useDealFetch(profile: (UserProfile & { id: string }) | null) {
       setDeals(deckDeals);
       setShowingAllDeals(filteredDeals.length === 0);
 
-      // Fetch premium deals for business users — clear them if the user
-      // has downgraded so we don't keep showing business-class deals.
-      if (profile.subscriptionStatus === "business") {
+      // Fetch premium deals for business AND premium users — premium
+      // subscribers are exactly the audience the business upsell card
+      // targets, and it needs a real business-class deal to tease. Cleared
+      // for anyone else so a downgrade stops showing business-class deals.
+      if (profile.subscriptionStatus === "business" || profile.subscriptionStatus === "premium") {
         try {
           const prem = await fetchPremiumDeals(airportCode);
           setPremiumDeals(weightedShuffle(prem));

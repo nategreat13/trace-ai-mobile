@@ -1,26 +1,20 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, Dimensions, AppState } from "react-native";
+import React, { useCallback, useEffect } from "react";
+import { View, Text, StyleSheet, Dimensions } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Svg, { Circle } from "react-native-svg";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedProps,
   withTiming,
   interpolate,
   runOnJS,
-  FadeInDown,
-  Easing,
-  cancelAnimation,
 } from "react-native-reanimated";
-import { UPSELL_CARD_WAIT_SECONDS } from "../../lib/constants";
 import { useIsFocused } from "@react-navigation/native";
 import { useFreeTrial } from "../../context/TrialContext";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Crown, Bell, ArrowRight } from "lucide-react-native";
+import { Crown, Bell, Lock, ArrowRight } from "lucide-react-native";
 import { colors } from "../../theme/colors";
-import { useAuth } from "../../context/AuthContext";
+import type { Deal } from "@trace/shared";
 
 // Same thresholds/exit mechanics as SwipeCard.tsx — this is a sibling
 // component (not a shared refactor) so the proven deal-swiping gesture
@@ -33,15 +27,6 @@ const ROTATION_INPUT = [-300, 0, 300];
 const ROTATION_OUTPUT = [-30, 0, 30];
 const SCALE_INPUT = [-300, 0, 300];
 const SCALE_OUTPUT = [0.95, 1, 0.95];
-
-// Countdown ring geometry. Drawn from 12 o'clock and depleting clockwise,
-// which is the direction people read a timer draining.
-const RING_SIZE = 26;
-const RING_STROKE = 2.5;
-const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface UpsellSwipeCardProps {
   variant: "premium" | "business" | "welcome_back";
@@ -56,8 +41,15 @@ interface UpsellSwipeCardProps {
    * variant — not stacked with business/welcome_back framing.
    */
   personalizedSub?: string | null;
-  /** Countdown length for this appearance; escalates with the card ordinal. */
-  waitSeconds?: number;
+  /**
+   * A real deal from the user's own deck to tease, partially redacted
+   * (destination + discount hidden behind a scrim). Replaces the old fake,
+   * identical-for-everyone notification stack — real and incomplete creates
+   * curiosity, fake and complete reads as an ad. `null` when nothing
+   * qualifies (e.g. an empty deck) — the section is omitted rather than
+   * falling back to invented content.
+   */
+  previewDeal?: Deal | null;
 }
 
 // Bullets are deliberately limited to benefits that are actually real
@@ -75,10 +67,7 @@ const CONTENT = {
   premium: {
     eyebrow: "TRACE PREMIUM",
     Icon: Bell,
-    // "Never miss a price drop" named a feeling; this names the two things
-    // the user is actually being blocked from right now — the locked deals
-    // and the countdown they just sat through.
-    headline: "Unlimited deals.\nNo waiting.",
+    headline: "Never miss\na price drop.",
     sub: null as string | null,
     // Four real gates, matching PaywallScreen's list — the card previously
     // carried one vague bullet ("Full Explore access included") standing in
@@ -92,9 +81,9 @@ const CONTENT = {
     // user doesn't care how often we poll, only that they hear about it.
     // Rephrased from their side of the transaction.
     //
-    // "No ads, no interruptions" is honest: the interruption being sold away
-    // is this card and its countdown, which is real and which they are
-    // experiencing at the moment they read the line.
+    // "No ads, no interruptions" is honest: this card itself is the
+    // interruption being sold away, and it's the one they're looking at
+    // right now.
     bullets: [
       { emoji: "🔔", text: "Get notified the moment your deal shows up" },
       { emoji: "🌍", text: "Every destination unlocked" },
@@ -124,14 +113,8 @@ const CONTENT = {
     // product instead: a stack of the push notifications you'd receive.
     image: null as number | null,
     accent: null as string | null,
-    // Caption above the banner stack. Without it the mock notifications read
-    // as real ones the user has somehow received — convincing, but it costs
-    // them a beat to work out this is an offer, and on a card with a
-    // countdown that beat is expensive. The line frames the stack as a
-    // preview before they start parsing it.
-    notifLabel: "Upgrade to get flight alerts like these",
-    // Set is chosen per card appearance — see PREMIUM_NOTIF_SETS.
-    notifications: true,
+    // Caption above the redacted real-deal preview (see previewDeal prop).
+    previewCaption: "A deal from your deck just dropped:",
   },
   business: {
     eyebrow: "BUSINESS CLASS",
@@ -149,22 +132,20 @@ const CONTENT = {
     // Same cabin hero + dark scrim treatment as UpgradeScreen's header.
     image: require("../../../assets/businessimage.png") as number,
     accent: colors.brand.amber500,
-    // A quick-stats row (65% / 48h / $2.4K) lived here until this card gained
-    // the notification stack. The two compete for the same job — proof — and
-    // running both left no room for the CTA on a full-height card. The stack
-    // wins: it shows the product working rather than asserting an average.
-    // It also retired "48h early access" and "$2.4K avg saved/yr", neither of
-    // which has anything backing it, so nothing accurate was lost.
-    notifLabel: "Upgrade to get business class alerts like these",
-    // The cabin photo stays as the backdrop — it already carries a scrim, and
-    // the banners read fine over the darkened lower half.
-    notifications: true,
+    // A quick-stats row (65% / 48h / $2.4K) lived here at one point. Retired
+    // along with "48h early access" and "$2.4K avg saved/yr" — neither had
+    // anything backing it, so nothing accurate was lost.
+    //
+    // The cabin photo stays as the backdrop for the redacted real-deal
+    // preview below — it already carries a scrim, and the block reads fine
+    // over the darkened lower half.
+    previewCaption: "A business-class deal from your deck just dropped:",
   },
 };
 
 // Shown instead of the standard premium pitch for the first upsell card of a
 // session, to a free user who's been away a few days — same mechanism, same
-// visual (the mock notification stack already sells "alerts, any
+// visual (the redacted real-deal preview already sells "alerts, any
 // destination"), just loss-aversion framing instead of the generic pitch.
 // No discount lever available, so this leans entirely on "you missed
 // something" rather than price.
@@ -174,84 +155,6 @@ const WELCOME_BACK_CONTENT: (typeof CONTENT)["premium"] = {
   headline: "New deals dropped\nsince your last visit.",
   sub: "Turn on Premium alerts and never miss the next one.",
 };
-
-interface MockNotif {
-  emoji: string;
-  // Every greeted body starts with a proper noun, so prefixing the user's
-  // name reads correctly ("Lisbon just…" → "Trevor, Lisbon just…") and the
-  // no-name fallback is still a valid sentence. Keep that true if you edit.
-  body: string;
-  time: string;
-  greet?: boolean;
-}
-
-// Only the first banner in each set is greeted by name — a real
-// notification feed doesn't say your name twice in a row, and it keeps the
-// personalisation from tipping into feeling spammy.
-// Two per set. A third was tried when the card first went full-bleed and cut
-// again: on a full-height card, three banners plus the four benefit lines and
-// the CTA block overflows the bottom on a 17 Pro. Two also keeps the lower
-// half calm, which is the whole point of the current layout.
-const PREMIUM_NOTIF_SETS: MockNotif[][] = [
-  [
-    { emoji: "✈️", body: "Lisbon just dropped to $312", time: "now", greet: true },
-    { emoji: "🗼", body: "Tokyo — 58% off, 4 seats left", time: "2m ago" },
-  ],
-  [
-    { emoji: "🏛️", body: "Rome just dropped to $377", time: "now", greet: true },
-    { emoji: "🇪🇸", body: "Barcelona — 61% off today", time: "12m ago" },
-  ],
-  [
-    { emoji: "🇯🇵", body: "Tokyo just dropped to $488", time: "now", greet: true },
-    { emoji: "🇮🇸", body: "Reykjavík — 54% off, ends tonight", time: "5m ago" },
-  ],
-  [
-    { emoji: "🇫🇷", body: "Paris just dropped to $341", time: "now", greet: true },
-    { emoji: "🏛️", body: "Athens — 63% off this week", time: "1h ago" },
-  ],
-  [
-    { emoji: "🇲🇽", body: "Mexico City dropped to $198", time: "now", greet: true },
-    { emoji: "🇵🇪", body: "Lima — 57% off, 6 seats left", time: "20m ago" },
-  ],
-];
-
-// Business-tier equivalents. Same shape and same rules as above (first line
-// greeted, proper noun first) so the two cards read as one product with two
-// tiers rather than two different designs. Cabin class is named in every line
-// — that's the whole distinction being sold here.
-const BUSINESS_NOTIF_SETS: MockNotif[][] = [
-  [
-    { emoji: "🛋️", body: "Tokyo lie-flat just dropped to $1,284", time: "now", greet: true },
-    { emoji: "🥂", body: "Paris business — 61% off, 2 seats left", time: "8m ago" },
-  ],
-  [
-    { emoji: "🛋️", body: "Dubai business just dropped to $1,512", time: "now", greet: true },
-    { emoji: "🥂", body: "Rome lie-flat — 58% off this week", time: "25m ago" },
-  ],
-  [
-    { emoji: "🛋️", body: "Singapore lie-flat now $1,690", time: "now", greet: true },
-    { emoji: "🥂", body: "London business — 64% off, 3 seats left", time: "40m ago" },
-  ],
-  [
-    { emoji: "🛋️", body: "Seoul business just dropped to $1,340", time: "now", greet: true },
-    { emoji: "🥂", body: "Milan lie-flat — 55% off today", time: "1h ago" },
-  ],
-];
-
-// Advances every time a premium upsell card mounts, so a user who sees
-// several across a session gets a different pair each time. Same
-// module-counter idiom as LOADING_IMAGES in SwipeDeckScreen.
-let upsellNotifSetCount = 0;
-
-// Trace's own app icon, reused as the sender icon in the mock banners so
-// they read as real push notifications rather than generic chat bubbles.
-const APP_ICON = require("../../../assets/1.png");
-
-// Per-banner tilt/offset. Small values on purpose — enough to feel hand-
-// placed rather than gridded, not enough that the tilted corners of two
-// adjacent banners can close the gap between them.
-const NOTIF_TILT = ["-1.5deg", "1.5deg"];
-const NOTIF_OFFSET = [0, 8];
 
 // Scrim over the cabin photo: clear at the top so the seat/champagne stays
 // visible, opaque at the bottom so the copy keeps its contrast.
@@ -285,11 +188,10 @@ export default function UpsellSwipeCard({
   onUpgrade,
   triggerSwipe,
   personalizedSub,
-  waitSeconds = UPSELL_CARD_WAIT_SECONDS,
+  previewDeal,
 }: UpsellSwipeCardProps) {
   const baseContent = variant === "welcome_back" ? WELCOME_BACK_CONTENT : CONTENT[variant];
   const content = personalizedSub ? { ...baseContent, sub: personalizedSub } : baseContent;
-  const { profile } = useAuth();
 
   // Lead with the trial, not the price. Tapping through to a paywall that
   // opens on a dollar figure is a cold stop; "try free" sets the expectation
@@ -304,112 +206,19 @@ export default function UpsellSwipeCard({
     : content.cta;
   const ctaSubLabel = tierTrial.available ? "Cancel anytime" : null;
 
-  // firstName is optional on UserProfile (and absent for guests), so every
-  // greeted line has to degrade to an ungreeted sentence.
-  const firstName = profile?.firstName?.trim() || null;
-
-  // Pinned in a ref so re-renders during a swipe don't reshuffle the
-  // banners mid-gesture; the counter only advances on mount.
-  // Business gets its own set — same structure, cabin-class copy. Pinned in a
-  // ref on mount so re-renders during a swipe can't reshuffle mid-gesture.
-  const notifSet = React.useRef(
-    (variant === "business" ? BUSINESS_NOTIF_SETS : PREMIUM_NOTIF_SETS)[
-      upsellNotifSetCount %
-        (variant === "business" ? BUSINESS_NOTIF_SETS : PREMIUM_NOTIF_SETS).length
-    ]
-  );
-  useEffect(() => {
-    if (content.notifications) upsellNotifSetCount += 1;
-  }, [content.notifications]);
-
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
 
-  // Dismissal lock. A shared value rather than a ref because the pan gesture's
-  // onEnd is a worklet on the UI thread and can't safely read React refs.
-  // 1 = still counting down, 0 = free to swipe past.
-  const dismissLocked = useSharedValue(1);
-  const ringProgress = useSharedValue(1);
-  const [secondsLeft, setSecondsLeft] = useState(waitSeconds);
-
-  /**
-   * The countdown measures time spent LOOKING at the card, not wall-clock
-   * time since it appeared.
-   *
-   * A plain setTimeout kept running while the user was on the paywall or had
-   * the app backgrounded, so opening the paywall, reading it, and backing out
-   * skipped the wait entirely — the one action most likely to precede a
-   * purchase was also the reliable way to bypass the mechanic. It now pauses
-   * whenever the deck isn't focused or the app isn't foregrounded, and
-   * resumes from exactly where it stopped.
-   */
+  // Card now survives a trip to the paywall rather than being destroyed on
+  // tap, so it needs to re-settle and re-arm its exit guard when it regains
+  // focus (a gesture could have been mid-flight when navigation happened).
   const isFocused = useIsFocused();
   useEffect(() => {
     if (!isFocused) return;
-    // Back on the deck: re-arm the exit guard and settle the card, in case a
-    // gesture was mid-flight when we navigated away.
     handled.current = false;
     translateX.value = 0;
     translateY.value = 0;
   }, [isFocused, translateX, translateY]);
-
-  const [appActive, setAppActive] = useState(AppState.currentState === "active");
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (s) => setAppActive(s === "active"));
-    return () => sub.remove();
-  }, []);
-  const running = isFocused && appActive;
-
-  // Milliseconds of on-card time still owed. Lives in a ref so pausing and
-  // resuming doesn't restart the effect from the top.
-  const remainingMsRef = useRef(waitSeconds * 1000);
-  useEffect(() => {
-    remainingMsRef.current = waitSeconds * 1000;
-    setSecondsLeft(waitSeconds);
-    ringProgress.value = 1;
-    dismissLocked.value = 1;
-  }, [waitSeconds, ringProgress, dismissLocked]);
-
-  useEffect(() => {
-    if (!running) return;
-    if (remainingMsRef.current <= 0) return;
-
-    const startedAt = Date.now();
-    const startedWith = remainingMsRef.current;
-
-    // Ring drains on the UI thread so it stays smooth under an in-flight
-    // gesture. On resume it animates only the remaining fraction, so the arc
-    // picks up where it left off rather than snapping back to full.
-    ringProgress.value = withTiming(0, {
-      duration: startedWith,
-      easing: Easing.linear,
-    });
-
-    const tick = setInterval(() => {
-      const left = Math.max(0, startedWith - (Date.now() - startedAt));
-      setSecondsLeft(Math.ceil(left / 1000));
-    }, 250);
-
-    const unlock = setTimeout(() => {
-      remainingMsRef.current = 0;
-      dismissLocked.value = 0;
-      setSecondsLeft(0);
-    }, startedWith);
-
-    return () => {
-      clearInterval(tick);
-      clearTimeout(unlock);
-      // Freeze: bank the time actually spent looking, and stop the arc where
-      // it is rather than letting it keep animating off-screen.
-      const spent = Date.now() - startedAt;
-      remainingMsRef.current = Math.max(0, startedWith - spent);
-      cancelAnimation(ringProgress);
-    };
-  }, [running, dismissLocked, ringProgress]);
-
-  const ringAnimatedProps = useAnimatedProps(() => ({
-    strokeDashoffset: RING_CIRCUMFERENCE * (1 - ringProgress.value),
-  }));
 
   // Guards against onDismiss/onUpgrade firing more than once for a
   // single swipe.
@@ -437,15 +246,12 @@ export default function UpsellSwipeCard({
   // "positive" semantics as saving a real deal); left/pass just dismisses.
   useEffect(() => {
     if (!triggerSwipe) return;
-    // The deck's X button is a dismissal like any other — hold it to the same
-    // countdown, or it becomes a one-tap bypass of the whole mechanic.
-    if (triggerSwipe === "left" && dismissLocked.value === 1) return;
     const exitX = triggerSwipe === "left" ? -EXIT_X : EXIT_X;
     const onExit = triggerSwipe === "left" ? handleDismiss : handleUpgrade;
     translateX.value = withTiming(exitX, { duration: EXIT_X_DURATION }, () => {
       runOnJS(onExit)();
     });
-  }, [triggerSwipe, translateX, handleDismiss, handleUpgrade, dismissLocked]);
+  }, [triggerSwipe, translateX, handleDismiss, handleUpgrade]);
 
   const tapScale = useSharedValue(1);
 
@@ -457,15 +263,6 @@ export default function UpsellSwipeCard({
     .onEnd((event) => {
       const { translationX, velocityX } = event;
       if (translationX < -SWIPE_X_THRESHOLD || velocityX < -VELOCITY_THRESHOLD) {
-        // Dismissal is the only thing the countdown blocks. The card springs
-        // back instead of exiting, which reads as "not yet" rather than as a
-        // dropped gesture. Upgrading (below, and via tap) is never blocked —
-        // paying to skip the wait is the entire mechanic.
-        if (dismissLocked.value === 1) {
-          translateX.value = withTiming(0, { duration: 200 });
-          translateY.value = withTiming(0, { duration: 200 });
-          return;
-        }
         translateX.value = withTiming(-EXIT_X, { duration: EXIT_X_DURATION }, () => {
           runOnJS(handleDismiss)();
         });
@@ -545,55 +342,33 @@ export default function UpsellSwipeCard({
           </>
         ) : null}
         <View style={styles.content}>
-          {content.notifications ? (
-            <View style={styles.notifWrap}>
-            {!!content.notifLabel && (
-              <View style={styles.notifLabelRow}>
+          {!!previewDeal && (
+            <View style={styles.previewWrap}>
+              <View style={styles.previewLabelRow}>
                 <Bell color="rgba(255,255,255,0.75)" size={12} />
-                <Text style={styles.notifLabelText}>{content.notifLabel}</Text>
+                <Text style={styles.previewLabelText}>{content.previewCaption}</Text>
               </View>
-            )}
-            <View style={styles.notifArea}>
-              {notifSet.current.map((notif, i) => (
-                <Animated.View
-                  key={notif.body}
-                  // Drop in with a spring and a wider stagger, so the stack
-                  // reads as notifications arriving one after another rather
-                  // than a static image that happened to fade up. This is the
-                  // card's only moving part and it's doing the selling — the
-                  // user should see them land.
-                  entering={FadeInDown.delay(180 + i * 220)
-                    .springify()
-                    .damping(15)
-                    .stiffness(140)}
-                  style={[
-                    styles.notifBanner,
-                    {
-                      transform: [
-                        { rotate: NOTIF_TILT[i] },
-                        { translateX: NOTIF_OFFSET[i] },
-                      ],
-                      opacity: 1 - i * 0.12,
-                    },
-                  ]}
-                >
-                  <View style={styles.notifHeader}>
-                    <Image source={APP_ICON} style={styles.notifIcon} contentFit="cover" />
-                    <Text style={styles.notifApp}>TRACE</Text>
-                    <Text style={styles.notifTime}>{notif.time}</Text>
-                  </View>
-                  {/* Two lines, not one: a greeted line is ~8 chars longer,
-                      and a long first name truncating mid-word reads as
-                      broken in a way that a wrap doesn't. */}
-                  <Text style={styles.notifBody} numberOfLines={2}>
-                    {notif.emoji}{" "}
-                    {notif.greet && firstName ? `${firstName}, ${notif.body}` : notif.body}
+              <View style={styles.previewBanner}>
+                {/* Real destination + discount, genuinely present — just
+                    dimmed rather than replaced by a placeholder. Same scrim
+                    technique WeatherPreview.tsx uses for its premium-gated
+                    rows: no expo-blur (native module, forces a runtimeVersion
+                    bump), so a layered translucent fill instead. Wrapped in
+                    its own block rather than inline spans — RN can't overlay
+                    part of a Text node, only a whole View. */}
+                <View style={{ position: "relative" }}>
+                  <Text style={styles.previewRedactedText} numberOfLines={1}>
+                    {previewDeal.destination} · {Math.round(previewDeal.discount_pct || 0)}% off
                   </Text>
-                </Animated.View>
-              ))}
+                  <View style={[StyleSheet.absoluteFillObject, styles.previewScrim]} pointerEvents="none" />
+                </View>
+                <View style={styles.previewUnlockRow}>
+                  <Lock color="#fff" size={12} />
+                  <Text style={styles.previewUnlockText}>Unlock to see which one</Text>
+                </View>
+              </View>
             </View>
-            </View>
-          ) : null}
+          )}
           <View
             style={[
               styles.eyebrowPill,
@@ -617,37 +392,6 @@ export default function UpsellSwipeCard({
               </View>
             ))}
           </View>
-          {secondsLeft > 0 && (
-            <View style={styles.waitRow}>
-              <Svg width={RING_SIZE} height={RING_SIZE}>
-                {/* Track */}
-                <Circle
-                  cx={RING_SIZE / 2}
-                  cy={RING_SIZE / 2}
-                  r={RING_RADIUS}
-                  stroke="rgba(255,255,255,0.22)"
-                  strokeWidth={RING_STROKE}
-                  fill="none"
-                />
-                {/* Depleting arc. Rotated -90° so it starts at 12 o'clock. */}
-                <AnimatedCircle
-                  cx={RING_SIZE / 2}
-                  cy={RING_SIZE / 2}
-                  r={RING_RADIUS}
-                  stroke="#fff"
-                  strokeWidth={RING_STROKE}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={RING_CIRCUMFERENCE}
-                  animatedProps={ringAnimatedProps}
-                  transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                />
-              </Svg>
-              <Text style={styles.waitText}>
-                Swipe past in {secondsLeft}s — or upgrade to skip
-              </Text>
-            </View>
-          )}
           <View
             style={[styles.ctaRow, content.accent ? { backgroundColor: content.accent } : null]}
           >
@@ -727,78 +471,55 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 16,
   },
-  // Absorbs whatever height is left over after the copy block and centers the
-  // banner stack in it. Added when the card went full-bleed: the old fixed
-  // 52pt margin was tuned for a short fixed-height card, and on a full-height
-  // card it left all the extra room as one dead gap in the middle.
-  //
-  // The flex:1 lives HERE and not on notifArea for the reason below.
-  // Natural height, NOT flex:1 — the parent centers the whole group now, so
-  // a greedy wrapper here would reopen the gap it was added to close.
-  notifWrap: {
+  // Absorbs whatever height is left over above the copy block and centers
+  // the preview in it — same role the old notification stack's wrapper had.
+  previewWrap: {
     justifyContent: "center",
+    marginBottom: 24,
   },
-  notifLabelRow: {
+  previewLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginBottom: 10,
     paddingLeft: 2,
   },
-  notifLabelText: {
+  previewLabelText: {
     fontSize: 11,
     fontWeight: "700",
     color: "rgba(255,255,255,0.75)",
     letterSpacing: 0.3,
     flex: 1,
   },
-  notifArea: {
-    // Deliberately NOT flex:1. A flex child here gets squeezed toward zero
-    // height when the copy needs the room, and its fixed-height banners
-    // then overflow *downward* onto the eyebrow pill. Natural height means
-    // the banners always push the copy instead of landing on top of it.
-    gap: 12,
-    marginBottom: 24,
-  },
-  notifBanner: {
-    // Never let a banner compress — if space runs short the copy below
-    // should win and the stack should push, not squash.
-    flexShrink: 0,
+  previewBanner: {
     backgroundColor: "rgba(255,255,255,0.16)",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.28)",
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
+    paddingVertical: 10,
+    gap: 8,
   },
-  notifHeader: {
+  previewRedactedText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  // Real text renders normally above (previewRedactedText) — this scrim
+  // sits over just that block so it's genuinely present, just dimmed, not
+  // replaced by a placeholder. No expo-blur (forces a runtimeVersion bump);
+  // same layered-fill technique as WeatherPreview.tsx's premium gate.
+  previewScrim: {
+    backgroundColor: "rgba(10,10,18,0.82)",
+    borderRadius: 6,
+  },
+  previewUnlockRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 5,
   },
-  notifIcon: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-  },
-  notifApp: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.9)",
-    letterSpacing: 0.6,
-    flex: 1,
-  },
-  notifTime: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.6)",
-  },
-  notifBody: {
-    fontSize: 13,
+  previewUnlockText: {
+    fontSize: 12,
     fontWeight: "700",
     color: "#fff",
   },
@@ -830,19 +551,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#fff",
-    flex: 1,
-  },
-  waitRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 10,
-    paddingHorizontal: 2,
-  },
-  waitText: {
-    color: "rgba(255,255,255,0.82)",
-    fontSize: 12,
-    fontWeight: "600",
     flex: 1,
   },
   ctaRow: {

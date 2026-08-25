@@ -40,7 +40,7 @@ import {
   UPSELL_CARD_START,
   upsellCardAt,
   ASSISTANT_CARD_AT,
-  upsellWaitSeconds,
+  MAX_DAILY_SWIPES,
   ALL_BADGES,
   LEVEL_TITLES,
 } from "../lib/constants";
@@ -165,9 +165,6 @@ export default function SwipeDeckScreen() {
   // handleSwipe). Doesn't touch currentIndex/visibleDeals, so the real
   // deal flow is unaffected.
   const [upsellVariant, setUpsellVariant] = useState<"premium" | "business" | "welcome_back" | null>(null);
-  // Countdown length for the card currently showing — escalates with how many
-  // cards this user has already sat through. See upsellWaitSeconds.
-  const [upsellWait, setUpsellWait] = useState(5);
   // Assistant card, shown at most once per session. The ref is mount-scoped,
   // which is exactly the lifetime we want — it resets on a fresh session and
   // can't fire twice within one.
@@ -181,6 +178,12 @@ export default function SwipeDeckScreen() {
     if (isPremium) setUpsellVariant(null);
   }, [isPremium]);
   const isBusinessMember = profile?.subscriptionStatus === "business";
+  // Daily swipe cap — the app's one real hard-stop, replacing the upsell
+  // card's countdown-dismiss-lock (removed same day). `dailySwipesToday`'s
+  // 24h rolling window is already reset at mount (see the init effect below,
+  // unchanged) so a fresh day always correctly unblocks this without any
+  // extra logic here.
+  const dailyLimitReached = !isPremium && (profile?.dailySwipesToday || 0) >= MAX_DAILY_SWIPES;
   // Guards the "welcome back" copy variant to the first upsell card of a
   // session only — later milestones in the same session fall back to the
   // standard premium pitch rather than repeating the away-time framing.
@@ -257,6 +260,21 @@ export default function SwipeDeckScreen() {
     if (destFilter === "both") return activeDeals;
     return activeDeals.filter((d) => getDealDestType(d) === destFilter);
   }, [activeDeals, destFilter, getDealDestType]);
+
+  // Real deal to tease on the upsell card, partially redacted — replaces the
+  // old fake, identical-for-everyone notification examples. Best remaining
+  // unswiped deal by discount; null when nothing qualifies (e.g. an empty
+  // deck), in which case the card's preview section is simply omitted rather
+  // than falling back to invented content.
+  const premiumPreviewDeal = useMemo(() => {
+    const remaining = visibleDeals.slice(currentIndex);
+    if (remaining.length === 0) return null;
+    return [...remaining].sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0))[0];
+  }, [visibleDeals, currentIndex]);
+  const businessPreviewDeal = useMemo(() => {
+    if (premiumDeals.length === 0) return null;
+    return [...premiumDeals].sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0))[0];
+  }, [premiumDeals]);
 
   // Reset deck position whenever the filter changes so the user starts fresh.
   useEffect(() => {
@@ -493,9 +511,7 @@ export default function SwipeDeckScreen() {
         setShowAssistantCard(true);
         logEvent("assistant_card_shown", { is_premium: isPremium });
       } else if (upsellHit.show) {
-        // Ordinal (1st card, 2nd card, …) drives both which tier is pitched
-        // and how long the countdown runs — see upsellWaitSeconds.
-        setUpsellWait(upsellWaitSeconds(upsellHit.ordinal));
+        // Ordinal (1st card, 2nd card, …) still drives which tier is pitched.
         const wantsBusiness = upsellHit.ordinal % 2 === 0;
         if (isBusinessMember) {
           // top tier — nothing to upsell
@@ -981,8 +997,34 @@ export default function SwipeDeckScreen() {
                 </Text>
               </View>
             )}
-            {/* Empty-filter state: the full deck has deals but none match the filter */}
-            {visibleDeals.length === 0 && activeDeals.length > 0 && deckPhase === "swiping" ? (
+            {/* Daily swipe cap — the app's one real hard-stop. Takes priority
+                over everything else in this slot, including the upsell card:
+                the limit screen already offers its own path to Paywall, so
+                showing both would be redundant. */}
+            {dailyLimitReached ? (
+              <Animated.View
+                entering={FadeIn.duration(300)}
+                style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}
+              >
+                <Text style={{ fontSize: 40, marginBottom: 16 }}>✋</Text>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
+                  You've hit today's {MAX_DAILY_SWIPES} swipes
+                </Text>
+                <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
+                  Come back tomorrow, or upgrade for unlimited swipes.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    logEvent("daily_limit_hit", {});
+                    navigation.navigate("Paywall", { entryPoint: "daily_swipe_cap" });
+                  }}
+                  style={{ backgroundColor: colors.brand.traceRed, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28 }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Upgrade for unlimited</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : /* Empty-filter state: the full deck has deals but none match the filter */
+            visibleDeals.length === 0 && activeDeals.length > 0 && deckPhase === "swiping" ? (
               <Animated.View
                 entering={FadeIn.duration(300)}
                 style={{ flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 }}
@@ -1040,7 +1082,7 @@ export default function SwipeDeckScreen() {
               // nothing should be swiping them.
               <UpsellSwipeCard
                 variant={upsellVariant}
-                waitSeconds={upsellWait}
+                previewDeal={upsellVariant === "business" ? businessPreviewDeal : premiumPreviewDeal}
                 personalizedSub={upsellVariant === "premium" ? personalizedSub : null}
                 triggerSwipe={triggerSwipe?.targetId === "upsell" ? triggerSwipe.direction : null}
                 onDismiss={() => {
