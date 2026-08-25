@@ -14,6 +14,7 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { useAuth } from "./AuthContext";
+import { logEvent } from "../lib/analytics";
 
 /**
  * App-wide "can this user start a free trial right now?" signal.
@@ -62,6 +63,27 @@ const PRODUCT_IDS = [
 
 const TrialContext = createContext<TrialState>(EMPTY_STATE);
 
+/**
+ * This context's whole job is deciding whether `usePostOnboardingPaywall`
+ * ever fires — a single transient RevenueCat failure here used to
+ * permanently disable the app's main automatic paywall trigger for that
+ * session, silently (no logging, no retry). One retry after a short delay
+ * rides out a flaky/slow call without meaningfully delaying resolution for
+ * everyone else; genuine failures still fail closed (no trial advertised).
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 2, delayMs = 600): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 export function TrialProvider({ children }: { children: React.ReactNode }) {
   const { user, isPremium } = useAuth();
   const [state, setState] = useState<TrialState>(EMPTY_STATE);
@@ -77,7 +99,7 @@ export function TrialProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
-        const offerings = await getOfferings();
+        const offerings = await withRetry(() => getOfferings());
 
         // Remote kill-switch: trials can be turned off instantly from the
         // RevenueCat dashboard (no release) via offering metadata.
@@ -101,17 +123,31 @@ export function TrialProvider({ children }: { children: React.ReactNode }) {
         let eligibleFor: (productId: string | undefined) => boolean = () => true;
         if (Platform.OS !== "android") {
           try {
-            const eligibility =
-              await Purchases.checkTrialOrIntroductoryPriceEligibility([
+            const eligibility = await withRetry(() =>
+              Purchases.checkTrialOrIntroductoryPriceEligibility([
                 ...PRODUCT_IDS,
-              ]);
+              ])
+            );
             eligibleFor = (productId) =>
               !!productId &&
               eligibility[productId]?.status ===
                 INTRO_ELIGIBILITY_STATUS.INTRO_ELIGIBILITY_STATUS_ELIGIBLE;
-          } catch {
-            // Can't confirm → advertise nothing, rather than risk a mismatch.
+            const perProduct: Record<string, boolean> = {};
+            for (const id of PRODUCT_IDS) perProduct[id] = eligibleFor(id);
+            logEvent("trial_eligibility_checked", {
+              source: "trial_context",
+              platform: Platform.OS,
+              ...perProduct,
+            });
+          } catch (err) {
+            // Can't confirm after retrying → advertise nothing, rather than
+            // risk a mismatch. Now logged instead of silent.
             eligibleFor = () => false;
+            logEvent("trial_eligibility_check_failed", {
+              source: "trial_context",
+              platform: Platform.OS,
+              message: err instanceof Error ? err.message : String(err),
+            });
           }
         }
 
@@ -133,9 +169,18 @@ export function TrialProvider({ children }: { children: React.ReactNode }) {
         const business = buildTier("business");
 
         if (!cancelled) setState({ ...premium, business });
-      } catch {
-        // Any failure → no trial advertised. The paywall remains the source
-        // of truth and degrades to "Subscribe" on its own.
+      } catch (err) {
+        // Any failure (offerings fetch, after retrying, or anything else
+        // above) → no trial advertised. The paywall remains the source of
+        // truth and degrades to "Subscribe" on its own. Now logged instead
+        // of silent, so a spike here is visible instead of just showing up
+        // as depressed post-onboarding-paywall volume with no explanation.
+        logEvent("trial_eligibility_check_failed", {
+          source: "trial_context",
+          stage: "offerings_or_build",
+          platform: Platform.OS,
+          message: err instanceof Error ? err.message : String(err),
+        });
         if (!cancelled) setState(EMPTY_STATE);
       }
     })();
