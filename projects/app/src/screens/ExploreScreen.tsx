@@ -13,7 +13,6 @@ import {
   Dimensions,
 } from "react-native";
 import Animated, {
-  FadeIn,
   runOnJS,
   useSharedValue,
   useAnimatedStyle,
@@ -290,15 +289,15 @@ export default function ExploreScreen() {
     }
   }, [loading, viewMode, filteredDeals.length]);
 
+  // Saving is deliberately unlimited for free users, here and in the swipe
+  // deck. There used to be a 3-save gate on this screen only, which counted
+  // deck saves toward the limit but never blocked them — so a user who
+  // swipe-saved ten deals hit "you've used all 3 of your free saves" while
+  // looking at a dashboard holding ten. Trevor's call on 2026-08-17: don't
+  // restrict saves at all (free users only see 5 Explore deals, so the cap
+  // bought nothing), and sell premium on the gates we actually enforce.
   const handleSave = async (deal: Deal) => {
     if (!user || !profile) return;
-    if (!isPremium && savedDealIds.size >= 3) {
-      navigation.navigate("Paywall", {
-        entryPoint: "explore_save_limit",
-        lockedStat: "You've used all 3 of your free saves",
-      });
-      return;
-    }
     await saveDeal({
       userId: user.uid,
       originalDealId: deal.id,
@@ -1031,37 +1030,6 @@ export default function ExploreScreen() {
               : `Showing ${Math.min(filteredDeals.length, FREE_NORMAL)} of ${filteredDeals.length} deals`}
           </Text>
         </View>
-      )}
-
-      {/* 1 save left warning */}
-      {!isPremium && savedDealIds.size === 2 && (
-        <Animated.View entering={FadeIn.duration(300)} style={{ paddingHorizontal: 16, marginBottom: 8 }}>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("Paywall", {
-                entryPoint: "explore_one_save_left",
-                lockedStat: "You have 1 free save left",
-              })
-            }
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              alignSelf: "flex-start",
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              backgroundColor: "#fdf2f8",
-              borderRadius: 999,
-              borderWidth: 1,
-              borderColor: "#f9a8d4",
-            }}
-          >
-            <Text style={{ fontSize: 14 }}>🔖</Text>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: "#be185d" }}>
-              1 save left — upgrade for unlimited
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
       )}
 
       {/* Deals list */}

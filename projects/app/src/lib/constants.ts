@@ -1,7 +1,11 @@
 import { getEnv } from "./env";
 import { extraString } from "./expoExtra";
 
-export const MAX_SAVES = 5;
+// MAX_SAVES lived here and was referenced nowhere — the real cap was a bare
+// `3` typed into ExploreScreen twice. Saving is unlimited for free users as
+// of 2026-08-17, so there is no cap to name; removed rather than left to
+// mislead the next reader into thinking the limit is 5.
+
 /**
  * Cadence for the in-deck premium/business upsell card: fires every
  * UPSELL_CARD_INTERVAL lifetime swipes, starting at UPSELL_CARD_START.
