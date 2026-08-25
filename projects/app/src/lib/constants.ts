@@ -86,16 +86,17 @@ export const ASSISTANT_CARD_AT = 17;
  * Not a re-run of the old 10/day cap that was removed in July: that number
  * caught brand-new users 1-5 minutes into their first-ever session, and five
  * of six June trials it produced were impulse-taps that cancelled and never
- * opened the app again. 25 sits below the current no-cap daily average
+ * opened the app again. 20 sits below the current no-cap daily average
  * (21-26 swipes/active user) so it's still a real limit, but well above 10 —
  * intended to catch people who've swiped enough in one sitting to have
  * actually formed an opinion of the product, not everyone on day one.
+ * Trevor's call, tightened from an initial 25.
  *
  * `dailySwipesToday`/`dailySwipeWindowStart` (SwipeDeckScreen.tsx) were kept
  * live as an engagement signal the whole time the cap was gone, so this only
  * needed a gate + a screen, not new tracking.
  */
-export const MAX_DAILY_SWIPES = 25;
+export const MAX_DAILY_SWIPES = 20;
 
 /**
  * Cloud Function URLs.
