@@ -2,7 +2,7 @@
   "expo": {
     "name": "Trace",
     "slug": "trace-ai-mobile",
-    "version": "1.4.2",
+    "version": "1.5.0",
     "scheme": "tracetravel",
     "orientation": "portrait",
     "icon": "./assets/icon.jpeg",
@@ -17,8 +17,12 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you upload a profile picture.",
         "SKAdNetworkItems": [
-          { "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork" },
-          { "SKAdNetworkIdentifier": "n38lu8286q.skadnetwork" }
+          {
+            "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork"
+          },
+          {
+            "SKAdNetworkIdentifier": "n38lu8286q.skadnetwork"
+          }
         ],
         "LSApplicationQueriesSchemes": [
           "fbapi",
@@ -37,7 +41,8 @@
     "web": {},
     "runtimeVersion": "1.4.0",
     "updates": {
-      "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab"
+      "url": "https://u.expo.dev/81b0afdc-7042-45ee-a0fb-bedfa70007ab",
+      "fallbackToCacheTimeout": 15000
     },
     "plugins": [
       "expo-font",
