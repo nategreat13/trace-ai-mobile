@@ -31,6 +31,17 @@ export type RootStackParamList = {
         lockedStat?: string;
       }
     | undefined;
+  /**
+   * Home screen for users behind the subscription gate — their onboarding
+   * feed, locked. The root of the gated stack, so Paywall and GiftOffer are
+   * pushed on top of it and both keep a working close affordance.
+   */
+  GatedHome: undefined;
+  /**
+   * Win-back offer, pushed when the paywall is dismissed (see handleDismiss
+   * in PaywallScreen). One-shot per user via `profile.giftOfferShown`.
+   */
+  GiftOffer: { fromEntryPoint?: string } | undefined;
   PremiumWelcome: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;

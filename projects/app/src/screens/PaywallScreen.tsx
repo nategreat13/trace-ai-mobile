@@ -19,6 +19,7 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useIAP } from "../hooks/useIAP";
 import { hasEntitlement } from "../services/iap";
+import { logout } from "../services/auth";
 import {
   formatTrialLength,
   formatTrialDuration,
@@ -86,9 +87,19 @@ export default function PaywallScreen() {
   const hasPremium = currentTier === "premium" || currentTier === "business";
   const hasBusiness = currentTier === "business";
 
-  // Default to MONTHLY — monthly trial shows a smaller commitment ($X/month)
-  // vs annual and is the standard trial-conversion default.
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
+  // Default to ANNUAL (Sept 2026).
+  //
+  // This was monthly, because the annual *sticker price* was the leading
+  // suspect for abandoned purchase sheets. That diagnosis was right and the
+  // fix was wrong: the plan wasn't the problem, showing a year-sized number
+  // was. The annual card below now leads with its per-month equivalent and
+  // states the billed-annually total underneath, which removes the shock
+  // without giving up the twelve months of revenue.
+  //
+  // It matters more than a default usually would: at current retention a
+  // monthly subscriber churns inside a couple of cycles, so an annual
+  // conversion is worth several times a monthly one.
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("annual");
 
   useEffect(() => {
     logEvent("paywall_viewed", {
@@ -427,7 +438,11 @@ export default function PaywallScreen() {
     if (!pkg) return null;
     const p = pkg.product.price;
     if (!p) return null;
-    const perMonth = p / 12;
+    // Floor rather than round: 47.99/12 is 3.9992, which rounds to "$4.00"
+    // and gives up the sub-$4 read over a tenth of a cent. The exact annual
+    // total is printed directly beneath this on the same card, so nothing is
+    // being hidden — only the per-month convenience figure is truncated.
+    const perMonth = Math.floor((p / 12) * 100) / 100;
     // Format with currency symbol matching the product's pricing locale
     const localized = pkg.product.priceString;
     // Derive the symbol by stripping digits/decimals from localized price string
@@ -436,407 +451,344 @@ export default function PaywallScreen() {
     return `${symbol}${perMonth.toFixed(2)}/mo`;
   };
 
-  return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-      {/* Close button.
+  /**
+   * Leaving the paywall is the win-back moment, not the end of the funnel.
+   *
+   * The first dismissal routes to the gift offer instead of straight back —
+   * these are people who have already said no, so anything recovered there is
+   * incremental. It fires once per user (`giftOfferShown`); a discount that
+   * reappears on every dismissal isn't a gift, it's just the price.
+   */
+  // When the paywall is the root of the stack there is nothing behind it —
+  // this user is behind the subscription gate (see RootNavigator). The close
+  // affordance is hidden in that state because it would be a dead control,
+  // and Restore / Sign out take its place so a returning subscriber can
+  // always recover and nobody is trapped in the app with no way out.
+  const canDismiss = navigation.canGoBack();
 
-          On the forced post-onboarding view this is deliberately de-emphasized
-          — no filled chip, muted glyph — so the offer reads as the primary
-          action rather than something to dismiss reflexively.
+  const handleDismiss = () => {
+    logEvent("paywall_dismissed", { entry_point: entryPoint });
+    const eligibleForGift =
+      !isBusinessPaywall &&
+      !hasPremium &&
+      !subscribeDisabled &&
+      !profile?.giftOfferShown;
+    if (eligibleForGift) {
+      navigation.replace("GiftOffer", { fromEntryPoint: entryPoint });
+      return;
+    }
+    navigation.goBack();
+  };
 
-          What it deliberately is NOT: hidden, delayed, shrunk, or moved off
-          the safe area. Apple rejects subscription screens without an obvious
-          way out (a common 3.1.2 / HIG rejection), so the tap target stays a
-          full 44pt via hitSlop and the glyph keeps real contrast. Lower
-          visual weight is fine; hard to leave is not. */}
+  const FEATURES = isBusinessPaywall
+    ? [
+        { Icon: Crown, label: "Business-class fares at economy prices" },
+        { Icon: Bell, label: "Alerts the moment a premium seat drops" },
+        { Icon: Map, label: "Every destination on the map, unlocked" },
+        { Icon: BookOpen, label: "Personal travel guides, unlocked" },
+      ]
+    : [
+        {
+          Icon: Bell,
+          label: profile?.homeAirport
+            ? `Every ${profile.homeAirport} deal, in real time`
+            : "Every deal, in real time",
+        },
+        { Icon: Map, label: "Every destination on the map, unlocked" },
+        { Icon: Search, label: "Search and filter the full deal feed" },
+        { Icon: BookOpen, label: "Personal travel guides, unlocked" },
+      ];
+
+  const annualPkg = isBusinessPaywall
+    ? businessAnnualPackage
+    : premiumAnnualPackage;
+  const monthlyPkg = isBusinessPaywall
+    ? businessMonthlyPackage
+    : premiumMonthlyPackage;
+  const annualPerMonth = getPerMonthFromAnnual(annualPkg);
+
+  const ctaLabel = subscribeDisabled
+    ? "You're subscribed"
+    : hasFreeTrial
+      ? "Try for Free"
+      : "Continue";
+
+  /** One selectable plan card. Annual leads with its per-month equivalent. */
+  const renderPlanCard = (
+    period: BillingPeriod,
+    pkg: PurchasesPackage | null,
+  ) => {
+    if (!pkg) return null;
+    const active = billingPeriod === period;
+    const isAnnual = period === "annual";
+    return (
       <TouchableOpacity
-        onPress={() => navigation.goBack()}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
+        key={period}
+        onPress={() => setBillingPeriod(period)}
+        activeOpacity={0.85}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: active }}
         style={{
-          position: "absolute",
-          top: 56,
-          right: 16,
-          zIndex: 10,
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: isForcedView ? "transparent" : theme.muted,
+          flex: 1,
+          borderWidth: 2,
+          borderColor: active ? accent : theme.border,
+          backgroundColor: active ? accent + "10" : theme.card,
+          borderRadius: 16,
+          paddingVertical: 18,
+          paddingHorizontal: 14,
           alignItems: "center",
           justifyContent: "center",
+          minHeight: 116,
         }}
       >
-        <X color={isForcedView ? theme.mutedForeground : theme.foreground} size={20} />
-      </TouchableOpacity>
-
-      {/* Sizing intent: everything fits on one screen with no scrolling, so
-          the CTA is always in view. The spacing below is tuned for that.
-
-          Scrolling is nonetheless ENABLED, deliberately. It was hard-disabled
-          before, and when this screen gained the locked-stat row and two more
-          feature lines the last row and part of the CTA went off the bottom
-          with no way to reach them — an unreachable buy button on the one
-          screen that takes money. Scroll costs nothing when content fits (a
-          ScrollView only scrolls on overflow) and saves small devices and
-          large accessibility text sizes when it doesn't. Keep it enabled. */}
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 140 }}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Compact header. Top padding clears the absolutely-positioned close
-            button at top:56 — don't drop it below ~52 or the eyebrow slides
-            under the X. */}
-        <View style={{ paddingHorizontal: 24, paddingTop: 54, paddingBottom: 14 }}>
-          <Text style={{ fontSize: 14, fontWeight: "700", color: accent, marginBottom: 6 }}>
-            {heroContent.eyebrow}
-          </Text>
-          <Text style={{ fontSize: 26, fontWeight: "900", color: theme.foreground, lineHeight: 32 }}>
-            {heroContent.headline}
-          </Text>
-          {!!heroContent.sub && (
-            <Text style={{ fontSize: 14, color: theme.mutedForeground, marginTop: 8, lineHeight: 20 }}>
-              {heroContent.sub}
-            </Text>
-          )}
-        </View>
-
-        {/* Free-trial callout — tappable CTA */}
-        {hasFreeTrial && (
-          <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-            <TouchableOpacity onPress={handlePurchase} disabled={purchasing} activeOpacity={0.85} style={{ borderRadius: 16, overflow: "hidden" }}>
-              <LinearGradient
-                colors={isBusinessPaywall
-                  ? [colors.brand.amber400, colors.brand.orange500]
-                  : [colors.brand.traceRed, colors.brand.tracePink]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ paddingVertical: 14, paddingHorizontal: 20, alignItems: "center" }}
-              >
-                {purchasing ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Text style={{ fontSize: 20, fontWeight: "900", color: "#fff" }}>
-                      ✨ Try for Free
-                    </Text>
-                    <Text style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", marginTop: 4, textAlign: "center" }}>
-                      7 days free — cancel anytime
-                    </Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Billing period toggle */}
-        <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-          <View style={{ flexDirection: "row", backgroundColor: theme.muted, borderRadius: 14, padding: 4 }}>
-            {(["monthly", "annual"] as BillingPeriod[]).map((period) => (
-              <TouchableOpacity
-                key={period}
-                onPress={() => setBillingPeriod(period)}
-                activeOpacity={0.85}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                  backgroundColor: billingPeriod === period ? theme.card : "transparent",
-                  flexDirection: "row",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: billingPeriod === period ? theme.foreground : theme.mutedForeground }}>
-                  {period === "monthly" ? "Monthly" : "Annual"}
-                </Text>
-                {period === "annual" && annualSavings != null && (
-                  <View style={{ backgroundColor: colors.brand.traceGreen, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>SAVE {annualSavings}%</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Premium plan card */}
-        {premiumDisplayPkg && (
-          <View style={{ paddingHorizontal: 24, marginBottom: 24 }}>
-            <View style={{ borderWidth: 2, borderColor: accent, borderRadius: 16, padding: 18, backgroundColor: theme.card }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                    <Text style={{ fontSize: 17, fontWeight: "800", color: theme.foreground }}>
-                      {isBusinessPaywall ? "Business" : "Premium"}
-                    </Text>
-                    {(isBusinessPaywall ? hasBusiness : hasPremium) && (
-                      <View style={{ backgroundColor: accent, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>CURRENT PLAN</Text>
-                      </View>
-                    )}
-                    {billingPeriod === "annual" && annualSavings != null && !(isBusinessPaywall ? hasBusiness : hasPremium) && (
-                      <View style={{ backgroundColor: colors.brand.traceGreen, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                        <Text style={{ fontSize: 9, fontWeight: "800", color: "#fff" }}>{annualSavings}% OFF</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 2 }}>
-                    {isBusinessPaywall ? "Business class deals + everything in Premium" : "Deal alerts, sent the moment they drop"}
-                  </Text>
-                  {hasFreeTrial && (
-                    <Text style={{ fontSize: 11, fontWeight: "700", color: colors.brand.traceRed, marginTop: 4 }}>
-                      ✨ Includes {trialLengthLabel} free trial
-                    </Text>
-                  )}
-                  {billingPeriod === "annual" && (
-                    <Text style={{ fontSize: 11, color: theme.mutedForeground, marginTop: 4 }}>
-                      {getPerMonthFromAnnual(premiumDisplayPkg)} billed annually
-                    </Text>
-                  )}
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: theme.mutedForeground }}>
-                    {premiumDisplayPkg.product.priceString}/{billingPeriod === "annual" ? "yr" : "mo"}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* Live "what you're missing right now" stat. Only rendered when the
-            calling screen could compute one from data it already had — a
-            concrete number ("5 of 340") is far harder to dismiss than a
-            static bullet, and it's the user's own situation rather than a
-            generic claim. */}
-        {lockedStat && (
-          <View style={{ paddingHorizontal: 24, marginBottom: 12 }}>
-            <View
-              style={{
-                backgroundColor: accent + "14",
-                borderColor: accent + "33",
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingVertical: 10,
-                paddingHorizontal: 14,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <Sparkles color={accent} size={16} />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: theme.foreground, flex: 1 }}>
-                {lockedStat}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Features */}
-        <View style={{ paddingHorizontal: 24, marginBottom: 16 }}>
-          <Text
+        {isAnnual && annualSavings != null && (
+          <View
             style={{
-              fontSize: 12,
-              fontWeight: "700",
-              color: theme.mutedForeground,
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              marginBottom: 12,
+              position: "absolute",
+              top: -11,
+              backgroundColor: accent,
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 3,
             }}
           >
-            What's included
-          </Text>
-          {(() => {
-            if (isBusinessPaywall) return [
-              { icon: Crown, title: "Business class deals — lie-flat at economy prices" },
-              { icon: Clock, title: "48-hour early access before anyone else" },
-              { icon: Sparkles, title: "Everything in Premium" },
-            ];
-            // Every line below maps to a real gate in the code. "Full Explore
-            // access" used to stand in for three separate limits (map pins,
-            // search/filters, save cap) and sold none of them — free users
-            // couldn't tell what they were missing, so the offer read as two
-            // vague bullets. Naming the actual limit next to the actual
-            // unlock is the whole pitch.
-            //   - map:    ExploreScreen mapDeals() unlocks 5 cheapest domestic
-            //   - search: ExploreScreen listData() locks all filtered results
-            //   - saves:  ExploreScreen handleSave() caps free at 3
-            //   - alerts: 4-hour scheduled matching (shipped Aug 14)
-            // Alerts is deliberately first. There used to be a reorder block
-            // here that hoisted it for alert-driven entry points by matching
-            // on `title.startsWith("Deal alerts")` — when the copy above was
-            // rewritten, that string stopped matching, `.find()` returned
-            // undefined, and a non-null assertion pushed `undefined` into the
-            // array. Every alert-entry paywall then crashed on `f.icon`.
-            // Ordering the source array correctly removes the failure mode
-            // rather than re-fixing the string.
-            // Named for the user's own airport where we have it — "every SLC
-            // deal" is a concrete promise in a way "any route" isn't.
-            //
-            // ACCURACY NOTE: "in real time" overstates the mechanism. Alerts
-            // run on a 4-hour scheduled match (runDealAlertMatching), so the
-            // real worst case is a few hours, not real time. Trevor was told
-            // this and chose the wording deliberately on 2026-08-16. Leaving
-            // the note so nobody "fixes" the schedule to match the copy, and
-            // so it's easy to find if App Review ever asks — subscription
-            // descriptions are covered by guideline 3.1.2.
-            const origin = profile?.homeAirport?.trim();
-            return [
-              {
-                icon: Bell,
-                title: origin
-                  ? `Every ${origin} deal, in real time`
-                  : "Every deal on your route, in real time",
-              },
-              { icon: Map, title: "Every destination on the map, unlocked" },
-              { icon: Search, title: "Search and filter the full deal feed" },
-              // Was "Save unlimited trips" until 2026-08-17. Saving is now
-              // unlimited for free users too (see ExploreScreen.handleSave),
-              // so that line advertised something nobody was gated from —
-              // and the four-real-limits premise only holds if every line is
-              // a limit we actually enforce. The destination guide is one we
-              // do enforce (ExpandedDeal locks the tab behind isPremium) and
-              // it was already being sold on the in-deck upsell card, so this
-              // also makes the two lists agree, which the card's comment
-              // claimed they did.
-              { icon: BookOpen, title: "Personal travel guides, unlocked" },
-            ];
-          })().map((f, i) => (
-            <View
-              key={i}
-              style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 6 }}
-            >
-              <f.icon color={accent} size={18} />
-              <Text style={{ fontSize: 15, color: theme.foreground, flex: 1 }}>
-                {f.title}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Error message */}
-        {error && (
-          <Text
-            style={{
-              color: "#ef4444",
-              fontSize: 13,
-              textAlign: "center",
-              paddingHorizontal: 24,
-              marginBottom: 12,
-            }}
-          >
-            {error}
-          </Text>
-        )}
-
-        {/* Restore */}
-        <TouchableOpacity
-          onPress={handleRestore}
-          disabled={purchasing}
-          style={{ alignItems: "center", marginBottom: 16 }}
-        >
-          <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>
-            Already subscribed?{" "}
-            <Text style={{ color: accent, fontWeight: "700" }}>
-              Restore
+            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
+              SAVE {annualSavings}%
             </Text>
-          </Text>
-        </TouchableOpacity>
-
-        {/* Legal links */}
-        <View
+          </View>
+        )}
+        <Text
           style={{
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: 16,
-            paddingHorizontal: 24,
+            color: theme.mutedForeground,
+            fontSize: 13,
+            fontWeight: "700",
+            marginBottom: 4,
           }}
         >
-          <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
-            <Text style={{ color: theme.mutedForeground, fontSize: 11 }}>Terms of Service</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
-            <Text style={{ color: theme.mutedForeground, fontSize: 11 }}>Privacy Policy</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* Fixed CTA */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          backgroundColor: theme.background,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          paddingBottom: 36,
-        }}
-      >
-        <Text style={{ textAlign: "center", fontSize: 12, color: theme.mutedForeground, marginBottom: 10 }}>
-          ✈️ Join 30,000+ travelers finding cheap flights
+          {isAnnual ? "Annual" : "Monthly"}
         </Text>
-        {(() => {
-          let ctaLabel: string;
-          if (subscribeDisabled) {
-            ctaLabel = isBusinessPaywall ? "You're already on Business" : "You're already on Premium";
-          } else if (hasFreeTrial) {
-            ctaLabel = `Start ${trialLengthLabel} free trial`;
-          } else {
-            ctaLabel = `Subscribe for ${priceString}/${periodSuffix}`;
-          }
+        <Text
+          style={{ color: theme.foreground, fontSize: 24, fontWeight: "800" }}
+        >
+          {isAnnual ? annualPerMonth ?? pkg.product.priceString : pkg.product.priceString}
+        </Text>
+        <Text
+          style={{
+            color: theme.mutedForeground,
+            fontSize: 12,
+            marginTop: 3,
+            textAlign: "center",
+          }}
+        >
+          {isAnnual ? `${pkg.product.priceString} billed annually` : "per month"}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
-          const isDisabled = purchasing || !selectedPkg || subscribeDisabled;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+        {/* Close.
 
-          return (
-            <>
-              <TouchableOpacity
-                onPress={handlePurchase}
-                disabled={isDisabled}
-                activeOpacity={0.85}
-                style={{ borderRadius: 16, overflow: "hidden", opacity: isDisabled ? 0.5 : 1 }}
+            Deliberately low-contrast on the forced post-onboarding view so
+            the offer reads as the primary action — but never hidden, delayed,
+            shrunk, or moved off the safe area. Apple rejects subscription
+            screens without an obvious way out (3.1.2 / HIG), so the tap
+            target stays a full 44pt via hitSlop and the glyph keeps real
+            contrast. Lower visual weight is fine; hard to leave is not. */}
+        {canDismiss ? (
+          <TouchableOpacity
+            onPress={handleDismiss}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={{
+              marginTop: 4,
+              marginLeft: 16,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: isForcedView ? "transparent" : theme.muted,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <X
+              color={isForcedView ? theme.mutedForeground : theme.foreground}
+              size={22}
+            />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ height: 40 }} />
+        )}
+
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 20 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text
+            style={{
+              color: accent,
+              fontSize: 12,
+              fontWeight: "800",
+              letterSpacing: 1.1,
+              marginTop: 10,
+            }}
+          >
+            {heroContent.eyebrow}
+          </Text>
+          <Text
+            style={{
+              color: theme.foreground,
+              fontSize: 32,
+              fontWeight: "800",
+              letterSpacing: -0.7,
+              lineHeight: 38,
+              marginTop: 8,
+            }}
+          >
+            {heroContent.headline}
+          </Text>
+          {!!(heroContent.sub || lockedStat) && (
+            <Text
+              style={{
+                color: theme.mutedForeground,
+                fontSize: 15,
+                lineHeight: 22,
+                marginTop: 10,
+              }}
+            >
+              {heroContent.sub ?? lockedStat}
+            </Text>
+          )}
+
+          <View style={{ marginTop: 26, gap: 14 }}>
+            {FEATURES.map(({ Icon, label }) => (
+              <View
+                key={label}
+                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
               >
-                <LinearGradient
-                  colors={isBusinessPaywall
-                    ? [colors.brand.amber400, colors.brand.orange500]
-                    : [colors.brand.traceRed, colors.brand.tracePink]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={{ paddingVertical: 16, alignItems: "center", justifyContent: "center" }}
-                >
-                  {purchasing ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-                      {ctaLabel}
-                    </Text>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-              {hasFreeTrial && (
+                <Icon size={19} color={accent} />
                 <Text
                   style={{
-                    textAlign: "center",
-                    fontSize: 11,
-                    color: theme.mutedForeground,
-                    marginTop: 6,
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "500",
+                    flex: 1,
                   }}
                 >
-                  Then {priceString}/{periodSuffix}. Cancel anytime.
+                  {label}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 30 }}>
+            {renderPlanCard("annual", annualPkg)}
+            {renderPlanCard("monthly", monthlyPkg)}
+          </View>
+
+          {!!error && (
+            <Text
+              style={{
+                color: colors.brand.rose500,
+                fontSize: 13,
+                textAlign: "center",
+                marginTop: 14,
+              }}
+            >
+              {error}
+            </Text>
+          )}
+        </ScrollView>
+
+        <View
+          style={{
+            paddingHorizontal: 24,
+            paddingTop: 12,
+            paddingBottom: 16,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+          }}
+        >
+          <TouchableOpacity
+            onPress={handlePurchase}
+            disabled={purchasing || subscribeDisabled || !selectedPkg}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+            style={{ opacity: purchasing || subscribeDisabled ? 0.6 : 1 }}
+          >
+            <LinearGradient
+              colors={[accent, colors.brand.tracePink]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{
+                borderRadius: 12,
+                paddingVertical: 18,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {purchasing ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text
+                  style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}
+                >
+                  {ctaLabel}
                 </Text>
               )}
-            </>
-          );
-        })()}
-      </View>
-    </SafeAreaView>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <Text
+            style={{
+              textAlign: "center",
+              fontSize: 12,
+              color: theme.mutedForeground,
+              marginTop: 10,
+            }}
+          >
+            {hasFreeTrial
+              ? `${trialDurationLabel} free, then ${priceString} per ${periodSuffix}. Cancel anytime.`
+              : `${priceString} per ${periodSuffix}. Cancel anytime.`}
+          </Text>
+
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 16,
+              marginTop: 12,
+            }}
+          >
+            <TouchableOpacity onPress={handleRestore}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+                Restore
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+                Terms
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+                Privacy
+              </Text>
+            </TouchableOpacity>
+            {!canDismiss && (
+              <TouchableOpacity onPress={() => logout().catch(() => {})}>
+                <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+                  Sign out
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
     </GestureHandlerRootView>
   );
 }

@@ -154,6 +154,24 @@ export const TIMEFRAMES = [
   { value: "no_preference", icon: "\u2728", label: "No Preference", sub: "Show me everything" },
 ] as const;
 
+/**
+ * "What's stopping you from taking the trip?" — the emotional beat in the
+ * Sept 2026 onboarding rebuild, modelled on Cal AI's barrier question.
+ *
+ * This one doesn't feed deal targeting. It exists to (a) make the user state
+ * a problem in their own words right before we show them the thing that
+ * solves it, and (b) give lifecycle email a segmentation key, so a
+ * price-sensitive user and a timing-anxious user don't get identical copy
+ * during the 72 hours that decide the trial.
+ */
+export const BARRIERS = [
+  { value: "prices_too_high", icon: "\u{1F4B8}", label: "Flights cost too much", sub: "Never seems affordable" },
+  { value: "bad_timing", icon: "⏰", label: "I never know when to book", sub: "Always feels like a gamble" },
+  { value: "no_time_to_search", icon: "\u{1F50D}", label: "I don't have time to search", sub: "Too many tabs, too little time" },
+  { value: "dates_never_work", icon: "\u{1F4C5}", label: "Dates never line up", sub: "Cheap fares, impossible days" },
+  { value: "cant_decide", icon: "\u{1F30D}", label: "I can't decide where to go", sub: "Too many options" },
+] as const;
+
 export const DEST_OPTIONS = [
   { value: "domestic", icon: "\u{1F1FA}\u{1F1F8}", label: "Domestic", sub: "Stay close" },
   { value: "international", icon: "\u{1F30D}", label: "International", sub: "Go far" },

@@ -17,6 +17,48 @@ export interface UserProfile {
   destinationPreference: "domestic" | "international" | "both";
   dealTypes: string[];
   travelTimeframe: string[];
+  /**
+   * What the user says is stopping them from travelling, captured in
+   * onboarding (see BARRIERS in the app's constants). Multi-select — most
+   * people have more than one reason and forcing a single pick threw away
+   * signal for no benefit.
+   *
+   * Not used for deal targeting — it's a segmentation key for lifecycle
+   * copy, so a "prices are too high" user and a "never know when to book"
+   * user can get different Klaviyo messaging during the trial window.
+   * Optional because everyone onboarded before Sept 2026 predates the step.
+   */
+  travelBarriers?: string[];
+  /**
+   * True once the win-back "we have a gift" offer has been shown.
+   *
+   * One-shot per user, like postOnboardingPaywallShown: a discount that
+   * reappears every time you dismiss a paywall stops being a gift and just
+   * becomes the price, which is the whole reason it is worth discounting
+   * this deeply in the first place.
+   */
+  giftOfferShown?: boolean;
+  /**
+   * Whether this user must hold a paid entitlement to reach the app at all.
+   *
+   * Set to "subscription_required" for everyone who completes the Sept 2026
+   * onboarding; absent for every account created before it. That scoping is
+   * deliberate and load-bearing: the gate is meant for people who just went
+   * through the new flow, and applying it to the whole base would lock ~450
+   * existing free users out of an app they have been using for months, plus
+   * anyone whose trial lapses. Widening it later is a one-line change in
+   * RootNavigator; un-ringing that bell is not.
+   */
+  accessGate?: "subscription_required";
+  /**
+   * Destinations this user was shown the last time they opened the gated
+   * home screen. Diffed on the next visit to count what's genuinely new.
+   *
+   * Stored as names rather than a timestamp because the deals API carries no
+   * "listed at" field — there is no honest way to ask "what appeared since
+   * Tuesday", but "which of these hadn't I seen" is exactly answerable.
+   */
+  gatedHomeSeenDestinations?: string[];
   subscriptionStatus: "free" | "trial" | "premium" | "business";
   /**
    * Where the user's current paid tier came from:

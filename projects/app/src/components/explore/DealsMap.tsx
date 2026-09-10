@@ -88,6 +88,28 @@ interface DealsMapProps {
   searchTarget: string | null;
   /** Create (or upsell) a deal alert for a destination we don't serve yet. */
   onRequestAlert: (destination: string) => void;
+  /**
+   * Camera overrides. Both default to the Explore constants and exist for the
+   * onboarding demo, which renders this map inside a ~212pt-wide phone mock —
+   * at Explore's zoom that framing is unreadably tight, so the demo pulls the
+   * initial view back and lands its auto-selection softer.
+   */
+  initialZoom?: number;
+  searchZoom?: number;
+  /**
+   * Suppress the locked-upsell banner and the selected-deal preview card,
+   * leaving just the map and its pins.
+   *
+   * Also hides the "N not shown" note for deals without coordinates.
+   *
+   * For the onboarding demo, which renders this inside a phone mock roughly a
+   * third of the real width — all of those are laid out for a full screen and
+   * overflow badly at that size, and the diagnostics-flavoured "N not shown"
+   * is an admission that means nothing to someone who has not used the app
+   * yet. The demo draws its own compact overlay instead. Defaults false, so
+   * Explore is unaffected.
+   */
+  chromeless?: boolean;
 }
 
 interface Pin {
@@ -144,6 +166,9 @@ export default function DealsMap({
   onLockedPress,
   searchTarget,
   onRequestAlert,
+  initialZoom = INITIAL_ZOOM,
+  searchZoom = SEARCH_ZOOM,
+  chromeless = false,
 }: DealsMapProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -211,7 +236,7 @@ export default function DealsMap({
     if (match) {
       cameraRef.current?.setCamera({
         centerCoordinate: [match.lng, match.lat],
-        zoomLevel: SEARCH_ZOOM,
+        zoomLevel: searchZoom,
         animationDuration: 1200,
       });
       setAlertPin(null);
@@ -235,7 +260,7 @@ export default function DealsMap({
       if (cancelled || !lnglat) return;
       cameraRef.current?.setCamera({
         centerCoordinate: lnglat,
-        zoomLevel: SEARCH_ZOOM,
+        zoomLevel: searchZoom,
         animationDuration: 1200,
       });
       setAlertPin({ name: searchTarget, lng: lnglat[0], lat: lnglat[1] });
@@ -280,7 +305,7 @@ export default function DealsMap({
           const name = await reverseGeocode(lng, lat);
           cameraRef.current?.setCamera({
             centerCoordinate: [lng, lat],
-            zoomLevel: SEARCH_ZOOM,
+            zoomLevel: searchZoom,
             animationDuration: 700,
           });
           setAlertPin({ name: name ?? `${lat.toFixed(2)}, ${lng.toFixed(2)}`, lng, lat });
@@ -289,7 +314,7 @@ export default function DealsMap({
       >
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: INITIAL_CENTER, zoomLevel: INITIAL_ZOOM }}
+          defaultSettings={{ centerCoordinate: INITIAL_CENTER, zoomLevel: initialZoom }}
         />
 
         {/* Locked teaser pins (drawn under the price tags). */}
@@ -360,7 +385,7 @@ export default function DealsMap({
 
       {/* Locked upsell banner. Names the searched destination when the search
           landed on a locked pin, otherwise falls back to the overall count. */}
-      {(searchLockedName || locked.length > 0) && (
+      {!chromeless && (searchLockedName || locked.length > 0) && (
         <Pressable onPress={onLockedPress} style={[styles.lockedBanner, { top: 12 }]}>
           <Lock size={13} color="#fff" />
           <Text style={styles.lockedBannerText} numberOfLines={1}>
@@ -372,7 +397,7 @@ export default function DealsMap({
         </Pressable>
       )}
 
-      {unmapped > 0 && (
+      {!chromeless && unmapped > 0 && (
         <View style={[styles.unmappedNote, { top: locked.length > 0 ? 54 : 12 }]} pointerEvents="none">
           <Text style={styles.unmappedText}>{unmapped} not shown</Text>
         </View>
@@ -405,7 +430,7 @@ export default function DealsMap({
 
       {/* Deal preview card — locked variant hides the price. For unlocked
           deals, tapping the card opens the full deal; the bookmark saves it. */}
-      {selectedPin && (
+      {!chromeless && selectedPin && (
         <View style={[styles.previewCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <Pressable
             style={styles.previewMain}

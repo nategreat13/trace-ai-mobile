@@ -44,6 +44,11 @@ export type AnalyticsEventName =
   | "signup_viewed"
   | "signup_completed"
   | "onboarding_started"
+  // Fires once per beat in the rebuilt flow. The rebuild trades a 5-step
+  // form for a ~10-beat one on the bet that completers convert far harder,
+  // so per-beat drop-off is the only way to read whether a fall in
+  // completion is the price of the bet or a specific screen being bad.
+  | "onboarding_step_viewed"
   | "onboarding_completed"
   // Engagement
   | "swipe"
@@ -112,6 +117,15 @@ export type AnalyticsEventName =
   | "paywall_cta_tapped"
   | "paywall_restore_tapped"
   | "paywall_dismissed"
+  // The win-back offer a dismissal now routes into. Split three ways because
+  // the interesting failure is specific: plenty of people will open the gift
+  // and still not claim it, and that gap is what says whether the discount is
+  // too small rather than the screen being wrong.
+  | "gift_offer_opened"
+  | "gift_offer_dismissed"
+  | "gift_offer_cta_tapped"
+  // Resting place for gated users who declined both the paywall and the gift.
+  | "gated_home_viewed"
   | "paywall_legal_tapped"
   // Subscription — client-side (user-action funnel)
   | "purchase_initiated"
