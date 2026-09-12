@@ -10,7 +10,11 @@ const isCodespaces = process.env.CODESPACES === "true";
 
 const localApiUrl = isCodespaces
   ? "https://opulent-space-train-pjxwjr9qpvqv26xpx-3001.app.github.dev"
-  : "http://localhost:3001";
+  : `http://${process.env.LOCAL_API_HOST ?? "localhost"}:3001`;
+// LOCAL_API_HOST: set to the Mac's LAN IP when testing the local server from
+// a physical device — a phone's "localhost" is the phone, so the default only
+// works in simulators. adb reverse papers over this on Android; iOS devices
+// have no equivalent, hence the override.
 
 const localSubscribeUrl = isCodespaces
   ? "https://opulent-space-train-pjxwjr9qpvqv26xpx-3000.app.github.dev/subscribe"
