@@ -12,6 +12,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 import { Sparkles } from "lucide-react-native";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -23,7 +24,9 @@ import FeedReveal, {
   selectRevealDeals,
 } from "../components/onboarding/FeedReveal";
 import { useIAP } from "../hooks/useIAP";
+import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
+import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import type { Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
@@ -125,10 +128,21 @@ export default function GatedHomeScreen() {
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
   const { updateProfile } = useProfile();
-  const { premiumAnnualPackage } = useIAP();
+  const { offerings, premiumAnnualPackage, isTrialEligibleFor } = useIAP();
+
+  // Same gate the paywall applies, so this button never promises a trial the
+  // purchase sheet won't honour.
+  const annualIntro = premiumAnnualPackage?.product.introPrice ?? null;
+  const hasFreeTrial =
+    trialsEnabledByRemote(offerings?.current) &&
+    isTrialEligibleFor(premiumAnnualPackage?.product.identifier) &&
+    !!annualIntro &&
+    annualIntro.price === 0;
+  const trialLabel = annualIntro ? formatTrialDuration(annualIntro) : "";
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
 
   const airport = profile?.homeAirport ?? "";
   const firstName = (profile?.firstName || profile?.displayName || "").split(
@@ -249,7 +263,23 @@ export default function GatedHomeScreen() {
   }, [loading, deals, profile?.gatedHomeSeenDestinations]);
 
   const openPaywall = (entryPoint: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     navigation.navigate("Paywall", { entryPoint });
+  };
+
+  /**
+   * From inside an opened deal, every conversion action goes to the paywall.
+   *
+   * ExpandedDeal's own rule is "never block the booking attempt", which is
+   * right for the in-app free tier — but this user has no free tier. The
+   * deal itself is the taste (dates, price, airline, tips; the guide tab
+   * already locks for non-premium); booking and saving are what they're
+   * being asked to pay for. The modal closes first so the paywall isn't
+   * pushed underneath an RN <Modal> that would sit on top of it.
+   */
+  const upsellFromDeal = (entryPoint: string) => {
+    setExpandedDeal(null);
+    setTimeout(() => openPaywall(entryPoint), 120);
   };
 
   const prefChips = [
@@ -390,6 +420,11 @@ export default function GatedHomeScreen() {
             destinationPreference={profile?.destinationPreference ?? "both"}
             headerExtra={matchingBlock}
             footerExtra={savingsBlock}
+            onPressDeal={(deal) => {
+              logEvent("gated_deal_opened", { destination: deal.destination });
+              setExpandedDeal(deal);
+            }}
+            onPressLocked={() => openPaywall("gated_deal_locked")}
           />
         </View>
 
@@ -421,7 +456,7 @@ export default function GatedHomeScreen() {
             }}
           >
             <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-              Unlock every deal
+              {hasFreeTrial ? `Try Free for ${trialLabel}` : "Unlock every deal"}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -437,6 +472,16 @@ export default function GatedHomeScreen() {
             marginTop: 14,
           }}
         >
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              navigation.navigate("EditPreferences");
+            }}
+          >
+            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+              Edit my answers
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => openPaywall("gated_home_restore")}>
             <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
               Restore purchase
@@ -449,6 +494,17 @@ export default function GatedHomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {expandedDeal && (
+        <ExpandedDeal
+          deal={expandedDeal}
+          visible={!!expandedDeal}
+          onClose={() => setExpandedDeal(null)}
+          onSave={() => upsellFromDeal("gated_deal_save")}
+          onBook={() => upsellFromDeal("gated_deal_book")}
+          userProfile={profile}
+        />
+      )}
     </SafeAreaView>
   );
 }

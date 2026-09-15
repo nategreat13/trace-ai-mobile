@@ -126,6 +126,8 @@ export type AnalyticsEventName =
   | "gift_offer_cta_tapped"
   // Resting place for gated users who declined both the paywall and the gift.
   | "gated_home_viewed"
+  // A gated user opened one of the five unlocked deals on the feed page.
+  | "gated_deal_opened"
   | "paywall_legal_tapped"
   // Subscription — client-side (user-action funnel)
   | "purchase_initiated"

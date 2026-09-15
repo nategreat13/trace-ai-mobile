@@ -18,6 +18,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 import { ChevronLeft } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 
@@ -43,6 +44,13 @@ interface OnboardingChromeProps {
   subtitle?: string;
   ctaLabel?: string;
   canProceed?: boolean;
+  /**
+   * Keep the CTA disabled for this long after the beat appears. The button
+   * visibly fills over the period so it reads as "coming", not "broken".
+   * Restarts whenever `holdKey` changes, so each beat gets its own hold.
+   */
+  holdMs?: number;
+  holdKey?: string;
   onNext: () => void;
   onBack?: () => void;
   /** Hide the bar + back affordance entirely (used by the full-bleed beats). */
@@ -60,6 +68,8 @@ export default function OnboardingChrome({
   subtitle,
   ctaLabel = "Continue",
   canProceed = true,
+  holdMs = 0,
+  holdKey,
   onNext,
   onBack,
   chromeless = false,
@@ -90,6 +100,30 @@ export default function OnboardingChrome({
   const barStyle = useAnimatedStyle(() => ({
     width: `${Math.max(0, Math.min(1, barProgress.value)) * 100}%`,
   }));
+
+  // Timed hold. `held` gates the button; `holdFill` sweeps a lighter band
+  // across it so the wait is legible. A dead-looking button for two seconds
+  // is the one way a forced pause turns into a support ticket.
+  const [held, setHeld] = React.useState(holdMs > 0);
+  const holdFill = useSharedValue(0);
+  React.useEffect(() => {
+    if (holdMs <= 0) {
+      setHeld(false);
+      return;
+    }
+    setHeld(true);
+    holdFill.value = 0;
+    holdFill.value = withTiming(1, { duration: holdMs, easing: Easing.linear });
+    const t = setTimeout(() => {
+      setHeld(false);
+      Haptics.selectionAsync().catch(() => {});
+    }, holdMs);
+    return () => clearTimeout(t);
+  }, [holdMs, holdKey]);
+  const holdFillStyle = useAnimatedStyle(() => ({
+    width: `${holdFill.value * 100}%`,
+  }));
+  const proceed = canProceed && !held;
 
   const Body = scrollable ? ScrollView : View;
   const bodyProps = scrollable
@@ -165,19 +199,30 @@ export default function OnboardingChrome({
       >
         {footerNote}
         <TouchableOpacity
-          onPress={onNext}
-          disabled={!canProceed}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(
+              () => {},
+            );
+            onNext();
+          }}
+          disabled={!proceed}
           activeOpacity={0.85}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canProceed }}
+          accessibilityState={{ disabled: !proceed }}
           style={[
             styles.cta,
             {
               backgroundColor: colors.brand.traceRed,
-              opacity: canProceed ? 1 : 0.4,
+              opacity: proceed ? 1 : held ? 0.55 : 0.4,
             },
           ]}
         >
+          {held && (
+            <Animated.View
+              pointerEvents="none"
+              style={[styles.holdFill, holdFillStyle]}
+            />
+          )}
           <Text style={styles.ctaText}>{ctaLabel}</Text>
         </TouchableOpacity>
       </View>
@@ -255,6 +300,14 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  holdFill: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255,255,255,0.28)",
   },
   ctaText: {
     color: "#ffffff",

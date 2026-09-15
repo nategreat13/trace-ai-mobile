@@ -357,6 +357,8 @@ export default function OnboardingScreen() {
     fullBleed?: boolean;
     /** Excluded from the EditPreferences flow. */
     newUserOnly?: boolean;
+    /** Keep the CTA disabled this long after the beat appears. */
+    holdMs?: number;
   };
 
   const nameBeat: Beat = {
@@ -442,7 +444,7 @@ export default function OnboardingScreen() {
       subtitle: "So we watch them for you instead",
       canProceed: true,
       newUserOnly: true,
-      content: <CadenceBeat />,
+      content: <CadenceBeat deals={deals} />,
     },
     {
       key: "destination",
@@ -519,6 +521,10 @@ export default function OnboardingScreen() {
       title: "Swipe and explore flights",
       subtitle: "Save what you like, skip what you don't — then see every deal on the map.",
       canProceed: true,
+      // Hold the CTA long enough to see the first two swipes land. Two
+      // seconds is the ceiling: enough to register that it's a demo, short
+      // enough that nobody reaches for the button and finds it dead.
+      holdMs: 2000,
       newUserOnly: true,
       content: <ProductDemoBeat deals={deals} />,
     },
@@ -631,6 +637,8 @@ export default function OnboardingScreen() {
           title={beat.title}
           subtitle={beat.subtitle}
           canProceed={beat.canProceed}
+          holdMs={beat.holdMs ?? 0}
+          holdKey={beat.key}
           ctaLabel={beat.ctaLabel ?? (isLast && isEditing ? "Save" : "Continue")}
           onNext={goNext}
           onBack={safeStep > 0 || isEditing ? goBack : undefined}

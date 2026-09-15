@@ -1,5 +1,11 @@
-import React, { useEffect } from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { View, Text, StyleSheet, useColorScheme, Pressable } from "react-native";
+import { Image } from "expo-image";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
+import { Bell, Hand } from "lucide-react-native";
+import { marqueeRank } from "../../lib/marquee";
+import type { Deal } from "@trace/shared";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -27,9 +33,69 @@ import { colors } from "../../theme/colors";
  */
 const TICKS = 42;
 
-export default function CadenceBeat() {
+/**
+ * Fallback for the tappable fare-drop demo when the deal fetch hasn't landed
+ * yet — this beat sits right after the airport step, so it usually hasn't.
+ * Illustrative, onboarding-only numbers, same policy as the map preview.
+ */
+const FALLBACK_DROP = { destination: "Paris", from: 612, to: 248, image: "" };
+
+interface CadenceBeatProps {
+  /** Their live feed, if it's arrived — picks a recognisable real deal. */
+  deals?: Deal[];
+}
+
+export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
+
+  // ── Tappable fare-drop demo ────────────────────────────────────────────
+  // The two timelines below explain coverage; this shows what coverage
+  // *delivers*. Tap the card and the price falls in front of you, then the
+  // alert lands — the thing they're actually being sold, demonstrated once,
+  // on demand, with a haptic so it feels like the phone doing it for real.
+  const showcase = useMemo(() => {
+    const withImage = deals.filter((d) => d.image_url && d.destination && d.price > 0);
+    if (!withImage.length) return FALLBACK_DROP;
+    const best = [...withImage].sort(
+      (a, b) => marqueeRank(a.destination) - marqueeRank(b.destination),
+    )[0];
+    const from =
+      best.original_price && best.original_price > best.price
+        ? best.original_price
+        : Math.round(best.price * 2.3);
+    return {
+      destination: best.destination,
+      from: Math.round(from),
+      to: Math.round(best.price),
+      image: best.image_url,
+    };
+  }, [deals]);
+
+  const [dropPhase, setDropPhase] = useState<"idle" | "dropping" | "alerted">("idle");
+  const [shownPrice, setShownPrice] = useState(showcase.from);
+  const dropTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => setShownPrice(showcase.from), [showcase.from]);
+  useEffect(() => () => { if (dropTimer.current) clearInterval(dropTimer.current); }, []);
+
+  const triggerDrop = () => {
+    if (dropPhase === "dropping") return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setDropPhase("dropping");
+    setShownPrice(showcase.from);
+    const start = Date.now();
+    const DUR = 720;
+    dropTimer.current = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / DUR);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShownPrice(Math.round(showcase.from - (showcase.from - showcase.to) * eased));
+      if (t >= 1) {
+        if (dropTimer.current) clearInterval(dropTimer.current);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        setDropPhase("alerted");
+      }
+    }, 16);
+  };
 
   const sweep = useSharedValue(0);
   useEffect(() => {
@@ -45,6 +111,82 @@ export default function CadenceBeat() {
 
   return (
     <View style={styles.wrap}>
+      <Animated.View entering={FadeInDown.duration(400)}>
+        <Pressable
+          onPress={triggerDrop}
+          accessibilityRole="button"
+          accessibilityLabel={`See a fare drop to ${showcase.destination}`}
+          style={({ pressed }) => [
+            styles.showcase,
+            { transform: [{ scale: pressed ? 0.985 : 1 }] },
+          ]}
+        >
+          {showcase.image ? (
+            <Image
+              source={{ uri: showcase.image }}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              transition={220}
+            />
+          ) : (
+            <LinearGradient
+              colors={[colors.brand.traceRed, colors.brand.tracePink]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+          )}
+          <LinearGradient
+            colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.78)"]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.showcaseBody}>
+            <Text style={styles.showcaseDest}>{showcase.destination}</Text>
+            <View style={styles.showcasePriceRow}>
+              <Text
+                style={[
+                  styles.showcasePrice,
+                  dropPhase !== "idle" && { color: colors.brand.traceGreen },
+                ]}
+              >
+                ${shownPrice}
+              </Text>
+              {dropPhase === "alerted" && (
+                <Animated.View entering={FadeIn.duration(200)} style={styles.wasPill}>
+                  <Text style={styles.wasText}>was ${showcase.from}</Text>
+                </Animated.View>
+              )}
+            </View>
+          </View>
+
+          {dropPhase === "idle" && (
+            <Animated.View entering={FadeIn.duration(300).delay(500)} style={styles.tapHint}>
+              <Hand size={14} color="#fff" />
+              <Text style={styles.tapHintText}>Tap to see an alert</Text>
+            </Animated.View>
+          )}
+
+          {dropPhase === "alerted" && (
+            <Animated.View
+              entering={FadeInDown.duration(320).springify().damping(16)}
+              style={[styles.alertBanner, { backgroundColor: theme.card }]}
+            >
+              <View style={[styles.alertIcon, { backgroundColor: colors.brand.traceRed }]}>
+                <Bell size={14} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.alertTitle, { color: theme.foreground }]} numberOfLines={1}>
+                  {showcase.destination} just dropped to ${showcase.to}
+                </Text>
+                <Text style={[styles.alertSub, { color: theme.mutedForeground }]}>
+                  Trace · just now
+                </Text>
+              </View>
+            </Animated.View>
+          )}
+        </Pressable>
+      </Animated.View>
+
       {/* Ours — dense, animated sweep */}
       <Animated.View
         entering={FadeInDown.duration(400)}
@@ -125,6 +267,66 @@ export default function CadenceBeat() {
 
 const styles = StyleSheet.create({
   wrap: { gap: 14 },
+  showcase: {
+    height: 178,
+    borderRadius: 20,
+    overflow: "hidden",
+    backgroundColor: "#00000010",
+  },
+  showcaseBody: { position: "absolute", left: 16, bottom: 14, right: 16 },
+  showcaseDest: { color: "#fff", fontSize: 20, fontWeight: "800" },
+  showcasePriceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
+  showcasePrice: { color: "#fff", fontSize: 30, fontWeight: "800", letterSpacing: -0.8 },
+  wasPill: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  wasText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    textDecorationLine: "line-through",
+  },
+  tapHint: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  tapHintText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  alertBanner: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 14,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  alertIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alertTitle: { fontSize: 14, fontWeight: "700" },
+  alertSub: { fontSize: 12, marginTop: 1 },
   card: { borderRadius: 20, padding: 18 },
   cardHead: {
     flexDirection: "row",

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import { X, Bell, Users, Crown, Clock, Sparkles, Map, Search, BookOpen } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
@@ -167,6 +168,11 @@ export default function PaywallScreen() {
 
   const handlePurchase = async () => {
     if (!selectedPkg) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    // The moment before the App Store sheet. A medium tap here, then the
+    // sheet — makes the CTA feel like it did something before the OS takes
+    // over, which otherwise has a dead half-second.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     // entry_point is stamped on both of these (as it already was on
     // paywall_viewed and trial_offer_shown) so the funnel can be read per
@@ -408,6 +414,27 @@ export default function PaywallScreen() {
           headline: "Know where to stay\nbefore you book",
           sub: null,
         };
+      // Opened a deal from the gated feed and reached for Book / Save, or
+      // tapped a locked row. They have a specific fare in mind now, so name
+      // that rather than the feature list.
+      case "gated_deal_book":
+        return {
+          eyebrow: "READY TO BOOK?",
+          headline: "Unlock this fare\nand every one after it",
+          sub: null,
+        };
+      case "gated_deal_save":
+        return {
+          eyebrow: "SAVE IT FOR LATER",
+          headline: "Keep this deal.\nGet told when it drops.",
+          sub: null,
+        };
+      case "gated_deal_locked":
+        return {
+          eyebrow: "LOCKED DESTINATION",
+          headline: "See the price on\nevery route we track",
+          sub: null,
+        };
       // Forced view after onboarding. They haven't used the app yet, so
       // there's no earned context to lean on — lead with the promise.
       case "post_onboarding":
@@ -507,10 +534,13 @@ export default function PaywallScreen() {
     : premiumMonthlyPackage;
   const annualPerMonth = getPerMonthFromAnnual(annualPkg);
 
+  // The trial length goes ON the button. "Try for Free" was true but vague;
+  // "Try Free for 7 Days" is the actual offer, and nothing else on the way
+  // here has said it out loud yet.
   const ctaLabel = subscribeDisabled
     ? "You're subscribed"
     : hasFreeTrial
-      ? "Try for Free"
+      ? `Try Free for ${trialDurationLabel}`
       : "Continue";
 
   /** One selectable plan card. Annual leads with its per-month equivalent. */
@@ -524,7 +554,10 @@ export default function PaywallScreen() {
     return (
       <TouchableOpacity
         key={period}
-        onPress={() => setBillingPeriod(period)}
+        onPress={() => {
+          Haptics.selectionAsync().catch(() => {});
+          setBillingPeriod(period);
+        }}
         activeOpacity={0.85}
         accessibilityRole="radio"
         accessibilityState={{ selected: active }}

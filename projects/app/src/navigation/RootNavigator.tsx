@@ -96,6 +96,15 @@ export default function RootNavigator() {
             component={PaywallScreen}
             options={{ presentation: "fullScreenModal" }}
           />
+          {/* Lets a gated user change an answer (wrong airport, forgot
+              international) without re-running the whole funnel. Editing
+              mode already skips every non-question beat and pops back here
+              on save, and GatedHome refetches when the airport changes. */}
+          <Stack.Screen
+            name="EditPreferences"
+            component={OnboardingScreen}
+            options={{ presentation: "fullScreenModal" }}
+          />
           <Stack.Screen
             name="GiftOffer"
             component={GiftOfferScreen}

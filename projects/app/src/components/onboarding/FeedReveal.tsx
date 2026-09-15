@@ -1,10 +1,18 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  useColorScheme,
+  TouchableOpacity,
+} from "react-native";
+import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { Lock, Plane } from "lucide-react-native";
 import { colors } from "../../theme/colors";
+import { marqueeRank } from "../../lib/marquee";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -45,6 +53,10 @@ interface FeedRevealProps {
   headerExtra?: React.ReactNode;
   /** Rendered after the locked-count line — the savings/price argument. */
   footerExtra?: React.ReactNode;
+  /** Tapping an unlocked row. When absent, rows are static. */
+  onPressDeal?: (deal: Deal) => void;
+  /** Tapping a locked row — the upsell moment. */
+  onPressLocked?: (deal: Deal) => void;
 }
 
 function isDomestic(d: Deal): boolean {
@@ -76,24 +88,27 @@ export function selectRevealDeals(
   const unique = [...cheapestByDest.values()];
 
   const byPrice = (a: Deal, b: Deal) => (a.price || 0) - (b.price || 0);
-  const domestic = unique.filter(isDomestic).sort(byPrice);
-  const intl = unique.filter((d) => !isDomestic(d)).sort(byPrice);
+  // Recognisable places first, cheapest within each — the sample is an
+  // advert for the feed, and "Paris $248" sells it in a way "Boise $89"
+  // doesn't, even though Boise is the better deal.
+  const byAppeal = (a: Deal, b: Deal) => {
+    const r = marqueeRank(a.destination) - marqueeRank(b.destination);
+    return r !== 0 ? r : byPrice(a, b);
+  };
+  const domestic = unique.filter(isDomestic).sort(byAppeal);
+  const intl = unique.filter((d) => !isDomestic(d)).sort(byAppeal);
 
-  // Compose the unlocked sample from their stated preference, then backfill
-  // from the other bucket so the count holds even for an airport that is
-  // thin on one side.
+  // Compose the sample from their stated preference, always with at least
+  // one international pick — even for domestic-only users, one far-away
+  // fare is what makes the feed feel bigger than the last search they ran.
+  // Backfill from the other bucket so the count holds for a thin airport.
   let picked: Deal[];
   if (destinationPreference === "domestic") {
-    picked = [...domestic.slice(0, FREE_UNLOCKED), ...intl];
+    picked = [...domestic.slice(0, 4), ...intl.slice(0, 1), ...domestic.slice(4), ...intl.slice(1)];
   } else if (destinationPreference === "international") {
     picked = [...intl.slice(0, FREE_UNLOCKED), ...domestic];
   } else {
-    picked = [
-      ...domestic.slice(0, 3),
-      ...intl.slice(0, 2),
-      ...domestic.slice(3),
-      ...intl.slice(2),
-    ];
+    picked = [...domestic.slice(0, 3), ...intl.slice(0, 2), ...domestic.slice(3), ...intl.slice(2)];
   }
   const unlocked = picked.slice(0, FREE_UNLOCKED).sort(byPrice);
   const unlockedSet = new Set(unlocked.map((d) => d.destination));
@@ -114,7 +129,11 @@ export function selectRevealDeals(
       locked: !unlockedSet.has(deal.destination),
     })),
     totalDestinations: unique.length,
-    cheapest: unlocked[0]?.price ?? unique[0]?.price ?? null,
+    // The true cheapest across everything, not just the sample — the label
+    // says "cheapest right now" and the sample is no longer sorted by price.
+    cheapest: unique.length
+      ? Math.min(...unique.map((d) => d.price || Infinity))
+      : null,
     lockedIntl: intl.filter((d) => !unlockedSet.has(d.destination)).length,
     unlockedIntl: intl.filter((d) => unlockedSet.has(d.destination)).length,
   };
@@ -127,6 +146,8 @@ export default function FeedReveal({
   destinationPreference,
   headerExtra,
   footerExtra,
+  onPressDeal,
+  onPressLocked,
 }: FeedRevealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -177,10 +198,33 @@ export default function FeedReveal({
       </Animated.View>
 
       <View style={styles.rows}>
-        {rows.map(({ deal, locked }, i) => (
+        {rows.map(({ deal, locked }, i) => {
+          const handler = locked ? onPressLocked : onPressDeal;
+          return (
           <Animated.View
             key={deal.id || `${deal.destination}-${i}`}
             entering={FadeInDown.duration(340).delay(240 + i * 55)}
+          >
+          {/* TouchableOpacity with a plain style array, not Pressable with a
+              function style — the function form rendered the row as a
+              column on-device (the row style was silently dropped under the
+              Reanimated wrapper). OptionList uses this exact structure and
+              lays out correctly, so it's the known-good shape here. */}
+          <TouchableOpacity
+            disabled={!handler}
+            activeOpacity={0.75}
+            onPress={() => {
+              Haptics.impactAsync(
+                locked
+                  ? Haptics.ImpactFeedbackStyle.Rigid
+                  : Haptics.ImpactFeedbackStyle.Light,
+              ).catch(() => {});
+              handler?.(deal);
+            }}
+            accessibilityRole={handler ? "button" : undefined}
+            accessibilityLabel={
+              locked ? `${deal.destination}, locked` : `Open ${deal.destination} deal`
+            }
             style={[
               styles.row,
               {
@@ -241,8 +285,10 @@ export default function FeedReveal({
                 )}
               </View>
             )}
+          </TouchableOpacity>
           </Animated.View>
-        ))}
+          );
+        })}
 
         {/* Fade the tail of the list so the locked run reads as continuing
             past the fold rather than ending. */}

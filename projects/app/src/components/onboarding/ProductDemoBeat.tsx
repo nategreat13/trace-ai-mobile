@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { View, Text, StyleSheet, useColorScheme } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Haptics from "expo-haptics";
 import Animated, {
   type SharedValue,
   FadeIn,
@@ -17,6 +18,7 @@ import Animated, {
 import { MapPin, Heart, X, Lock } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
+import { marqueeRank } from "../../lib/marquee";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -52,8 +54,8 @@ const DECK = SWIPES + 1;
  * the price before it's whipped away, or the demo shows motion instead of
  * product.
  */
-const CYCLE_MS = 1500;
-const FLING_MS = 340;
+const CYCLE_MS = 1150;
+const FLING_MS = 300;
 /** Cards render ~188pt wide inside a ~212pt screen; 250 clears the bezel. */
 const FLING_X = 250;
 const MAP_MS = 7600;
@@ -95,28 +97,6 @@ function makePreviewDeal(
     domestic_or_international: "International",
     image_url: "",
   } as unknown as Deal;
-}
-
-/**
- * Destinations that carry instant recognition. The deck prefers these over a
- * pure best-discount sort: a 70%-off fare to a regional airport is a better
- * *deal* but a worse *advert*, because the viewer has to work out whether they
- * care about the place before they can care about the price. Matching is a
- * substring test so "Tokyo (HND)" and "Rome, Italy" both land.
- */
-const MARQUEE = [
-  "tokyo", "rome", "paris", "london", "barcelona", "lisbon", "honolulu",
-  "maui", "hawaii", "cancun", "cancún", "denver", "new york", "los angeles",
-  "miami", "san francisco", "seattle", "chicago", "san diego", "boston",
-  "las vegas", "athens", "amsterdam", "dublin", "reykjavik", "reykjavík",
-  "mexico city", "san juan", "madrid", "milan", "venice", "sydney", "seoul",
-  "bangkok", "bali", "dubai", "istanbul", "lima", "rio de janeiro", "cape town",
-];
-
-function marqueeRank(destination: string): number {
-  const d = (destination || "").toLowerCase();
-  const i = MARQUEE.findIndex((m) => d.includes(m));
-  return i === -1 ? MARQUEE.length : i;
 }
 
 const PHONE_W = 228;
@@ -245,6 +225,10 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     let handover: ReturnType<typeof setTimeout> | null = null;
     const id = setInterval(() => {
       step += 1;
+      // Same light tick the real deck gives on a swipe. The demo can't be
+      // touched, so this is the one channel through which it can feel like
+      // the product rather than a video of it.
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       pos.value = withTiming(step, {
         duration: FLING_MS,
         easing: Easing.inOut(Easing.cubic),
@@ -313,6 +297,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
       const at = 1000 + i * 2000;
       timers.push(
         setTimeout(() => {
+          Haptics.selectionAsync().catch(() => {});
           setSearchTarget(pick.deal.destination);
           setChip(pick.deal);
           setChipLocked(pick.locked);

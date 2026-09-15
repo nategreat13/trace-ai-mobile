@@ -161,9 +161,15 @@ export default function GiftOfferScreen() {
   };
 
   const handleOpen = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-      () => {},
-    );
+    // Two-stage: a heavy thud on the tap itself, then the success burst ~150ms
+    // later as the confetti erupts. One notification haptic alone read as a
+    // tick; this reads as the box actually opening.
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+    setTimeout(() => {
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+    }, 150);
     setOpened(true);
     markShown();
     logEvent("gift_offer_opened", {
@@ -446,7 +452,10 @@ export default function GiftOfferScreen() {
           )}
         </View>
 
-        {opened && (
+        {/* Rendered in both states. Before opening, the button opens the box
+            — the box is still the hero and still tappable, but a visible CTA
+            at the bottom is where a thumb goes by habit, and a screen with
+            no button at the bottom reads as a dead end to some people. */}
         <Animated.View
           entering={FadeInDown.duration(360)}
           style={{
@@ -458,7 +467,7 @@ export default function GiftOfferScreen() {
           }}
         >
           <TouchableOpacity
-            onPress={handleClaim}
+            onPress={opened ? handleClaim : handleOpen}
             disabled={purchasing}
             activeOpacity={0.9}
             accessibilityRole="button"
@@ -479,13 +488,17 @@ export default function GiftOfferScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-                  {hasFreeTrial ? "Claim your free trial" : "Claim this offer"}
+                  {!opened
+                    ? "Open your gift"
+                    : hasFreeTrial
+                      ? `Try Free for ${trialDurationLabel}`
+                      : "Claim this offer"}
                 </Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
 
-          {(
+          {opened && (
             <>
               <Text
                 style={{
@@ -521,7 +534,6 @@ export default function GiftOfferScreen() {
             </>
           )}
         </Animated.View>
-        )}
 
         <Confetti active={opened} originY={0.42} />
       </SafeAreaView>

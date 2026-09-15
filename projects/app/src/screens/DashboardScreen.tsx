@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import * as Haptics from "expo-haptics";
 import {
   View,
   Text,
@@ -57,7 +58,6 @@ export default function DashboardScreen() {
   const [tab, setTab] = useState<"saved" | "alerts">("saved");
   const [alertSavedToast, setAlertSavedToast] = useState(false);
   const [expandedDeal, setExpandedDeal] = useState<any | null>(null);
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [selectedBadge, setSelectedBadge] = useState<(typeof ALL_BADGES)[number] | null>(null);
   const [showProfile, setShowProfile] = useState(false);
   async function doShare(deal: any, name: string) {
@@ -81,6 +81,14 @@ export default function DashboardScreen() {
     return raw && raw !== "Travel Explorer" ? raw : null;
   })();
 
+  /**
+   * Deals currently being deleted. Consulted by `loadData` so a refetch —
+   * this screen reloads on every tab focus — can't resurrect a row whose
+   * delete hasn't landed yet. That resurrection was the "I deleted it and it
+   * came back" report: the delete worked, the reload just raced it.
+   */
+  const inFlightDeletes = useRef<Set<string>>(new Set());
+
   const loadData = useCallback(async () => {
     if (!user) return;
     try {
@@ -89,7 +97,11 @@ export default function DashboardScreen() {
         getSwipeActions(user.uid),
         getDealAlerts(user.uid),
       ]);
-      setDeals(savedDeals);
+      setDeals(
+        inFlightDeletes.current.size
+          ? savedDeals.filter((d) => !inFlightDeletes.current.has(d.id))
+          : savedDeals,
+      );
       setSwipes(swipeData);
       setAlerts(alertData);
 
@@ -179,15 +191,56 @@ export default function DashboardScreen() {
     }
   }, [route.params]);
 
+  /**
+   * Deletes are optimistic: the row leaves the list the instant it's tapped
+   * and comes back only if the write fails.
+   *
+   * The previous version waited 250ms and *then* called Firestore, holding
+   * the row in a "deleting" state meanwhile. That state was never cleared on
+   * failure, so one dropped request left a row stuck forever; a double-tap
+   * fired two deletes, the second of which failed on a missing doc, same
+   * result. The delay itself was left over from a manual fade — the row
+   * already has a Reanimated `exiting` animation, so removing it from state
+   * IS the fade.
+   */
   const handleDeleteDeal = async (dealId: string) => {
-    setDeletingIds((prev) => new Set(prev).add(dealId));
-    setTimeout(async () => {
+    if (inFlightDeletes.current.has(dealId)) return;
+    inFlightDeletes.current.add(dealId);
+
+    const snapshot = deals;
+    const removed = snapshot.find((d) => d.id === dealId);
+    setDeals((prev) => prev.filter((d) => d.id !== dealId));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    try {
       await deleteSavedDeal(dealId);
-      setDeals((prev) => prev.filter((d) => d.id !== dealId));
-      setDeletingIds((prev) => { const s = new Set(prev); s.delete(dealId); return s; });
-    }, 250);
+    } catch (err) {
+      console.warn("[dashboard] delete saved deal failed:", err);
+      // Put it back where it was rather than at the end.
+      if (removed) {
+        setDeals((prev) => {
+          if (prev.some((d) => d.id === dealId)) return prev;
+          const idx = snapshot.findIndex((d) => d.id === dealId);
+          const next = [...prev];
+          next.splice(Math.min(idx, next.length), 0, removed);
+          return next;
+        });
+      }
+      Alert.alert("Couldn't remove that deal", "Please try again.");
+    } finally {
+      inFlightDeletes.current.delete(dealId);
+    }
   };
 
+  /**
+   * Clear-all empties the list immediately and deletes in parallel. Anything
+   * that fails is restored, so the list always matches the server.
+   *
+   * It used to await each delete in turn and clear the UI only after the
+   * last one — twenty saved deals meant twenty round-trips with a frozen
+   * list, and one failure mid-loop left the server half-cleared and the
+   * client showing everything.
+   */
   const handleClearAll = () => {
     Alert.alert("Clear All Saved Deals", "Remove all saved deals? This can't be undone.", [
       { text: "Cancel", style: "cancel" },
@@ -195,10 +248,23 @@ export default function DashboardScreen() {
         text: "Clear All",
         style: "destructive",
         onPress: async () => {
-          for (const deal of deals) {
-            await deleteSavedDeal(deal.id);
-          }
+          const snapshot = deals;
+          if (!snapshot.length) return;
           setDeals([]);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+          const results = await Promise.allSettled(
+            snapshot.map((d) => deleteSavedDeal(d.id)),
+          );
+          const failed = snapshot.filter((_, i) => results[i].status === "rejected");
+          if (failed.length) {
+            console.warn(`[dashboard] clear all: ${failed.length} deletes failed`);
+            setDeals(failed);
+            Alert.alert(
+              "Some deals couldn't be removed",
+              `${failed.length} ${failed.length === 1 ? "deal is" : "deals are"} still saved. Please try again.`,
+            );
+          }
         },
       },
     ]);
@@ -271,7 +337,6 @@ export default function DashboardScreen() {
   });
 
   const renderSavedDeal = ({ item }: { item: any }) => {
-    const isDeleting = deletingIds.has(item.id);
     const dealStatus = dealStatuses[item.id];
     const isPast = dealStatus?.status === "past";
     const isPriceChanged = dealStatus?.status === "price_changed";
@@ -287,7 +352,7 @@ export default function DashboardScreen() {
           borderColor: isPast ? theme.border : isPriceChanged ? "#F59E0B40" : theme.border,
           overflow: "hidden",
           marginBottom: 12,
-          opacity: isDeleting ? 0.4 : isPast ? 0.5 : 1,
+          opacity: isPast ? 0.5 : 1,
         }}
       >
         <TouchableOpacity activeOpacity={0.85} onPress={() => setExpandedDeal(savedDealToDeal(item))}>
@@ -389,7 +454,6 @@ export default function DashboardScreen() {
                 <ChevronRight size={16} color={theme.mutedForeground} />
                 <TouchableOpacity
                   onPress={() => handleDeleteDeal(item.id)}
-                  disabled={isDeleting}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Trash2 size={16} color="#ef4444" />
