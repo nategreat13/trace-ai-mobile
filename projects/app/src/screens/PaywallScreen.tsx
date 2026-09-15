@@ -168,7 +168,6 @@ export default function PaywallScreen() {
 
   const handlePurchase = async () => {
     if (!selectedPkg) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     // The moment before the App Store sheet. A medium tap here, then the
     // sheet — makes the CTA feel like it did something before the OS takes
     // over, which otherwise has a dead half-second.
