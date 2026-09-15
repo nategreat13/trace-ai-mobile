@@ -547,7 +547,7 @@ export default function ExpandedDeal({
                     {tab === "flight"
                       ? "✈️  Flight"
                       : `🗺️  ${deal.destination_code ? `Your ${deal.destination_code} Guide` : "Travel Guide"}`}
-                    {tab === "destination" && !isPremium ? "  🔒" : ""}
+                    {tab === "destination" && !isPremium && !guidePreview ? "  🔒" : ""}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1040,8 +1040,14 @@ export default function ExpandedDeal({
                 end={{ x: 1, y: 0 }}
                 style={styles.bookGradient}
               >
-                <ExternalLink size={16} color="#ffffff" />
-                <Text style={styles.bookButtonText}>Book Now</Text>
+                {guidePreview ? (
+                  <Sparkles size={16} color="#ffffff" />
+                ) : (
+                  <ExternalLink size={16} color="#ffffff" />
+                )}
+                <Text style={styles.bookButtonText}>
+                  {guidePreview ? "Try Free" : "Book Now"}
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -1246,15 +1252,15 @@ const styles = StyleSheet.create({
   },
 
   // ── Guide preview (gated onboarding feed) ─────────────────────────────────
-  previewPanel: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
-  previewTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, marginBottom: 6 },
-  previewSection: { marginTop: 16, gap: 10 },
-  previewLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.9 },
-  previewRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  previewBullet: { fontSize: 15, marginTop: 1 },
-  previewText: { flex: 1, fontSize: 15, lineHeight: 21, fontWeight: "600" },
-  previewSub: { fontSize: 13, lineHeight: 18, marginTop: 2 },
-  previewLockedWrap: { marginTop: 18, gap: 10, position: "relative", minHeight: 120 },
+  previewPanel: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 8 },
+  previewTitle: { fontSize: 21, fontWeight: "800", letterSpacing: -0.3, marginBottom: 4 },
+  previewSection: { marginTop: 24, gap: 14 },
+  previewLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.9, marginBottom: 2 },
+  previewRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  previewBullet: { fontSize: 16, marginTop: 1 },
+  previewText: { flex: 1, fontSize: 15, lineHeight: 22, fontWeight: "600" },
+  previewSub: { fontSize: 13, lineHeight: 19, marginTop: 4 },
+  previewLockedWrap: { marginTop: 26, gap: 10, position: "relative", minHeight: 130 },
   previewGhost: { height: 40, borderRadius: 10 },
   previewLock: {
     position: "absolute",

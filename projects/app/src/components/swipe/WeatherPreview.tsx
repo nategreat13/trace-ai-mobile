@@ -330,10 +330,14 @@ export default function WeatherPreview({ deal, onUpsell }: WeatherPreviewProps) 
 
             {!isPremium && (
               <>
+                {/* Scrim in the card's own blue, not white. A white scrim
+                    inside a blue-tinted card read as a random pale patch;
+                    matching the tint makes it read as "this part is veiled"
+                    rather than "this part is broken". */}
                 <View
                   style={[
                     StyleSheet.absoluteFillObject,
-                    { backgroundColor: scheme === "dark" ? "rgba(16,16,22,0.86)" : "rgba(255,255,255,0.88)" },
+                    { backgroundColor: scheme === "dark" ? "rgba(17,24,39,0.9)" : "rgba(239,246,255,0.93)" },
                   ]}
                   pointerEvents="none"
                 />
