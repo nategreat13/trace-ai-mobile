@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, useColorScheme, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  useColorScheme,
+  TouchableOpacity,
+} from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -111,15 +117,17 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
 
   return (
     <View style={styles.wrap}>
+      {/* The showcase. TouchableOpacity with a plain style array, NOT
+          Pressable with a function style — that form dropped the container
+          style on-device, so every absolute layer inside (image, gradient,
+          price, hint, alert) collapsed onto a zero-height box. */}
       <Animated.View entering={FadeInDown.duration(400)}>
-        <Pressable
+        <TouchableOpacity
           onPress={triggerDrop}
+          activeOpacity={0.9}
           accessibilityRole="button"
           accessibilityLabel={`See a fare drop to ${showcase.destination}`}
-          style={({ pressed }) => [
-            styles.showcase,
-            { transform: [{ scale: pressed ? 0.985 : 1 }] },
-          ]}
+          style={styles.showcase}
         >
           {showcase.image ? (
             <Image
@@ -184,82 +192,59 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
               </View>
             </Animated.View>
           )}
-        </Pressable>
+        </TouchableOpacity>
       </Animated.View>
 
-      {/* Ours — dense, animated sweep */}
+      {/* One compact comparison instead of two full cards. The showcase
+          above is the engaging part; this just has to make the contrast
+          legible at a glance, and two stacked cards with their own headers
+          and notes were doing that at three times the height. */}
       <Animated.View
-        entering={FadeInDown.duration(400)}
-        style={[styles.card, { backgroundColor: theme.muted }]}
+        entering={FadeInDown.duration(400).delay(180)}
+        style={[styles.compare, { backgroundColor: theme.muted }]}
       >
-        <View style={styles.cardHead}>
-          <Text style={[styles.cardTitle, { color: theme.foreground }]}>
-            Trace checks
+        <View style={styles.compareRow}>
+          <Text style={[styles.compareLabel, { color: theme.foreground }]}>
+            Trace
           </Text>
-          <Text style={[styles.cardValue, { color: colors.brand.traceGreen }]}>
+          <View style={styles.compareTrack}>
+            <Animated.View style={[styles.sweep, sweepStyle]}>
+              <View style={styles.ticks}>
+                {Array.from({ length: TICKS }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[styles.tick, { backgroundColor: colors.brand.traceGreen }]}
+                  />
+                ))}
+              </View>
+            </Animated.View>
+          </View>
+          <Text style={[styles.compareValue, { color: colors.brand.traceGreen }]}>
             Real time
           </Text>
         </View>
-        <View style={styles.trackRow}>
-          <Animated.View style={[styles.sweep, sweepStyle]}>
-            <View style={styles.ticks}>
-              {Array.from({ length: TICKS }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.tick,
-                    { backgroundColor: colors.brand.traceGreen },
-                  ]}
-                />
-              ))}
-            </View>
-          </Animated.View>
-        </View>
-        <Text style={[styles.cardNote, { color: theme.mutedForeground }]}>
-          On every route you care about, around the clock
-        </Text>
-      </Animated.View>
-
-      {/* Theirs — sparse */}
-      <Animated.View
-        entering={FadeInDown.duration(400).delay(220)}
-        style={[styles.card, { backgroundColor: theme.muted }]}
-      >
-        <View style={styles.cardHead}>
-          <Text style={[styles.cardTitle, { color: theme.foreground }]}>
-            Checking on your own
+        <View style={[styles.compareDivider, { backgroundColor: theme.border }]} />
+        <View style={styles.compareRow}>
+          <Text style={[styles.compareLabel, { color: theme.foreground }]}>
+            You
           </Text>
-          <Text style={[styles.cardValue, { color: colors.brand.rose500 }]}>
+          <View style={styles.compareTrack}>
+            <View style={[styles.emptyTrack, { backgroundColor: theme.border }]}>
+              <View style={[styles.sparseTick, { backgroundColor: colors.brand.rose500, left: "18%" }]} />
+              <View style={[styles.sparseTick, { backgroundColor: colors.brand.rose500, left: "71%" }]} />
+            </View>
+          </View>
+          <Text style={[styles.compareValue, { color: colors.brand.rose500 }]}>
             2× a week
           </Text>
         </View>
-        <View style={styles.trackRow}>
-          <View style={[styles.emptyTrack, { backgroundColor: theme.border }]}>
-            <View
-              style={[
-                styles.sparseTick,
-                { backgroundColor: colors.brand.rose500, left: "18%" },
-              ]}
-            />
-            <View
-              style={[
-                styles.sparseTick,
-                { backgroundColor: colors.brand.rose500, left: "71%" },
-              ]}
-            />
-          </View>
-        </View>
-        <Text style={[styles.cardNote, { color: theme.mutedForeground }]}>
-          Most fare drops are gone before you look
-        </Text>
       </Animated.View>
 
       <Animated.Text
-        entering={FadeIn.duration(400).delay(620)}
+        entering={FadeIn.duration(400).delay(520)}
         style={[styles.kicker, { color: theme.mutedForeground }]}
       >
-        A cheap fare usually lasts hours, not days. The difference isn't how
-        hard you look — it's whether anyone's watching when it drops.
+        A cheap fare lasts hours, not days. We're watching when it drops.
       </Animated.Text>
     </View>
   );
@@ -327,31 +312,22 @@ const styles = StyleSheet.create({
   },
   alertTitle: { fontSize: 14, fontWeight: "700" },
   alertSub: { fontSize: 12, marginTop: 1 },
-  card: { borderRadius: 20, padding: 18 },
-  cardHead: {
+  compare: { borderRadius: 18, paddingVertical: 6, paddingHorizontal: 16 },
+  compareRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 14,
+    gap: 12,
+    paddingVertical: 12,
   },
-  cardTitle: { fontSize: 16, fontWeight: "700" },
-  cardValue: { fontSize: 16, fontWeight: "800" },
-  trackRow: { height: 26, justifyContent: "center" },
+  compareLabel: { width: 52, fontSize: 15, fontWeight: "700" },
+  compareTrack: { flex: 1, height: 22, justifyContent: "center" },
+  compareValue: { width: 76, textAlign: "right", fontSize: 14, fontWeight: "800" },
+  compareDivider: { height: StyleSheet.hairlineWidth },
   sweep: { overflow: "hidden" },
   ticks: { flexDirection: "row", gap: 3 },
-  tick: { width: 4, height: 22, borderRadius: 2 },
-  emptyTrack: {
-    height: 4,
-    borderRadius: 2,
-    justifyContent: "center",
-  },
-  sparseTick: {
-    position: "absolute",
-    width: 4,
-    height: 22,
-    borderRadius: 2,
-  },
-  cardNote: { fontSize: 13, marginTop: 12, lineHeight: 18 },
+  tick: { width: 4, height: 18, borderRadius: 2 },
+  emptyTrack: { height: 4, borderRadius: 2, justifyContent: "center" },
+  sparseTick: { position: "absolute", width: 4, height: 18, borderRadius: 2 },
   kicker: {
     fontSize: 15,
     lineHeight: 22,

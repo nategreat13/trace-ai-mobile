@@ -305,15 +305,22 @@ export default function GiftOfferScreen() {
                 </TouchableOpacity>
               </Animated.View>
 
-              <Text
-                style={{
-                  color: theme.mutedForeground,
-                  fontSize: 15,
-                  fontWeight: "600",
-                }}
+              <TouchableOpacity
+                onPress={handleOpen}
+                hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
+                accessibilityRole="button"
+                accessibilityLabel="Open your gift"
               >
-                Tap to open
-              </Text>
+                <Text
+                  style={{
+                    color: theme.mutedForeground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                  }}
+                >
+                  Tap to open
+                </Text>
+              </TouchableOpacity>
             </Animated.View>
           ) : (
             <Animated.View entering={FadeIn.duration(420)} style={{ alignItems: "center" }}>
@@ -452,10 +459,10 @@ export default function GiftOfferScreen() {
           )}
         </View>
 
-        {/* Rendered in both states. Before opening, the button opens the box
-            — the box is still the hero and still tappable, but a visible CTA
-            at the bottom is where a thumb goes by habit, and a screen with
-            no button at the bottom reads as a dead end to some people. */}
+        {/* Footer only once the offer is revealed. Before that, the box and
+            the "Tap to open" caption are the tap targets — a bar at the bottom
+            competed with the object the copy tells you to open. */}
+        {opened && (
         <Animated.View
           entering={FadeInDown.duration(360)}
           style={{
@@ -467,7 +474,7 @@ export default function GiftOfferScreen() {
           }}
         >
           <TouchableOpacity
-            onPress={opened ? handleClaim : handleOpen}
+            onPress={handleClaim}
             disabled={purchasing}
             activeOpacity={0.9}
             accessibilityRole="button"
@@ -488,11 +495,9 @@ export default function GiftOfferScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-                  {!opened
-                    ? "Open your gift"
-                    : hasFreeTrial
-                      ? `Try Free for ${trialDurationLabel}`
-                      : "Claim this offer"}
+                  {hasFreeTrial
+                    ? `Try Free for ${trialDurationLabel}`
+                    : "Claim this offer"}
                 </Text>
               )}
             </LinearGradient>
@@ -534,6 +539,7 @@ export default function GiftOfferScreen() {
             </>
           )}
         </Animated.View>
+        )}
 
         <Confetti active={opened} originY={0.42} />
       </SafeAreaView>

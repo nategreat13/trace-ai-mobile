@@ -77,6 +77,17 @@ interface ExpandedDealProps {
   onShare?: (name: string) => void;
   /** Pre-resolved display name — "Travel Explorer" filtered out by the parent. */
   userName?: string | null;
+  /**
+   * Show a taste of the destination guide to a non-premium user instead of
+   * the bare locked panel: a few real items from the deal record itself
+   * (neighbourhoods, experiences, tips), then a lock and the upsell.
+   *
+   * Only the gated onboarding feed sets this. It never fetches the full
+   * guide — everything shown is already on the deal object — so the cost
+   * argument in the locked panel below still holds. Default false, so the
+   * in-app free tier keeps its current behaviour.
+   */
+  guidePreview?: boolean;
 }
 
 type FitLevel = { color: "green" | "yellow" | "red" };
@@ -215,6 +226,7 @@ export default function ExpandedDeal({
   bothSaved,
   onShare,
   userName,
+  guidePreview = false,
 }: ExpandedDealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -545,6 +557,114 @@ export default function ExpandedDeal({
           {activeTab === "destination" ? (
             isPremium ? (
               <DealDestinationTab deal={deal} userProfile={userProfile} />
+            ) : guidePreview ? (
+              <View style={styles.previewPanel}>
+                <Text style={[styles.previewTitle, { color: theme.foreground }]}>
+                  {guideFirstName
+                    ? `${guideFirstName}, a peek at your ${deal.destination} guide`
+                    : `A peek at your ${deal.destination} guide`}
+                </Text>
+
+                {(deal.neighborhood_previews ?? []).slice(0, 2).length > 0 && (
+                  <View style={styles.previewSection}>
+                    <Text style={[styles.previewLabel, { color: theme.mutedForeground }]}>
+                      WHERE TO STAY
+                    </Text>
+                    {(deal.neighborhood_previews ?? []).slice(0, 2).map((n, i) => (
+                      <View key={i} style={styles.previewRow}>
+                        <Text style={styles.previewBullet}>📍</Text>
+                        <Text style={[styles.previewText, { color: theme.foreground }]}>
+                          {n}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {(deal.experiences ?? []).slice(0, 2).length > 0 && (
+                  <View style={styles.previewSection}>
+                    <Text style={[styles.previewLabel, { color: theme.mutedForeground }]}>
+                      THINGS TO DO
+                    </Text>
+                    {/* No bullet on these: experience titles arrive with their
+                        own emoji from the API, and a second one reads as noise. */}
+                    {(deal.experiences ?? []).slice(0, 2).map((e, i) => (
+                      <View key={i} style={styles.previewRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.previewText, { color: theme.foreground }]}>
+                            {e.title}
+                          </Text>
+                          {!!e.description && (
+                            <Text
+                              style={[styles.previewSub, { color: theme.mutedForeground }]}
+                              numberOfLines={2}
+                            >
+                              {e.description}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {(deal.quick_tips ?? []).slice(0, 1).length > 0 && (
+                  <View style={styles.previewSection}>
+                    <Text style={[styles.previewLabel, { color: theme.mutedForeground }]}>
+                      GOOD TO KNOW
+                    </Text>
+                    <View style={styles.previewRow}>
+                      <Text style={styles.previewBullet}>💡</Text>
+                      <Text style={[styles.previewText, { color: theme.foreground }]}>
+                        {(deal.quick_tips ?? [])[0]}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* The rest, faded under a lock. Rows are placeholders, not
+                    real content — showing more would defeat the gate. */}
+                <View style={styles.previewLockedWrap}>
+                  {[0, 1, 2].map((i) => (
+                    <View
+                      key={i}
+                      style={[styles.previewGhost, { backgroundColor: theme.muted }]}
+                    />
+                  ))}
+                  <LinearGradient
+                    colors={["transparent", theme.background]}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+                  <View style={styles.previewLock}>
+                    <Text style={styles.lockedTabEmoji}>🔒</Text>
+                    <Text style={[styles.previewLockText, { color: theme.foreground }]}>
+                      Neighbourhoods, day trips, budgets, what to avoid —
+                      the full guide is in your trial.
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    onClose();
+                    navigation.navigate("Paywall", { entryPoint: "deal_destination_locked" });
+                  }}
+                  activeOpacity={0.85}
+                  style={styles.lockedTabCta}
+                >
+                  <LinearGradient
+                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.lockedTabCtaInner}
+                  >
+                    <Text style={styles.lockedTabCtaText}>
+                      Unlock Your {deal.destination} Guide
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             ) : (
               /* Locked destination guide.
 
@@ -1124,6 +1244,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
+
+  // ── Guide preview (gated onboarding feed) ─────────────────────────────────
+  previewPanel: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 8 },
+  previewTitle: { fontSize: 20, fontWeight: "800", letterSpacing: -0.3, marginBottom: 6 },
+  previewSection: { marginTop: 16, gap: 10 },
+  previewLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.9 },
+  previewRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  previewBullet: { fontSize: 15, marginTop: 1 },
+  previewText: { flex: 1, fontSize: 15, lineHeight: 21, fontWeight: "600" },
+  previewSub: { fontSize: 13, lineHeight: 18, marginTop: 2 },
+  previewLockedWrap: { marginTop: 18, gap: 10, position: "relative", minHeight: 120 },
+  previewGhost: { height: 40, borderRadius: 10 },
+  previewLock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+  },
+  previewLockText: { fontSize: 14, lineHeight: 20, textAlign: "center", fontWeight: "600" },
 
   // ── Locked destination tab ────────────────────────────────────────────────
   lockedTabPanel: {

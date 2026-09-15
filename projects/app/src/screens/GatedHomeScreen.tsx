@@ -503,6 +503,7 @@ export default function GatedHomeScreen() {
           onSave={() => upsellFromDeal("gated_deal_save")}
           onBook={() => upsellFromDeal("gated_deal_book")}
           userProfile={profile}
+          guidePreview
         />
       )}
     </SafeAreaView>
