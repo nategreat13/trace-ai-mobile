@@ -16,6 +16,7 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "We need access to your photo library to let you upload a profile picture.",
+        "NSLocationWhenInUseUsageDescription": "Trace can center the deal map near you. Location is optional \u2014 the app works fully without it.",
         "SKAdNetworkItems": [
           {
             "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork"
