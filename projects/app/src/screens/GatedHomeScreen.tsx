@@ -20,13 +20,15 @@ import { useProfile } from "../hooks/useProfile";
 import { fetchDeals } from "../services/dealsApi";
 import { logout } from "../services/auth";
 import { logEvent } from "../lib/analytics";
+import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
+import { Gift } from "lucide-react-native";
 import FeedReveal, {
   selectRevealDeals,
 } from "../components/onboarding/FeedReveal";
 import { useIAP } from "../hooks/useIAP";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
-import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import DealPeek from "../components/onboarding/DealPeek";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import type { Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
@@ -105,6 +107,18 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   freshText: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
+  giftPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    alignSelf: "flex-start",
+    borderWidth: 1.5,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginBottom: 12,
+  },
+  giftPillText: { fontSize: 13, fontWeight: "800" },
   answer: {
     fontSize: 15,
     lineHeight: 22,
@@ -193,6 +207,24 @@ export default function GatedHomeScreen() {
     return () => clearTimeout(t);
   }, [profile?.id, profile?.postOnboardingPaywallShown]);
 
+  // Return-visit re-offer. If they've seen the gift before, it's been 24h+,
+  // and they're under the cap, push it again shortly after landing. Skipped
+  // on the very first visit — that path goes paywall → gift on its own.
+  const reofferRef = useRef(false);
+  useEffect(() => {
+    if (reofferRef.current || loading || !profile) return;
+    if (profile.postOnboardingPaywallShown !== true) return; // first visit
+    if (!giftOfferSeen(profile) || !giftOfferEligible(profile)) return;
+    reofferRef.current = true;
+    const t = setTimeout(
+      () => navigation.navigate("GiftOffer", { fromEntryPoint: "gated_home_return" }),
+      900,
+    );
+    return () => clearTimeout(t);
+  }, [loading, profile?.id, profile?.giftOfferShowCount, profile?.giftOfferLastShownAt]);
+
+  const showGiftPill = giftOfferSeen(profile) && giftOfferEligible(profile, { manual: true });
+
   // Everything the page says about "the deals below" is computed from the
   // SAME selection FeedReveal renders — see selectRevealDeals.
   const selection = useMemo(
@@ -268,14 +300,9 @@ export default function GatedHomeScreen() {
   };
 
   /**
-   * From inside an opened deal, every conversion action goes to the paywall.
-   *
-   * ExpandedDeal's own rule is "never block the booking attempt", which is
-   * right for the in-app free tier — but this user has no free tier. The
-   * deal itself is the taste (dates, price, airline, tips; the guide tab
-   * already locks for non-premium); booking and saving are what they're
-   * being asked to pay for. The modal closes first so the paywall isn't
-   * pushed underneath an RN <Modal> that would sit on top of it.
+   * The deal peek's one button goes to the paywall. The sheet closes first
+   * so the paywall isn't pushed underneath an RN <Modal> that would sit on
+   * top of it.
    */
   const upsellFromDeal = (entryPoint: string) => {
     setExpandedDeal(null);
@@ -299,6 +326,22 @@ export default function GatedHomeScreen() {
   // a question the user has before they scroll, not after.
   const matchingBlock = (
     <>
+      {showGiftPill && (
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            navigation.navigate("GiftOffer", { fromEntryPoint: "gated_home_pill" });
+          }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          style={[styles.giftPill, { backgroundColor: colors.brand.traceRed + "14", borderColor: colors.brand.traceRed }]}
+        >
+          <Gift size={15} color={colors.brand.traceRed} />
+          <Text style={[styles.giftPillText, { color: colors.brand.traceRed }]}>
+            You have an unclaimed offer
+          </Text>
+        </TouchableOpacity>
+      )}
       {newCount > 0 && (
         <Animated.View
           entering={FadeIn.duration(400)}
@@ -496,14 +539,12 @@ export default function GatedHomeScreen() {
       </View>
 
       {expandedDeal && (
-        <ExpandedDeal
+        <DealPeek
           deal={expandedDeal}
-          visible={!!expandedDeal}
+          homeAirport={airport}
+          ctaLabel={hasFreeTrial ? `Try Free for ${trialLabel}` : "Unlock every deal"}
           onClose={() => setExpandedDeal(null)}
-          onSave={() => upsellFromDeal("gated_deal_save")}
-          onBook={() => upsellFromDeal("gated_deal_book")}
-          userProfile={profile}
-          guidePreview
+          onCta={() => upsellFromDeal("gated_deal_peek")}
         />
       )}
     </SafeAreaView>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { View, Text, StyleSheet, useColorScheme } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,11 +10,15 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
+  withSpring,
   withSequence,
   interpolate,
   Extrapolation,
   Easing,
+  runOnJS,
+  runOnUI,
 } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { MapPin, Heart, X, Lock } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
@@ -27,17 +31,19 @@ import type { Deal } from "@trace/shared";
  * Every other beat *describes* the product; this one shows it. Two choices
  * worth knowing about:
  *
- *  1. **It lives inside a phone frame and is `pointerEvents="none"`.** Without
- *     the frame an animating deck reads as something you're meant to swipe,
- *     people try, nothing happens, and the screen feels broken.
- *  2. **Nothing resets mid-loop.** Earlier versions swapped card *content* on
- *     a React index and reset the animation values each cycle; the frame
- *     where React caught up was visible as a hitch at the end of every swipe.
- *     Now every card is mounted once with its own deal for the life of the
- *     beat, and a single `pos` value walks 0 → DECK. A card's whole life is a
- *     function of `pos - itsIndex`, so there is no swap, no reset, and no
- *     React re-render while the deck is running. The one reset — `pos` back
- *     to 0 — happens while the map phase is on screen, where it can't be seen.
+ *  1. **The deck is really swipeable.** A pan gesture drives the top card,
+ *     and a real swipe commits it. If the user doesn't touch it for IDLE_MS
+ *     the deck swipes itself, so a passive viewer still sees the loop — but
+ *     a curious one gets to *do* the thing rather than watch it, which is
+ *     what people remember. The phone frame stays because it frames the
+ *     product; it just isn't a no-touch zone any more.
+ *  2. **Nothing resets mid-loop.** `pos` is the committed top-card index
+ *     (an integer, set directly) and `dragX`/`dragY` are the live offset of
+ *     whatever card is on top. A fling animates dragX out, then — in the
+ *     same UI-thread callback — bumps `pos` and zeroes the drag, so the next
+ *     card is already at rest the frame it becomes top. No content swap, no
+ *     React re-render while the deck runs. The one rewind (pos back to 0)
+ *     happens while the map phase covers the screen.
  */
 /**
  * Three swipes is the whole demonstration — after that it's repetition, and
@@ -54,8 +60,13 @@ const DECK = SWIPES + 1;
  * the price before it's whipped away, or the demo shows motion instead of
  * product.
  */
-const CYCLE_MS = 1150;
+/** How long the deck waits for a touch before swiping a card itself. */
+const IDLE_MS = 2600;
+/** Grace after the phone swoops in before the idle clock starts. */
+const ENTRANCE_MS = 900;
 const FLING_MS = 300;
+/** Drag distance that commits a swipe; a fast flick commits sooner. */
+const SWIPE_THRESHOLD = 70;
 /** Cards render ~188pt wide inside a ~212pt screen; 250 clears the bezel. */
 const FLING_X = 250;
 const MAP_MS = 7600;
@@ -219,39 +230,102 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
   }));
 
   // Swipe phase: walk `pos` one card at a time, then hand to the map.
+  // Live drag of the top card, plus the committed index. See header.
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const flinging = useSharedValue(false);
+  const stepRef = useRef(0);
+  const lastInteractRef = useRef(0);
+  const [interacted, setInteracted] = useState(false);
+
+  const totalSwipes = Math.min(SWIPES, cards.length);
+
+  /** JS side of a committed swipe: haptic, marker pulse, phase handover. */
+  const onCommitted = (dir: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    // Bloom fast, decay slow — the shape of a haptic tap. On its own value
+    // so the marker outlives the card rather than blinking with it.
+    const target = dir > 0 ? likePulse : passPulse;
+    target.value = withSequence(
+      withTiming(1, { duration: 150, easing: Easing.out(Easing.back(2)) }),
+      withTiming(0, { duration: 900, easing: Easing.out(Easing.cubic) }),
+    );
+    stepRef.current += 1;
+    lastInteractRef.current = Date.now();
+    if (stepRef.current >= totalSwipes) {
+      setTimeout(() => setPhase("map"), 160);
+    }
+  };
+
+  const noteInteraction = () => {
+    lastInteractRef.current = Date.now();
+    if (!interacted) setInteracted(true);
+  };
+
+  /** Throw the top card out. Callable from a gesture or, via runOnUI, JS. */
+  const fling = (dir: number) => {
+    "worklet";
+    if (flinging.value) return;
+    flinging.value = true;
+    dragX.value = withTiming(
+      dir * FLING_X,
+      { duration: FLING_MS, easing: Easing.in(Easing.cubic) },
+      (finished) => {
+        if (!finished) {
+          flinging.value = false;
+          return;
+        }
+        // Commit + reset in the same UI-thread tick: the next card is at
+        // rest the frame it becomes top, and the departed one is at s=-1
+        // (fully transparent) before React hears about it.
+        pos.value = pos.value + 1;
+        dragX.value = 0;
+        dragY.value = 0;
+        flinging.value = false;
+        runOnJS(onCommitted)(dir);
+      },
+    );
+  };
+  const flingRef = useRef(fling);
+  flingRef.current = fling;
+
+  const pan = Gesture.Pan()
+    .onBegin(() => {
+      runOnJS(noteInteraction)();
+    })
+    .onUpdate((e) => {
+      if (flinging.value) return;
+      dragX.value = e.translationX;
+      dragY.value = e.translationY * 0.25;
+    })
+    .onEnd((e) => {
+      if (flinging.value) return;
+      const dir = dragX.value >= 0 ? 1 : -1;
+      const committed =
+        Math.abs(dragX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > 700;
+      if (committed) {
+        fling(dir);
+      } else {
+        dragX.value = withSpring(0, { damping: 18, stiffness: 220 });
+        dragY.value = withSpring(0, { damping: 18, stiffness: 220 });
+      }
+    });
+
+  // Idle fallback: if nobody touches the deck, it swipes itself, alternating
+  // direction. Polls rather than schedules so a touch mid-wait simply pushes
+  // the deadline out instead of needing the timer torn down and rebuilt.
   useEffect(() => {
     if (phase !== "swipe" || cards.length === 0) return;
-    let step = 0;
-    let handover: ReturnType<typeof setTimeout> | null = null;
+    lastInteractRef.current = Date.now() + ENTRANCE_MS;
     const id = setInterval(() => {
-      step += 1;
-      // Same light tick the real deck gives on a swipe. The demo can't be
-      // touched, so this is the one channel through which it can feel like
-      // the product rather than a video of it.
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      pos.value = withTiming(step, {
-        duration: FLING_MS,
-        easing: Easing.inOut(Easing.cubic),
-      });
-      // Bloom fast, decay slow — the shape of a haptic tap. On its own value
-      // rather than the fling's progress so the marker outlives the card;
-      // tied to the fling it was a 340ms blink, which is what read as jumpy.
-      const target = (step - 1) % 2 === 0 ? likePulse : passPulse;
-      target.value = withSequence(
-        withTiming(1, { duration: 150, easing: Easing.out(Easing.back(2)) }),
-        withTiming(0, { duration: 900, easing: Easing.out(Easing.cubic) }),
-      );
-      if (step >= Math.min(SWIPES, cards.length)) {
-        clearInterval(id);
-        // Let the last card finish leaving before switching.
-        handover = setTimeout(() => setPhase("map"), FLING_MS + 140);
-      }
-    }, CYCLE_MS);
-    return () => {
-      clearInterval(id);
-      if (handover) clearTimeout(handover);
-    };
-  }, [phase, cards.length]);
+      if (stepRef.current >= totalSwipes) return;
+      if (Date.now() - lastInteractRef.current < IDLE_MS) return;
+      lastInteractRef.current = Date.now();
+      const dir = stepRef.current % 2 === 0 ? 1 : -1;
+      runOnUI(flingRef.current)(dir);
+    }, 200);
+    return () => clearInterval(id);
+  }, [phase, cards.length, totalSwipes]);
 
   // Map phase: fly to a couple of real deals, each with a compact chip.
   // `searchTarget` is the same prop Explore uses for a user's pick, so the
@@ -271,6 +345,10 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     // after paint, so resetting on the way in would let one frame render with
     // every card already gone — a blink before the deck reappears.
     pos.value = 0;
+    dragX.value = 0;
+    dragY.value = 0;
+    flinging.value = false;
+    stepRef.current = 0;
 
     // One genuine unlocked pin from their own feed first — so the demo opens
     // on something real and local — then the two illustrative stops.
@@ -360,36 +438,45 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
           />
         </Animated.View>
 
-      <Animated.View style={[styles.phone, phoneStyle]} pointerEvents="none">
+      <Animated.View style={[styles.phone, phoneStyle]}>
         <View style={[styles.screen, { backgroundColor: theme.background }]}>
           {/* Both phases are absolutely positioned so they overlap during the
               handover and cross-fade, rather than one unmounting and the next
               popping in — the hard swap is what read as clunky. */}
           {phase === "swipe" ? (
-            <Animated.View
-              key="swipe"
-              entering={FadeIn.duration(420)}
-              exiting={FadeOut.duration(320)}
-              style={[StyleSheet.absoluteFill, styles.deckWrap]}
-            >
-              {/* Rendered back-to-front so card 0 is the last child and sits
-                  on top — that gives correct stacking from render order alone,
-                  with no animated zIndex to fight the platform over. */}
-              {cards
-                .map((deal, i) => ({ deal, i }))
-                .reverse()
-                .map(({ deal, i }) => (
-                  <DeckCard key={deal.id || `${deal.destination}-${i}`} index={i} pos={pos}>
-                    {renderFace(deal)}
-                  </DeckCard>
-                ))}
-            </Animated.View>
+            <GestureDetector gesture={pan}>
+              <Animated.View
+                key="swipe"
+                entering={FadeIn.duration(420)}
+                exiting={FadeOut.duration(320)}
+                style={[StyleSheet.absoluteFill, styles.deckWrap]}
+              >
+                {/* Rendered back-to-front so card 0 is the last child and
+                    sits on top — correct stacking from render order alone,
+                    with no animated zIndex to fight the platform over. */}
+                {cards
+                  .map((deal, i) => ({ deal, i }))
+                  .reverse()
+                  .map(({ deal, i }) => (
+                    <DeckCard
+                      key={deal.id || `${deal.destination}-${i}`}
+                      index={i}
+                      pos={pos}
+                      dragX={dragX}
+                      dragY={dragY}
+                    >
+                      {renderFace(deal)}
+                    </DeckCard>
+                  ))}
+              </Animated.View>
+            </GestureDetector>
           ) : (
             <Animated.View
               key="map"
               entering={FadeIn.duration(420)}
               exiting={FadeOut.duration(320)}
               style={[StyleSheet.absoluteFill, styles.mapWrap]}
+              pointerEvents="none"
             >
               <DealsMap
                 deals={previewMapDeals}
@@ -464,7 +551,9 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
 
       <Text style={[styles.caption, { color: theme.mutedForeground }]}>
         {phase === "swipe"
-          ? "Save what you want, pass on what you don't."
+          ? interacted
+            ? "Right saves it. Left skips it."
+            : "Try it — swipe the card."
           : "Or open the map and see every destination we track from your airport."}
       </Text>
     </Animated.View>
@@ -478,67 +567,69 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
 function DeckCard({
   index,
   pos,
+  dragX,
+  dragY,
   children,
 }: {
   index: number;
   pos: SharedValue<number>;
+  dragX: SharedValue<number>;
+  dragY: SharedValue<number>;
   children: React.ReactNode;
 }) {
-  // Alternate direction by index so the deck doesn't throw every card the
-  // same way. Deterministic, which means no React state and no re-render.
-  const dir = index % 2 === 0 ? 1 : -1;
-
   const style = useAnimatedStyle(() => {
-    const s = index - pos.value; // 0 = top, <0 departing, >0 behind
-    const leaving = s < 0;
+    const s = index - pos.value; // 0 = top, >0 behind, <0 gone
+    if (s < 0) return { opacity: 0, transform: [{ translateX: 0 }] };
+    if (s === 0) {
+      const p = Math.min(Math.abs(dragX.value) / FLING_X, 1);
+      return {
+        opacity: interpolate(p, [0.65, 1], [1, 0], Extrapolation.CLAMP),
+        transform: [
+          { translateX: dragX.value },
+          { translateY: dragY.value },
+          { rotate: `${(dragX.value / FLING_X) * 0.18}rad` },
+          { scale: 1 },
+        ],
+      };
+    }
+    // Behind the top card. The next one lifts toward full size as the top
+    // card departs, so the hand-off reads as continuous.
+    const lift = s === 1 ? Math.min(Math.abs(dragX.value) / FLING_X, 1) : 0;
+    const base = interpolate(Math.min(s, 3), [1, 2, 3], [0.94, 0.89, 0.85]);
+    const ty = interpolate(Math.min(s, 3), [1, 2, 3], [9, 18, 26]);
     return {
-      opacity: leaving
-        ? interpolate(s, [-0.7, -0.05], [0, 1], Extrapolation.CLAMP)
-        : interpolate(s, [2.1, 2.6], [1, 0], Extrapolation.CLAMP),
+      opacity: s >= 3 ? 0 : 1,
       transform: [
-        {
-          translateX: leaving
-            ? interpolate(s, [-1, 0], [dir * FLING_X, 0], Extrapolation.CLAMP)
-            : 0,
-        },
-        {
-          translateY: leaving
-            ? 0
-            : interpolate(s, [0, 1, 2, 3], [0, 9, 18, 26], Extrapolation.CLAMP),
-        },
-        {
-          rotate: leaving
-            ? `${interpolate(s, [-1, 0], [dir * 0.18, 0], Extrapolation.CLAMP)}rad`
-            : "0rad",
-        },
-        {
-          scale: leaving
-            ? 1
-            : interpolate(s, [0, 1, 2, 3], [1, 0.94, 0.89, 0.85], Extrapolation.CLAMP),
-        },
+        { translateX: 0 },
+        { translateY: ty * (1 - lift) },
+        { rotate: "0rad" },
+        { scale: base + (1 - base) * lift },
       ],
     };
   });
 
-  // The verdict badge, revealed as the card commits to a direction.
-  const badgeStyle = useAnimatedStyle(() => {
-    const s = index - pos.value;
-    return {
-      opacity: s < 0 ? interpolate(s, [-0.05, -0.3], [0, 1], Extrapolation.CLAMP) : 0,
-    };
-  });
+  // Verdict badges on the top card, one per direction, revealed by drag.
+  const saveStyle = useAnimatedStyle(() => ({
+    opacity:
+      index - pos.value === 0 && dragX.value > 0
+        ? interpolate(dragX.value, [15, 80], [0, 1], Extrapolation.CLAMP)
+        : 0,
+  }));
+  const passStyle = useAnimatedStyle(() => ({
+    opacity:
+      index - pos.value === 0 && dragX.value < 0
+        ? interpolate(-dragX.value, [15, 80], [0, 1], Extrapolation.CLAMP)
+        : 0,
+  }));
 
   return (
     <Animated.View style={[styles.card, style]}>
       {children}
-      <Animated.View
-        style={[
-          styles.badge,
-          dir > 0 ? styles.badgeSave : styles.badgePass,
-          badgeStyle,
-        ]}
-      >
-        <Text style={styles.badgeText}>{dir > 0 ? "SAVED" : "PASSED"}</Text>
+      <Animated.View style={[styles.badge, styles.badgeSave, saveStyle]}>
+        <Text style={styles.badgeText}>SAVED</Text>
+      </Animated.View>
+      <Animated.View style={[styles.badge, styles.badgePass, passStyle]}>
+        <Text style={styles.badgeText}>PASSED</Text>
       </Animated.View>
     </Animated.View>
   );

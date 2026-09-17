@@ -39,6 +39,17 @@ export interface UserProfile {
    */
   giftOfferShown?: boolean;
   /**
+   * How many times the gift has been shown, and when it was last shown.
+   *
+   * The gift is no longer strictly one-shot: it re-offers on a later visit
+   * (24h+ after the last showing) up to GIFT_MAX_SHOWS times, and can always
+   * be reopened by the user from the feed page. Never twice in one session —
+   * a discount that reappears the moment you dismiss it stops being a gift
+   * and becomes the price, and makes the paywall's number look fake.
+   */
+  giftOfferShowCount?: number;
+  giftOfferLastShownAt?: Date | null;
+  /**
    * Whether this user must hold a paid entitlement to reach the app at all.
    *
    * Set to "subscription_required" for everyone who completes the Sept 2026

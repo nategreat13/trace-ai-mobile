@@ -1,212 +1,187 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  useColorScheme,
-  TouchableOpacity,
-} from "react-native";
+import { View, Text, StyleSheet, useColorScheme } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { Bell, Hand } from "lucide-react-native";
-import { marqueeRank } from "../../lib/marquee";
-import type { Deal } from "@trace/shared";
 import Animated, {
   FadeIn,
   FadeInDown,
+  FadeOut,
+  LinearTransition,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
   withTiming,
   Easing,
 } from "react-native-reanimated";
+import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
+import type { Deal } from "@trace/shared";
 
 /**
- * The "here's why you need us" beat.
+ * The "deals don't wait for you" beat — Trace in real time vs. you, twice a
+ * week, shown rather than told.
  *
- * The contrast that matters for a deal app isn't outcome over six months,
- * it's *coverage*: a fare drop lives for hours, and someone checking flights
- * on a whim will miss almost all of them. So the visual is two timelines over
- * the same week — an unbroken run of checks against two lonely ones.
+ * A stream of alert cards rolls in, one every ~1.4s: a recognisable city, a
+ * price that just dropped, a timestamp a few minutes old. Underneath, a
+ * compact strip contrasts that stream with the two lonely times a week a
+ * person checks on their own. The contrast is the whole argument.
  *
- * Framed as "real time" rather than by cadence. The underlying schedule is a
- * real number and a true one, but naming it invites the user to do arithmetic
- * on our coverage ("so it could be four hours stale?") at the exact moment we
- * want them to feel covered. The claim stays honest either way — this is the
- * same behaviour described in the register that matches the promise.
+ * The alerts are ILLUSTRATIVE — marquee cities at prices that make the
+ * point, not bookable fares. The previous version hung this page on a single
+ * real deal from the user's feed, which meant the pitch was only as good as
+ * whatever happened to be cheapest that day (it was $1,096 to Tokyo). Real
+ * imagery is still used where the user's feed has a photo for the city, so
+ * the cards look like the product; the numbers are the demo's.
  */
+const ALERTS: { destination: string; price: number; was: number }[] = [
+  { destination: "Lisbon", price: 312, was: 780 },
+  { destination: "Cancún", price: 189, was: 512 },
+  { destination: "Tokyo", price: 448, was: 1180 },
+  { destination: "Rome", price: 389, was: 940 },
+  { destination: "Honolulu", price: 297, was: 690 },
+  { destination: "Paris", price: 362, was: 870 },
+  { destination: "Barcelona", price: 341, was: 810 },
+  { destination: "Mexico City", price: 178, was: 430 },
+];
+
+const TICK_MS = 1400;
+const VISIBLE = 4;
 const TICKS = 42;
 
-/**
- * Fallback for the tappable fare-drop demo when the deal fetch hasn't landed
- * yet — this beat sits right after the airport step, so it usually hasn't.
- * Illustrative, onboarding-only numbers, same policy as the map preview.
- */
-const FALLBACK_DROP = { destination: "Paris", from: 612, to: 248, image: "" };
-
 interface CadenceBeatProps {
-  /** Their live feed, if it's arrived — picks a recognisable real deal. */
+  /** Used only to borrow a real photo for a city when the feed has one. */
   deals?: Deal[];
 }
+
+type Alert = (typeof ALERTS)[number] & { id: number; minutesAgo: number };
 
 export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  // ── Tappable fare-drop demo ────────────────────────────────────────────
-  // The two timelines below explain coverage; this shows what coverage
-  // *delivers*. Tap the card and the price falls in front of you, then the
-  // alert lands — the thing they're actually being sold, demonstrated once,
-  // on demand, with a haptic so it feels like the phone doing it for real.
-  const showcase = useMemo(() => {
-    const withImage = deals.filter((d) => d.image_url && d.destination && d.price > 0);
-    if (!withImage.length) return FALLBACK_DROP;
-    const best = [...withImage].sort(
-      (a, b) => marqueeRank(a.destination) - marqueeRank(b.destination),
-    )[0];
-    const from =
-      best.original_price && best.original_price > best.price
-        ? best.original_price
-        : Math.round(best.price * 2.3);
-    return {
-      destination: best.destination,
-      from: Math.round(from),
-      to: Math.round(best.price),
-      image: best.image_url,
+  // City → image from the user's real feed, so the cards wear the product's
+  // own photography even though the prices are illustrative.
+  const imageFor = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of deals) {
+      if (!d.destination || !d.image_url) continue;
+      const key = d.destination.toLowerCase();
+      if (!map.has(key)) map.set(key, d.image_url);
+    }
+    return (city: string) => {
+      const k = city.toLowerCase();
+      for (const [name, url] of map) {
+        if (name.includes(k) || k.includes(name)) return url;
+      }
+      return null;
     };
   }, [deals]);
 
-  const [dropPhase, setDropPhase] = useState<"idle" | "dropping" | "alerted">("idle");
-  const [shownPrice, setShownPrice] = useState(showcase.from);
-  const dropTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => setShownPrice(showcase.from), [showcase.from]);
-  useEffect(() => () => { if (dropTimer.current) clearInterval(dropTimer.current); }, []);
-
-  const triggerDrop = () => {
-    if (dropPhase === "dropping") return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setDropPhase("dropping");
-    setShownPrice(showcase.from);
-    const start = Date.now();
-    const DUR = 720;
-    dropTimer.current = setInterval(() => {
-      const t = Math.min(1, (Date.now() - start) / DUR);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setShownPrice(Math.round(showcase.from - (showcase.from - showcase.to) * eased));
-      if (t >= 1) {
-        if (dropTimer.current) clearInterval(dropTimer.current);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        setDropPhase("alerted");
+  // Rolling window of alerts. New one at the front, oldest falls off.
+  const [visible, setVisible] = useState<Alert[]>([]);
+  const idxRef = useRef(0);
+  const idRef = useRef(0);
+  useEffect(() => {
+    const push = () => {
+      const base = ALERTS[idxRef.current % ALERTS.length];
+      idxRef.current += 1;
+      idRef.current += 1;
+      const next: Alert = {
+        ...base,
+        id: idRef.current,
+        minutesAgo: 1 + Math.floor(Math.random() * 6),
+      };
+      setVisible((prev) => [next, ...prev].slice(0, VISIBLE));
+      // A tick for the first few arrivals only — enough to feel live, not
+      // enough to become a metronome.
+      if (idRef.current <= 3) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
-    }, 16);
-  };
+    };
+    push();
+    const id = setInterval(push, TICK_MS);
+    return () => clearInterval(id);
+  }, []);
 
+  // The dense "Trace" tick-track sweeps in once.
   const sweep = useSharedValue(0);
   useEffect(() => {
     sweep.value = withDelay(
-      260,
+      300,
       withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) }),
     );
   }, []);
-
-  const sweepStyle = useAnimatedStyle(() => ({
-    width: `${sweep.value * 100}%`,
-  }));
+  const sweepStyle = useAnimatedStyle(() => ({ width: `${sweep.value * 100}%` }));
 
   return (
     <View style={styles.wrap}>
-      {/* The showcase. TouchableOpacity with a plain style array, NOT
-          Pressable with a function style — that form dropped the container
-          style on-device, so every absolute layer inside (image, gradient,
-          price, hint, alert) collapsed onto a zero-height box. */}
-      <Animated.View entering={FadeInDown.duration(400)}>
-        <TouchableOpacity
-          onPress={triggerDrop}
-          activeOpacity={0.9}
-          accessibilityRole="button"
-          accessibilityLabel={`See a fare drop to ${showcase.destination}`}
-          style={styles.showcase}
-        >
-          {showcase.image ? (
-            <Image
-              source={{ uri: showcase.image }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              transition={220}
-            />
-          ) : (
-            <LinearGradient
-              colors={[colors.brand.traceRed, colors.brand.tracePink]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
-          <LinearGradient
-            colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.78)"]}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.showcaseBody}>
-            <Text style={styles.showcaseDest}>{showcase.destination}</Text>
-            <View style={styles.showcasePriceRow}>
-              <Text
-                style={[
-                  styles.showcasePrice,
-                  dropPhase !== "idle" && { color: colors.brand.traceGreen },
-                ]}
-              >
-                ${shownPrice}
-              </Text>
-              {dropPhase === "alerted" && (
-                <Animated.View entering={FadeIn.duration(200)} style={styles.wasPill}>
-                  <Text style={styles.wasText}>was ${showcase.from}</Text>
-                </Animated.View>
-              )}
-            </View>
-          </View>
-
-          {dropPhase === "idle" && (
-            <Animated.View entering={FadeIn.duration(300).delay(500)} style={styles.tapHint}>
-              <Hand size={14} color="#fff" />
-              <Text style={styles.tapHintText}>Tap to see an alert</Text>
-            </Animated.View>
-          )}
-
-          {dropPhase === "alerted" && (
+      {/* Alert stream */}
+      <View style={styles.stream}>
+        {visible.map((a, i) => {
+          const img = imageFor(a.destination);
+          return (
             <Animated.View
-              entering={FadeInDown.duration(320).springify().damping(16)}
-              style={[styles.alertBanner, { backgroundColor: theme.card }]}
+              key={a.id}
+              entering={FadeInDown.duration(360).springify().damping(18)}
+              exiting={FadeOut.duration(220)}
+              layout={LinearTransition.duration(320)}
+              style={[
+                styles.alert,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                  opacity: 1 - i * 0.18,
+                },
+              ]}
             >
-              <View style={[styles.alertIcon, { backgroundColor: colors.brand.traceRed }]}>
-                <Bell size={14} color="#fff" />
+              <View style={styles.alertThumb}>
+                {img ? (
+                  <Image
+                    source={{ uri: img }}
+                    style={StyleSheet.absoluteFill}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
+                <View style={styles.alertBell}>
+                  <Bell size={10} color="#fff" strokeWidth={2.6} />
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
+              <View style={styles.alertBody}>
                 <Text style={[styles.alertTitle, { color: theme.foreground }]} numberOfLines={1}>
-                  {showcase.destination} just dropped to ${showcase.to}
+                  {a.destination} just dropped to{" "}
+                  <Text style={{ color: colors.brand.traceGreen }}>${a.price}</Text>
                 </Text>
-                <Text style={[styles.alertSub, { color: theme.mutedForeground }]}>
-                  Trace · just now
+                <Text style={[styles.alertSub, { color: theme.mutedForeground }]} numberOfLines={1}>
+                  was ${a.was} · {a.minutesAgo}m ago
                 </Text>
               </View>
             </Animated.View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
+          );
+        })}
+        {/* Fade the tail so the stream reads as continuing off-screen. */}
+        <LinearGradient
+          colors={["transparent", theme.background]}
+          style={styles.streamFade}
+          pointerEvents="none"
+        />
+      </View>
 
-      {/* One compact comparison instead of two full cards. The showcase
-          above is the engaging part; this just has to make the contrast
-          legible at a glance, and two stacked cards with their own headers
-          and notes were doing that at three times the height. */}
+      {/* Compact contrast strip */}
       <Animated.View
-        entering={FadeInDown.duration(400).delay(180)}
+        entering={FadeInDown.duration(400).delay(260)}
         style={[styles.compare, { backgroundColor: theme.muted }]}
       >
         <View style={styles.compareRow}>
-          <Text style={[styles.compareLabel, { color: theme.foreground }]}>
-            Trace
-          </Text>
+          <Text style={[styles.compareLabel, { color: theme.foreground }]}>Trace</Text>
           <View style={styles.compareTrack}>
             <Animated.View style={[styles.sweep, sweepStyle]}>
               <View style={styles.ticks}>
@@ -225,9 +200,7 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
         </View>
         <View style={[styles.compareDivider, { backgroundColor: theme.border }]} />
         <View style={styles.compareRow}>
-          <Text style={[styles.compareLabel, { color: theme.foreground }]}>
-            You
-          </Text>
+          <Text style={[styles.compareLabel, { color: theme.foreground }]}>You</Text>
           <View style={styles.compareTrack}>
             <View style={[styles.emptyTrack, { backgroundColor: theme.border }]}>
               <View style={[styles.sparseTick, { backgroundColor: colors.brand.rose500, left: "18%" }]} />
@@ -241,7 +214,7 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
       </Animated.View>
 
       <Animated.Text
-        entering={FadeIn.duration(400).delay(520)}
+        entering={FadeIn.duration(400).delay(600)}
         style={[styles.kicker, { color: theme.mutedForeground }]}
       >
         A cheap fare lasts hours, not days. We're watching when it drops.
@@ -251,74 +224,45 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 14 },
-  showcase: {
-    height: 178,
-    borderRadius: 20,
-    overflow: "hidden",
-    backgroundColor: "#00000010",
-  },
-  showcaseBody: { position: "absolute", left: 16, bottom: 14, right: 16 },
-  showcaseDest: { color: "#fff", fontSize: 20, fontWeight: "800" },
-  showcasePriceRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 2 },
-  showcasePrice: { color: "#fff", fontSize: 30, fontWeight: "800", letterSpacing: -0.8 },
-  wasPill: {
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-  },
-  wasText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-    textDecorationLine: "line-through",
-  },
-  tapHint: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  tapHintText: { color: "#fff", fontSize: 12, fontWeight: "700" },
-  alertBanner: {
-    position: "absolute",
-    top: 12,
-    left: 12,
-    right: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 14,
-    padding: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-  alertIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  alertTitle: { fontSize: 14, fontWeight: "700" },
-  alertSub: { fontSize: 12, marginTop: 1 },
-  compare: { borderRadius: 18, paddingVertical: 6, paddingHorizontal: 16 },
-  compareRow: {
+  wrap: { gap: 16 },
+  stream: { gap: 10, minHeight: 4 * 66 + 3 * 10, position: "relative" },
+  streamFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 70 },
+  alert: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
+  alertThumb: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#00000010",
+  },
+  alertBell: {
+    position: "absolute",
+    right: 3,
+    bottom: 3,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.brand.traceRed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alertBody: { flex: 1, gap: 2 },
+  alertTitle: { fontSize: 15, fontWeight: "700" },
+  alertSub: { fontSize: 12 },
+  compare: { borderRadius: 18, paddingVertical: 6, paddingHorizontal: 16 },
+  compareRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
   compareLabel: { width: 52, fontSize: 15, fontWeight: "700" },
   compareTrack: { flex: 1, height: 22, justifyContent: "center" },
   compareValue: { width: 76, textAlign: "right", fontSize: 14, fontWeight: "800" },
@@ -328,11 +272,5 @@ const styles = StyleSheet.create({
   tick: { width: 4, height: 18, borderRadius: 2 },
   emptyTrack: { height: 4, borderRadius: 2, justifyContent: "center" },
   sparseTick: { position: "absolute", width: 4, height: 18, borderRadius: 2 },
-  kicker: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: "center",
-    marginTop: 10,
-    paddingHorizontal: 4,
-  },
+  kicker: { fontSize: 15, lineHeight: 22, textAlign: "center", paddingHorizontal: 4 },
 });

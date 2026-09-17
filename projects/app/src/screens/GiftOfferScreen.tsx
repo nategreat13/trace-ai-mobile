@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -146,6 +146,14 @@ export default function GiftOfferScreen() {
     };
   }, [offerings, premiumAnnualPackage, premiumMonthlyPackage]);
 
+  /** "$2.49/mo" from an annual package — floored, matching the paywall. */
+  const perMonth = (pkg: PurchasesPackage | null): string | null => {
+    if (!pkg?.product.price) return null;
+    const symbol = pkg.product.priceString.replace(/[0-9.,\s]/g, "").trim() || "$";
+    return `${symbol}${(Math.floor((pkg.product.price / 12) * 100) / 100).toFixed(2)}/mo`;
+  };
+  const offerPerMonth = perMonth(offerPkg);
+
   const introPrice = offerPkg?.product.introPrice ?? null;
   const hasFreeTrial =
     trialsEnabledByRemote(offerings?.current) &&
@@ -154,10 +162,31 @@ export default function GiftOfferScreen() {
     introPrice.price === 0;
   const trialDurationLabel = introPrice ? formatTrialDuration(introPrice) : "";
 
+  // Stamp once per mount, not per tap — open + close both call this, and a
+  // single visit should count as a single showing.
+  const stampedRef = useRef(false);
   const markShown = () => {
+    if (stampedRef.current) return;
+    stampedRef.current = true;
+    const now = new Date();
+    const nextCount =
+      (profile?.giftOfferShowCount ?? (profile?.giftOfferShown ? 1 : 0)) + 1;
     // Optimistic so a remount can't re-offer the gift before the write lands.
-    setProfile((prev) => (prev ? { ...prev, giftOfferShown: true } : prev));
-    updateProfile({ giftOfferShown: true }).catch(() => {});
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            giftOfferShown: true,
+            giftOfferShowCount: nextCount,
+            giftOfferLastShownAt: now,
+          }
+        : prev,
+    );
+    updateProfile({
+      giftOfferShown: true,
+      giftOfferShowCount: nextCount,
+      giftOfferLastShownAt: now,
+    }).catch(() => {});
   };
 
   const handleOpen = () => {
@@ -393,13 +422,29 @@ export default function GiftOfferScreen() {
                       <Text
                         style={{
                           color: theme.foreground,
-                          fontSize: 24,
+                          fontSize: 30,
                           fontWeight: "800",
+                          letterSpacing: -0.6,
                         }}
                       >
-                        {offerPkg.product.priceString}/year
+                        {offerPerMonth ?? `${offerPkg.product.priceString}/year`}
                       </Text>
                     </View>
+                    {/* The offer in one line: the trial, then the real annual
+                        number. The per-month figure is the hook; this is the
+                        honest footnote it hangs on. */}
+                    <Text
+                      style={{
+                        color: theme.mutedForeground,
+                        fontSize: 14,
+                        fontWeight: "600",
+                        marginTop: 8,
+                      }}
+                    >
+                      {hasFreeTrial
+                        ? `${trialDurationLabel} free, then ${offerPkg.product.priceString}/year`
+                        : `${offerPkg.product.priceString} billed annually`}
+                    </Text>
                   </>
                 ) : (
                   /* No discounted SKU configured — present the trial as the
@@ -419,12 +464,23 @@ export default function GiftOfferScreen() {
                     <Text
                       style={{
                         color: theme.foreground,
-                        fontSize: 22,
+                        fontSize: 28,
                         fontWeight: "800",
                         marginTop: 12,
+                        letterSpacing: -0.6,
                       }}
                     >
-                      {offerPkg.product.priceString}/year
+                      {offerPerMonth ?? `${offerPkg.product.priceString}/year`}
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.mutedForeground,
+                        fontSize: 14,
+                        fontWeight: "600",
+                        marginTop: 6,
+                      }}
+                    >
+                      {offerPkg.product.priceString} billed annually
                     </Text>
                   </>
                 )}

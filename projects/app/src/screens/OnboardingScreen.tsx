@@ -521,10 +521,6 @@ export default function OnboardingScreen() {
       title: "Swipe and explore flights",
       subtitle: "Save what you like, skip what you don't — then see every deal on the map.",
       canProceed: true,
-      // Hold the CTA long enough to see the first two swipes land. Two
-      // seconds is the ceiling: enough to register that it's a demo, short
-      // enough that nobody reaches for the button and finds it dead.
-      holdMs: 2000,
       newUserOnly: true,
       content: <ProductDemoBeat deals={deals} />,
     },

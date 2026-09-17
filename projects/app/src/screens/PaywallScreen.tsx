@@ -27,6 +27,7 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
+import { giftOfferEligible } from "../lib/giftOffer";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -498,7 +499,7 @@ export default function PaywallScreen() {
       !isBusinessPaywall &&
       !hasPremium &&
       !subscribeDisabled &&
-      !profile?.giftOfferShown;
+      giftOfferEligible(profile);
     if (eligibleForGift) {
       navigation.replace("GiftOffer", { fromEntryPoint: entryPoint });
       return;
