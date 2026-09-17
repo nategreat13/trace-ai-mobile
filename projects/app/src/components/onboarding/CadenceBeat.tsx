@@ -16,6 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
+import { marqueeRank } from "../../lib/marquee";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -37,7 +38,7 @@ import type { Deal } from "@trace/shared";
 const ALERTS: { destination: string; price: number; was: number }[] = [
   { destination: "Lisbon", price: 312, was: 780 },
   { destination: "Cancún", price: 189, was: 512 },
-  { destination: "Tokyo", price: 448, was: 1180 },
+  { destination: "Tokyo", price: 539, was: 1180 },
   { destination: "Rome", price: 389, was: 940 },
   { destination: "Honolulu", price: 297, was: 690 },
   { destination: "Paris", price: 362, was: 870 },
@@ -78,13 +79,49 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
     };
   }, [deals]);
 
+  /**
+   * The alert list is the curated set filtered to cities the user's feed
+   * actually has a photo for, backfilled from the feed's most recognisable
+   * destinations. Curated entries keep their illustrative prices; backfill
+   * entries use the real fare. Either way every card wears a real photo —
+   * a curated city with no image was rendering as a flat pink box.
+   */
+  const alerts = useMemo(() => {
+    const curated = ALERTS.filter((a) => !!imageFor(a.destination));
+    const used = new Set(curated.map((a) => a.destination.toLowerCase()));
+    const seen = new Set<string>();
+    const backfill = deals
+      .filter((d) => d.destination && d.image_url)
+      .filter((d) => {
+        const k = d.destination.toLowerCase();
+        if (used.has(k) || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .sort((a, b) => marqueeRank(a.destination) - marqueeRank(b.destination))
+      .slice(0, Math.max(0, ALERTS.length - curated.length))
+      .map((d) => ({
+        destination: d.destination,
+        price: Math.round(d.price),
+        was:
+          d.original_price && d.original_price > d.price
+            ? Math.round(d.original_price)
+            : Math.round(d.price * 2.1),
+      }));
+    const list = [...curated, ...backfill];
+    // Before the feed has loaded there's nothing to match against; show the
+    // curated set so the stream starts immediately, and let the images fill
+    // in as the fetch lands.
+    return list.length >= 4 ? list : ALERTS;
+  }, [deals, imageFor]);
+
   // Rolling window of alerts. New one at the front, oldest falls off.
   const [visible, setVisible] = useState<Alert[]>([]);
   const idxRef = useRef(0);
   const idRef = useRef(0);
   useEffect(() => {
     const push = () => {
-      const base = ALERTS[idxRef.current % ALERTS.length];
+      const base = alerts[idxRef.current % alerts.length];
       idxRef.current += 1;
       idRef.current += 1;
       const next: Alert = {
@@ -102,7 +139,8 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
     push();
     const id = setInterval(push, TICK_MS);
     return () => clearInterval(id);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts]);
 
   // The dense "Trace" tick-track sweeps in once.
   const sweep = useSharedValue(0);
@@ -144,12 +182,17 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
                     transition={200}
                   />
                 ) : (
-                  <LinearGradient
-                    colors={[colors.brand.traceRed, colors.brand.tracePink]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
+                  <View
+                    style={[
+                      StyleSheet.absoluteFill,
+                      styles.alertPlaceholder,
+                      { backgroundColor: colors.brand.traceRed + "1F" },
+                    ]}
+                  >
+                    <Text style={[styles.alertInitial, { color: colors.brand.traceRed }]}>
+                      {a.destination.charAt(0)}
+                    </Text>
+                  </View>
                 )}
                 <View style={styles.alertBell}>
                   <Bell size={10} color="#fff" strokeWidth={2.6} />
@@ -247,6 +290,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#00000010",
   },
+  alertPlaceholder: { alignItems: "center", justifyContent: "center" },
+  alertInitial: { fontSize: 20, fontWeight: "800" },
   alertBell: {
     position: "absolute",
     right: 3,

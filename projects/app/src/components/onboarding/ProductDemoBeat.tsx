@@ -17,9 +17,12 @@ import Animated, {
   Easing,
   runOnJS,
   runOnUI,
+  withRepeat,
+  withDelay,
+  cancelAnimation,
 } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { MapPin, Heart, X, Lock } from "lucide-react-native";
+import { MapPin, Heart, X, Lock, Hand } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
 import { marqueeRank } from "../../lib/marquee";
@@ -108,6 +111,12 @@ function makePreviewDeal(
     domestic_or_international: "International",
     image_url: "",
   } as unknown as Deal;
+}
+
+/** withDelay under a name that can't collide with the Reanimated import. */
+function withDelayed<T>(ms: number, anim: T): T {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (withDelay as any)(ms, anim);
 }
 
 const PHONE_W = 228;
@@ -261,6 +270,55 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     lastInteractRef.current = Date.now();
     if (!interacted) setInteracted(true);
   };
+
+  // "You can swipe this" hint. A hand sweeps right across the top card and
+  // the card itself eases a few points along with it, on a loop, until the
+  // first real touch. An animating deck alone reads as a video; a hand on it
+  // reads as an invitation.
+  const hint = useSharedValue(0);
+  const nudge = useSharedValue(0);
+  useEffect(() => {
+    if (phase !== "swipe" || interacted) {
+      cancelAnimation(hint);
+      cancelAnimation(nudge);
+      hint.value = 0;
+      nudge.value = withTiming(0, { duration: 180 });
+      return;
+    }
+    hint.value = 0;
+    hint.value = withDelayed(
+      ENTRANCE_MS + 300,
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1150, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 0 }),
+          withTiming(0, { duration: 650 }),
+        ),
+        -1,
+        false,
+      ),
+    );
+    nudge.value = withDelayed(
+      ENTRANCE_MS + 300,
+      withRepeat(
+        withSequence(
+          withTiming(14, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 450, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0, { duration: 650 }),
+        ),
+        -1,
+        false,
+      ),
+    );
+  }, [phase, interacted]);
+  const handStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(hint.value, [0, 0.12, 0.78, 1], [0, 1, 1, 0], Extrapolation.CLAMP),
+    transform: [
+      { translateX: interpolate(hint.value, [0, 1], [-28, 72]) },
+      { translateY: interpolate(hint.value, [0, 0.5, 1], [0, -6, 0]) },
+      { rotate: `${interpolate(hint.value, [0, 1], [-0.12, 0.12])}rad` },
+    ],
+  }));
 
   /** Throw the top card out. Callable from a gesture or, via runOnUI, JS. */
   const fling = (dir: number) => {
@@ -464,10 +522,19 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
                       pos={pos}
                       dragX={dragX}
                       dragY={dragY}
+                      nudge={nudge}
                     >
                       {renderFace(deal)}
                     </DeckCard>
                   ))}
+                {!interacted && (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[styles.hand, handStyle]}
+                  >
+                    <Hand size={22} color="#ffffff" strokeWidth={2.4} />
+                  </Animated.View>
+                )}
               </Animated.View>
             </GestureDetector>
           ) : (
@@ -553,7 +620,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
         {phase === "swipe"
           ? interacted
             ? "Right saves it. Left skips it."
-            : "Try it — swipe the card."
+            : "👆 Swipe the card — right to save, left to skip."
           : "Or open the map and see every destination we track from your airport."}
       </Text>
     </Animated.View>
@@ -569,25 +636,28 @@ function DeckCard({
   pos,
   dragX,
   dragY,
+  nudge,
   children,
 }: {
   index: number;
   pos: SharedValue<number>;
   dragX: SharedValue<number>;
   dragY: SharedValue<number>;
+  nudge: SharedValue<number>;
   children: React.ReactNode;
 }) {
   const style = useAnimatedStyle(() => {
     const s = index - pos.value; // 0 = top, >0 behind, <0 gone
     if (s < 0) return { opacity: 0, transform: [{ translateX: 0 }] };
     if (s === 0) {
+      const x = dragX.value + nudge.value;
       const p = Math.min(Math.abs(dragX.value) / FLING_X, 1);
       return {
         opacity: interpolate(p, [0.65, 1], [1, 0], Extrapolation.CLAMP),
         transform: [
-          { translateX: dragX.value },
+          { translateX: x },
           { translateY: dragY.value },
-          { rotate: `${(dragX.value / FLING_X) * 0.18}rad` },
+          { rotate: `${(x / FLING_X) * 0.18}rad` },
           { scale: 1 },
         ],
       };
@@ -663,6 +733,19 @@ const styles = StyleSheet.create({
   },
   screen: { flex: 1, borderRadius: 31, overflow: "hidden" },
   deckWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
+  hand: {
+    position: "absolute",
+    top: "48%",
+    left: "42%",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.9)",
+  },
   card: {
     position: "absolute",
     top: 18,

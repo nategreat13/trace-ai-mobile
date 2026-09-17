@@ -12,7 +12,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import Animated, { FadeIn, FadeInDown, SlideInDown } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  SlideInDown,
+  Easing,
+} from "react-native-reanimated";
 import { X, Lock, Plane, Calendar, Flame, Sparkles } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import type { Deal } from "@trace/shared";
@@ -82,7 +87,7 @@ export default function DealPeek({
       </Pressable>
 
       <Animated.View
-        entering={SlideInDown.duration(380).springify().damping(22)}
+        entering={SlideInDown.duration(340).easing(Easing.out(Easing.cubic))}
         style={[styles.sheet, { backgroundColor: theme.background }]}
       >
         {/* Hero */}
@@ -277,7 +282,7 @@ const styles = StyleSheet.create({
   teaserLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.9, marginBottom: 2 },
   teaserRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   teaserText: { flex: 1, fontSize: 14, fontWeight: "500" },
-  footer: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8, gap: 8 },
+  footer: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 22, gap: 8 },
   cta: {
     flexDirection: "row",
     alignItems: "center",
