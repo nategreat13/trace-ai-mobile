@@ -17,6 +17,7 @@ import Animated, {
 import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
+import { fadeTo } from "../../lib/fade";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -212,7 +213,7 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
         })}
         {/* Fade the tail so the stream reads as continuing off-screen. */}
         <LinearGradient
-          colors={["transparent", theme.background]}
+          colors={fadeTo(theme.background)}
           style={styles.streamFade}
           pointerEvents="none"
         />

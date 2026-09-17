@@ -13,6 +13,7 @@ import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { Lock, Plane } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
+import { fadeTo } from "../../lib/fade";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -38,6 +39,33 @@ import type { Deal } from "@trace/shared";
  * it a lock rather than a wall.
  */
 const FREE_UNLOCKED = 5;
+
+/**
+ * Display-price overrides for the gated preview, keyed by lowercase
+ * destination. Trevor's call (Sept 16): the page is a preview meant to get
+ * people into a trial, and a real $1,011 Tokyo fare undersells it.
+ *
+ * Applied ONLY here — the deal sheet, the savings line and the "cheapest"
+ * stat all derive from this same selection so they stay consistent with what
+ * the rows show, and nothing outside the gated preview ever sees these
+ * numbers. Discount is recomputed against the real `original_price` so the
+ * "% off" stays arithmetically true to what's displayed. To turn it off,
+ * empty the map.
+ */
+const PREVIEW_PRICE_OVERRIDES: Record<string, number> = {
+  tokyo: 539,
+  "los angeles": 96,
+};
+
+function applyPreviewPrice(d: Deal): Deal {
+  const key = (d.destination || "").toLowerCase();
+  const hit = Object.entries(PREVIEW_PRICE_OVERRIDES).find(([k]) => key.includes(k));
+  if (!hit) return d;
+  const price = hit[1];
+  const orig = d.original_price && d.original_price > price ? d.original_price : d.original_price;
+  const pct = orig && orig > price ? Math.round(((orig - price) / orig) * 100) : d.discount_pct;
+  return { ...d, price, discount_pct: pct };
+}
 
 interface FeedRevealProps {
   deals: Deal[];
@@ -78,7 +106,8 @@ export function selectRevealDeals(
   // One deal per destination — the cheapest — so the list reads as places
   // rather than as duplicate routes.
   const cheapestByDest = new Map<string, Deal>();
-  for (const d of deals) {
+  for (const raw of deals) {
+    const d = applyPreviewPrice(raw);
     if (!d.destination) continue;
     const existing = cheapestByDest.get(d.destination);
     if (!existing || (d.price || Infinity) < (existing.price || Infinity)) {
@@ -293,7 +322,7 @@ export default function FeedReveal({
         {/* Fade the tail of the list so the locked run reads as continuing
             past the fold rather than ending. */}
         <LinearGradient
-          colors={["transparent", theme.background]}
+          colors={fadeTo(theme.background)}
           style={styles.tailFade}
           pointerEvents="none"
         />

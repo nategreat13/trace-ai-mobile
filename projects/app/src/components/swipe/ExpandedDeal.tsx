@@ -41,6 +41,7 @@ import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
+import { fadeTo } from "../../lib/fade";
 import { logEvent } from "../../lib/analytics";
 import { useAuth } from "../../context/AuthContext";
 import type { RootStackParamList } from "../../navigation/types";
@@ -632,7 +633,7 @@ export default function ExpandedDeal({
                     />
                   ))}
                   <LinearGradient
-                    colors={["transparent", theme.background]}
+                    colors={fadeTo(theme.background)}
                     style={StyleSheet.absoluteFill}
                     pointerEvents="none"
                   />
