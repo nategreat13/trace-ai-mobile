@@ -512,10 +512,16 @@ export default function GatedHomeScreen() {
             flexDirection: "row",
             justifyContent: "center",
             gap: 20,
-            marginTop: 14,
+            // marginTop is small because each link below carries its own
+            // paddingVertical — 12pt text alone gave a ~15pt tall tap target,
+            // well under the 44pt minimum, and taps that looked like they were
+            // on "Sign out" landed just under it and did nothing.
+            marginTop: 4,
           }}
         >
           <TouchableOpacity
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={{ paddingVertical: 10 }}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               navigation.navigate("EditPreferences");
@@ -525,12 +531,20 @@ export default function GatedHomeScreen() {
               Edit my answers
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => openPaywall("gated_home_restore")}>
+          <TouchableOpacity
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={{ paddingVertical: 10 }}
+            onPress={() => openPaywall("gated_home_restore")}
+          >
             <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
               Restore purchase
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => logout().catch(() => {})}>
+          <TouchableOpacity
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={{ paddingVertical: 10 }}
+            onPress={() => logout().catch(() => {})}
+          >
             <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
               Sign out
             </Text>
