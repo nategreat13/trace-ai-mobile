@@ -26,6 +26,7 @@ import { MapPin, Heart, X, Lock, Hand } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
 import { marqueeRank } from "../../lib/marquee";
+import { applyPreviewPrice } from "../../lib/previewPrices";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -133,7 +134,9 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
 
   const cards = useMemo(() => {
     const byDest = new Map<string, Deal>();
-    for (const d of deals) {
+    for (const raw of deals) {
+      // Same display prices as the gated feed, so Tokyo is $539 here too.
+      const d = applyPreviewPrice(raw);
       if (!d.destination) continue;
       const prev = byDest.get(d.destination);
       if (!prev || (d.discount_pct || 0) > (prev.discount_pct || 0)) {
