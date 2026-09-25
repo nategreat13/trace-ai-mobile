@@ -123,6 +123,13 @@ export type AnalyticsEventName =
   | "trial_eligibility_checked"
   | "trial_eligibility_check_failed"
   | "paywall_cta_tapped"
+  // The step before Apple's sheet. 77% of trial taps died inside StoreKit,
+  // so this measures whether naming the price and the flow beforehand helps:
+  // _shown / _confirmed gives the explainer's own pass-through rate, and
+  // _confirmed against purchase_completed isolates what the sheet still eats.
+  | "trial_explainer_shown"
+  | "trial_explainer_confirmed"
+  | "trial_explainer_dismissed"
   | "paywall_restore_tapped"
   | "paywall_dismissed"
   // The win-back offer a dismissal now routes into. Split three ways because

@@ -33,6 +33,7 @@ import { useIAP } from "../hooks/useIAP";
 import { hasEntitlement } from "../services/iap";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
+import TrialExplainer from "../components/TrialExplainer";
 import Confetti from "../components/Confetti";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -215,6 +216,24 @@ export default function GiftOfferScreen() {
       opened,
     });
     navigation.goBack();
+  };
+
+  const [explainerOpen, setExplainerOpen] = useState(false);
+
+  /** Same pre-sheet step as the paywall — the gift hits the same StoreKit wall. */
+  const onClaimPress = () => {
+    if (!offerPkg) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (hasFreeTrial) {
+      logEvent("trial_explainer_shown", {
+        entry_point: "gift_offer",
+        billing: "annual",
+        product_id: offerPkg.product.identifier,
+      });
+      setExplainerOpen(true);
+      return;
+    }
+    handleClaim();
   };
 
   const handleClaim = async () => {
@@ -530,7 +549,7 @@ export default function GiftOfferScreen() {
           }}
         >
           <TouchableOpacity
-            onPress={handleClaim}
+            onPress={onClaimPress}
             disabled={purchasing}
             activeOpacity={0.9}
             accessibilityRole="button"
@@ -598,6 +617,30 @@ export default function GiftOfferScreen() {
         )}
 
         <Confetti active={opened} originY={0.42} />
+
+        <TrialExplainer
+          visible={explainerOpen}
+          trialDuration={trialDurationLabel}
+          priceString={offerPkg.product.priceString}
+          period="year"
+          perMonth={offerPerMonth}
+          purchasing={purchasing}
+          onConfirm={() => {
+            logEvent("trial_explainer_confirmed", {
+              entry_point: "gift_offer",
+              billing: "annual",
+            });
+            setExplainerOpen(false);
+            handleClaim();
+          }}
+          onCancel={() => {
+            logEvent("trial_explainer_dismissed", {
+              entry_point: "gift_offer",
+              billing: "annual",
+            });
+            setExplainerOpen(false);
+          }}
+        />
       </SafeAreaView>
     </GestureHandlerRootView>
   );

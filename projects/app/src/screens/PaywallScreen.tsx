@@ -27,6 +27,7 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
+import TrialExplainer from "../components/TrialExplainer";
 import { giftOfferEligible } from "../lib/giftOffer";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -167,6 +168,36 @@ export default function PaywallScreen() {
     }
   }, [hasFreeTrial, billingPeriod, trialLengthLabel, entryPoint]);
 
+  const [explainerOpen, setExplainerOpen] = useState(false);
+
+  /**
+   * The CTA opens the explainer rather than StoreKit whenever a trial is on
+   * offer — see components/TrialExplainer for why. A straight purchase has
+   * no timeline to explain, so it goes to the sheet directly.
+   */
+  const onCtaPress = () => {
+    if (!selectedPkg) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    logEvent("paywall_cta_tapped", {
+      tier: isBusinessPaywall ? "business" : "premium",
+      billing: billingPeriod,
+      product_id: selectedPkg.product.identifier,
+      is_trial: hasFreeTrial,
+      trial_length: hasFreeTrial ? trialLengthLabel : null,
+      entry_point: entryPoint,
+    });
+    if (hasFreeTrial) {
+      logEvent("trial_explainer_shown", {
+        entry_point: entryPoint,
+        billing: billingPeriod,
+        product_id: selectedPkg.product.identifier,
+      });
+      setExplainerOpen(true);
+      return;
+    }
+    handlePurchase();
+  };
+
   const handlePurchase = async () => {
     if (!selectedPkg) return;
     // The moment before the App Store sheet. A medium tap here, then the
@@ -180,14 +211,6 @@ export default function PaywallScreen() {
     // unattributable — we could see which paywalls got *shown* but never which
     // ones actually earned money, which is exactly the question that decides
     // where the paywall should fire.
-    logEvent("paywall_cta_tapped", {
-      tier: isBusinessPaywall ? "business" : "premium",
-      billing: billingPeriod,
-      product_id: selectedPkg.product.identifier,
-      is_trial: hasFreeTrial,
-      trial_length: hasFreeTrial ? trialLengthLabel : null,
-      entry_point: entryPoint,
-    });
     logEvent("purchase_initiated", {
       tier: isBusinessPaywall ? "business" : "premium",
       billing: billingPeriod,
@@ -746,7 +769,7 @@ export default function PaywallScreen() {
           }}
         >
           <TouchableOpacity
-            onPress={handlePurchase}
+            onPress={onCtaPress}
             disabled={purchasing || subscribeDisabled || !selectedPkg}
             activeOpacity={0.9}
             accessibilityRole="button"
@@ -822,6 +845,30 @@ export default function PaywallScreen() {
           </View>
         </View>
       </SafeAreaView>
+
+      <TrialExplainer
+        visible={explainerOpen}
+        trialDuration={trialDurationLabel}
+        priceString={priceString}
+        period={periodSuffix}
+        perMonth={billingPeriod === "annual" ? annualPerMonth : null}
+        purchasing={purchasing}
+        onConfirm={() => {
+          logEvent("trial_explainer_confirmed", {
+            entry_point: entryPoint,
+            billing: billingPeriod,
+          });
+          setExplainerOpen(false);
+          handlePurchase();
+        }}
+        onCancel={() => {
+          logEvent("trial_explainer_dismissed", {
+            entry_point: entryPoint,
+            billing: billingPeriod,
+          });
+          setExplainerOpen(false);
+        }}
+      />
     </GestureHandlerRootView>
   );
 }
