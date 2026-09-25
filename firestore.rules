@@ -86,6 +86,19 @@ service cloud.firestore {
     }
 
     // ──── Deal Alerts ────
+    // Airport requests from the onboarding picker's dead end. Create-only
+    // from clients: someone tells us they want a city we don't serve, and
+    // nothing they write is ever read back to them. Anonymous requests are
+    // allowed because the picker sits inside onboarding and the request is
+    // worth keeping even if the account is never finished — that intent used
+    // to be discarded in silence. Reads and edits stay server-only.
+    match /airportRequests/{docId} {
+      allow read, update, delete: if false;
+      allow create: if request.resource.data.query is string
+                    && request.resource.data.query.size() > 0
+                    && request.resource.data.query.size() < 120;
+    }
+
     match /dealAlerts/{docId} {
 
       allow read: if request.auth != null
@@ -265,6 +278,19 @@ service cloud.firestore {
                     && request.resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null
                     && resource.data.userId == request.auth.uid;
+    }
+
+    // Airport requests from the onboarding picker's dead end. Create-only
+    // from clients: someone tells us they want a city we don't serve, and
+    // nothing they write is ever read back to them. Anonymous requests are
+    // allowed because the picker sits inside onboarding and the request is
+    // worth keeping even if the account is never finished — that intent used
+    // to be discarded in silence. Reads and edits stay server-only.
+    match /staging_airportRequests/{docId} {
+      allow read, update, delete: if false;
+      allow create: if request.resource.data.query is string
+                    && request.resource.data.query.size() > 0
+                    && request.resource.data.query.size() < 120;
     }
 
     match /staging_dealAlerts/{docId} {

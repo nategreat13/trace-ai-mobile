@@ -13,7 +13,6 @@ import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { Lock, Plane } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { fadeTo } from "../../lib/fade";
-import { applyPreviewPrice } from "../../lib/previewPrices";
 import { rankDeals, type RankPrefs } from "../../lib/dealRanker";
 import type { Deal } from "@trace/shared";
 
@@ -89,8 +88,7 @@ export function selectRevealDeals(
   // One deal per destination — the cheapest — so the list reads as places
   // rather than as duplicate routes.
   const cheapestByDest = new Map<string, Deal>();
-  for (const raw of deals) {
-    const d = applyPreviewPrice(raw);
+  for (const d of deals) {
     if (!d.destination) continue;
     const existing = cheapestByDest.get(d.destination);
     if (!existing || (d.price || Infinity) < (existing.price || Infinity)) {

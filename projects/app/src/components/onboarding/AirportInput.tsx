@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,9 +7,16 @@ import {
   ScrollView,
   useColorScheme,
 } from "react-native";
+import * as Haptics from "expo-haptics";
+import Animated, { FadeIn } from "react-native-reanimated";
+import { MapPin, BellRing, Check } from "lucide-react-native";
 import { colors } from "../../theme/colors";
+import { findUnserved, nearestServed, type GeoAirport } from "../../lib/airportGeo";
+import { createAirportRequest } from "../../services/firestore";
+import { useAuth } from "../../context/AuthContext";
+import { logEvent } from "../../lib/analytics";
 
-interface Airport {
+export interface Airport {
   code: string;
   name: string;
   city: string;
@@ -202,6 +209,75 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
   // the keyboard.
   const showDropdown = query.trim().length > 0 && results.length > 0;
 
+  /**
+   * The dead end. A query with no serviced match used to render nothing at
+   * all — no rows, no message, Continue grey — which stranded 13% of one
+   * cohort and produced 58% of all onboarding drop-off. Now an unmatched
+   * search is answered: we name the airport if we recognise it, point at the
+   * nearest origin we do cover, and offer to write when their city launches.
+   */
+  const trimmed = query.trim();
+  const unserved: GeoAirport[] = showDropdown ? [] : findUnserved(trimmed);
+  const deadEnd = trimmed.length >= 2 && results.length === 0;
+  const match = unserved[0] ?? null;
+  const nearest = match ? nearestServed(match) : null;
+
+  const [requested, setRequested] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const { user, profile } = useAuth();
+
+  const requestAirport = async () => {
+    if (requesting) return;
+    setRequesting(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const label = match ? `${match.city}, ${match.state}` : trimmed;
+    try {
+      await createAirportRequest({
+        userId: user?.uid ?? null,
+        email: user?.email ?? profile?.email ?? null,
+        airportCode: match?.code ?? null,
+        query: trimmed,
+        nearestCode: nearest?.airport.code ?? null,
+        nearestMiles: nearest ? Math.round(nearest.miles) : null,
+      });
+      logEvent("airport_request_submitted", {
+        airport_code: match?.code ?? null,
+        query: trimmed,
+        nearest_code: nearest?.airport.code ?? null,
+      });
+      setRequested(label);
+    } catch (err) {
+      console.warn("[airport] request failed:", err);
+      // Still acknowledge — the user did their part, and a lost write is
+      // not worth turning a recovery into a second dead end.
+      setRequested(label);
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  // A new search clears the acknowledgement so the panel tracks the query.
+  const lastQueryRef = useRef(trimmed);
+  if (lastQueryRef.current !== trimmed) {
+    lastQueryRef.current = trimmed;
+    if (requested) setRequested(null);
+  }
+
+  // Size the wall directly. Logged once per distinct query rather than per
+  // keystroke, so the count is "searches that found nothing" and not
+  // "characters typed on the way there".
+  const loggedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!deadEnd || loggedRef.current.has(trimmed)) return;
+    loggedRef.current.add(trimmed);
+    logEvent("airport_dead_end_shown", {
+      query: trimmed,
+      recognized_code: match?.code ?? null,
+      nearest_code: nearest?.airport.code ?? null,
+      nearest_miles: nearest ? Math.round(nearest.miles) : null,
+    });
+  }, [deadEnd, trimmed]);
+
   const handleSelect = (airport: Airport) => {
     onChange(airport.code);
     setQuery("");
@@ -292,6 +368,124 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
       )}
 
       {/* Dropdown */}
+      {/* Dead end: answered, not silent. */}
+      {deadEnd && (
+        <Animated.View
+          entering={FadeIn.duration(220)}
+          style={{
+            backgroundColor: theme.card,
+            borderWidth: 1,
+            borderColor: theme.border,
+            borderRadius: 14,
+            marginTop: 6,
+            padding: 14,
+            gap: 12,
+          }}
+        >
+          {requested ? (
+            <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+              <View
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: 13,
+                  backgroundColor: colors.brand.traceGreen,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Check size={15} color="#fff" strokeWidth={3} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14.5, fontWeight: "700", color: theme.foreground }}>
+                  We'll email you when {requested} opens up
+                </Text>
+                <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 3, lineHeight: 18 }}>
+                  {nearest
+                    ? `In the meantime you can start from ${nearest.airport.city} below.`
+                    : "In the meantime, pick any airport below to look around."}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={{ gap: 3 }}>
+                <Text style={{ fontSize: 15, fontWeight: "700", color: theme.foreground }}>
+                  {match
+                    ? `We don't fly from ${match.city} yet`
+                    : `No match for "${trimmed}"`}
+                </Text>
+                <Text style={{ fontSize: 13, color: theme.mutedForeground, lineHeight: 18 }}>
+                  {match
+                    ? `${match.code} isn't one of our ${HOME_AIRPORTS.length} airports — we're adding more.`
+                    : `Try a city or airport code. We currently fly from ${HOME_AIRPORTS.length} US airports.`}
+                </Text>
+              </View>
+
+              {/* The nearest airport we do cover. For a lot of people this is
+                  a drive they already make. */}
+              {!!nearest && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    logEvent("airport_nearest_accepted", {
+                      from_query: trimmed,
+                      chosen_code: nearest.airport.code,
+                      miles: Math.round(nearest.miles),
+                    });
+                    handleSelect(nearest.airport);
+                  }}
+                  activeOpacity={0.8}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                    backgroundColor: colors.brand.traceRed + "10",
+                    borderWidth: 1.5,
+                    borderColor: colors.brand.traceRed,
+                    borderRadius: 12,
+                    paddingHorizontal: 12,
+                    paddingVertical: 11,
+                  }}
+                >
+                  <MapPin size={17} color={colors.brand.traceRed} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14.5, fontWeight: "700", color: theme.foreground }}>
+                      Use {nearest.airport.city} ({nearest.airport.code})
+                    </Text>
+                    <Text style={{ fontSize: 12.5, color: theme.mutedForeground, marginTop: 1 }}>
+                      Closest airport we cover — about {Math.round(nearest.miles)} miles away
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                onPress={requestAirport}
+                disabled={requesting}
+                activeOpacity={0.8}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  borderWidth: 1,
+                  borderColor: theme.border,
+                  borderRadius: 12,
+                  paddingVertical: 11,
+                  opacity: requesting ? 0.5 : 1,
+                }}
+              >
+                <BellRing size={15} color={theme.mutedForeground} />
+                <Text style={{ fontSize: 14, fontWeight: "700", color: theme.foreground }}>
+                  Tell me when you launch {match ? match.city : "here"}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </Animated.View>
+      )}
+
       {showDropdown && (
         <View
           style={{

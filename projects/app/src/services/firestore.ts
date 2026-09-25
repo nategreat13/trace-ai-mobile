@@ -244,6 +244,38 @@ export function subscribeToSavedDeals(
  * Matching is on destination + month, compared case-insensitively, because
  * that pair is what the matcher itself keys on.
  */
+/**
+ * Record that someone wanted an airport Trace doesn't serve.
+ *
+ * Written from the onboarding picker's empty state. Two jobs: it lets us tell
+ * them when their city launches, and it is the demand signal for which origin
+ * to add next — previously that intent was discarded in silence, which is how
+ * 13% of one cohort left without a trace of why.
+ *
+ * Deliberately tolerant of a missing userId: the picker sits inside
+ * onboarding, and a request is worth keeping even from someone who bails
+ * before their profile is written.
+ */
+export async function createAirportRequest(data: {
+  userId?: string | null;
+  email?: string | null;
+  airportCode?: string | null;
+  query: string;
+  nearestCode?: string | null;
+  nearestMiles?: number | null;
+}): Promise<string> {
+  const ref = await addDoc(envCollection("airportRequests"), {
+    ...data,
+    userId: data.userId ?? null,
+    email: data.email ?? null,
+    airportCode: data.airportCode ?? null,
+    nearestCode: data.nearestCode ?? null,
+    nearestMiles: data.nearestMiles ?? null,
+    createdAt: Timestamp.now(),
+  });
+  return ref.id;
+}
+
 export async function createDealAlert(data: Omit<DealAlert, "id" | "createdAt">): Promise<string> {
   const existing = await getDocs(
     query(envCollection("dealAlerts"), where("userId", "==", data.userId))

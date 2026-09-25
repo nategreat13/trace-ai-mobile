@@ -32,7 +32,6 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { MapPin, Heart, X, Hand, Bell, BookmarkCheck } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
-import { applyPreviewPrice } from "../../lib/previewPrices";
 import { SHOWCASE_DEALS, toDeal } from "../../lib/showcaseDeals";
 import type { Deal } from "@trace/shared";
 
@@ -88,8 +87,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
    */
   const cards = useMemo(() => {
     const byDest = new Map<string, Deal>();
-    for (const raw of deals) {
-      const d = applyPreviewPrice(raw);
+    for (const d of deals) {
       if (!d.destination || !d.image_url) continue;
       const prev = byDest.get(d.destination);
       if (!prev || (d.discount_pct || 0) > (prev.discount_pct || 0)) {

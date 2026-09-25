@@ -49,6 +49,14 @@ export type AnalyticsEventName =
   // so per-beat drop-off is the only way to read whether a fall in
   // completion is the price of the bet or a specific screen being bad.
   | "onboarding_step_viewed"
+  // The airport picker's dead end — a search that matched none of the 23
+  // serviced origins. `_shown` sizes the wall directly (13% of accounts in
+  // the 1.8.0 cohort, 58% of all onboarding drop-off); `_submitted` is the
+  // demand signal for which origin to add next, and `_recovered` counts the
+  // people who took the nearest airport instead of leaving.
+  | "airport_dead_end_shown"
+  | "airport_request_submitted"
+  | "airport_nearest_accepted"
   | "onboarding_completed"
   // Engagement
   | "swipe"

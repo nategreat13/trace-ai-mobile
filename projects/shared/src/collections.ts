@@ -53,6 +53,10 @@ export const COLLECTION_NAMES = [
   "dotdCache",
   "sandboxEmailWhitelist",
   "webhookEvents",
+  // Airport requests from the onboarding picker's dead end: someone searched
+  // for a city Trace doesn't serve and asked to be told when it launches.
+  // Doubles as the demand signal for which origin to add next.
+  "airportRequests",
 ] as const;
 
 export type CollectionName = (typeof COLLECTION_NAMES)[number];
