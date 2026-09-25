@@ -42,22 +42,19 @@ const APP_RATING_COUNT: string | null = null;
  * written one, and it removes the question entirely.
  */
 /**
- * Stock travel photography, one per testimonial.
+ * ─────────────────────────────────────────────────────────────────────────
+ *  TREVOR: drop 5-7 image URLs in here — couples, families, people actually
+ *  travelling — and both the photo strip and the testimonial avatars light
+ *  up automatically. Empty is the safe default: the page falls back to the
+ *  membership number and the quotes, which still works.
  *
- * The page used to illustrate social proof with destination scenery, which
- * proves the places exist but says nothing about people using Trace. Faces do
- * the work scenery can't: the claim is "30,000 travellers", so the page
- * should show travellers. All verified to load before shipping.
+ *  It's empty because I can't see what a stock URL contains from here, only
+ *  that it loads. The first attempt shipped a camera flat-lay, a bar
+ *  interior, and an office desk — and used the flat-lay as someone's face.
+ *  Real customer photos would beat stock anyway, if any exist.
+ * ─────────────────────────────────────────────────────────────────────────
  */
-const FACES = [
-  "https://images.pexels.com/photos/1051075/pexels-photo-1051075.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/1058277/pexels-photo-1058277.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/3811082/pexels-photo-3811082.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/2422265/pexels-photo-2422265.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?auto=compress&cs=tinysrgb&w=400",
-  "https://images.pexels.com/photos/853168/pexels-photo-853168.jpeg?auto=compress&cs=tinysrgb&w=400",
-];
+const FACES: string[] = [];
 
 const TESTIMONIALS = [
   {
@@ -201,8 +198,8 @@ export default function SocialProofBeat({
         </Text>
       </Animated.View>
 
-      {/* People, not places — see FACES. */}
-      {true && (
+      {/* People, not places — see FACES. Hidden until it's populated. */}
+      {FACES.length > 0 && (
         <Animated.View entering={FadeIn.duration(450).delay(80)}>
           <ScrollView
             horizontal
@@ -278,14 +275,16 @@ export default function SocialProofBeat({
             {t.text}
           </Text>
           <View style={styles.attrRow}>
-            <View style={styles.avatar}>
-              <Image
-                source={{ uri: FACES[i % FACES.length] }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={180}
-              />
-            </View>
+            {FACES.length > 0 && (
+              <View style={styles.avatar}>
+                <Image
+                  source={{ uri: FACES[i % FACES.length] }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={180}
+                />
+              </View>
+            )}
             <View style={styles.stars}>
               {Array.from({ length: 5 }).map((_, s) => (
                 <Star

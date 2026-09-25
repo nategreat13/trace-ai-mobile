@@ -249,7 +249,7 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
 
 const styles = StyleSheet.create({
   wrap: { gap: 16 },
-  stream: { gap: 10, minHeight: 4 * 66 + 3 * 10, position: "relative" },
+  stream: { gap: 10, minHeight: VISIBLE * 66 + (VISIBLE - 1) * 10, position: "relative" },
   streamFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 70 },
   alert: {
     flexDirection: "row",

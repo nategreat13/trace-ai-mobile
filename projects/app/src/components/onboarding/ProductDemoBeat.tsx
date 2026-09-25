@@ -100,22 +100,38 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
    * fallback. Either way the cards carry the same prices as the landing deck
    * and the alert stream — see lib/showcaseDeals.ts.
    */
+  /**
+   * The deck is an advertisement, so it has a quality bar.
+   *
+   * Sorting the real feed by recognisability alone put Paris at $868 / 2% off
+   * on the first card — the beat meant to sell the product was showing the
+   * worst deal in it. Marquee cities are often the *expensive* ones, and a
+   * famous name with a bad number is worse than an unfamiliar name with a
+   * great one.
+   *
+   * So: keep only genuinely good fares, then prefer recognisable ones among
+   * those. If their airport can't fill a deck that way — which is common for
+   * international out of a mid-size origin — fall back to the showcase set,
+   * which is what the landing deck and the alert stream already show.
+   */
   const cards = useMemo(() => {
+    const MIN_DISCOUNT = 30;
     const byDest = new Map<string, Deal>();
     for (const d of deals) {
       if (!d.destination || !d.image_url) continue;
+      if ((d.discount_pct || 0) < MIN_DISCOUNT) continue;
       const prev = byDest.get(d.destination);
       if (!prev || (d.discount_pct || 0) > (prev.discount_pct || 0)) {
         byDest.set(d.destination, d);
       }
     }
-    const real = [...byDest.values()].sort((a, b) => {
+    const good = [...byDest.values()].sort((a, b) => {
       const ra = marqueeRank(a.destination);
       const rb = marqueeRank(b.destination);
       if (ra !== rb) return ra - rb;
       return (b.discount_pct || 0) - (a.discount_pct || 0);
     });
-    const list = real.length >= DECK ? real : SHOWCASE_DEALS.map((d) => toDeal(d));
+    const list = good.length >= DECK ? good : SHOWCASE_DEALS.map((d) => toDeal(d));
     return list.slice(0, DECK);
   }, [deals]);
 

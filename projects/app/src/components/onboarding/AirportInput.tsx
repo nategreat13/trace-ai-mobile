@@ -402,8 +402,8 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
                 </Text>
                 <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 3, lineHeight: 18 }}>
                   {nearest
-                    ? `In the meantime you can start from ${nearest.airport.city} below.`
-                    : "In the meantime, pick any airport below to look around."}
+                    ? `Until then, you can start from ${nearest.airport.city}.`
+                    : "Until then, search another city to look around."}
                 </Text>
               </View>
             </View>
@@ -421,44 +421,6 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
                     : `Try a city or airport code. We currently fly from ${HOME_AIRPORTS.length} US airports.`}
                 </Text>
               </View>
-
-              {/* The nearest airport we do cover. For a lot of people this is
-                  a drive they already make. */}
-              {!!nearest && (
-                <TouchableOpacity
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    logEvent("airport_nearest_accepted", {
-                      from_query: trimmed,
-                      chosen_code: nearest.airport.code,
-                      miles: Math.round(nearest.miles),
-                    });
-                    handleSelect(nearest.airport);
-                  }}
-                  activeOpacity={0.8}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                    backgroundColor: colors.brand.traceRed + "10",
-                    borderWidth: 1.5,
-                    borderColor: colors.brand.traceRed,
-                    borderRadius: 12,
-                    paddingHorizontal: 12,
-                    paddingVertical: 11,
-                  }}
-                >
-                  <MapPin size={17} color={colors.brand.traceRed} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14.5, fontWeight: "700", color: theme.foreground }}>
-                      Use {nearest.airport.city} ({nearest.airport.code})
-                    </Text>
-                    <Text style={{ fontSize: 12.5, color: theme.mutedForeground, marginTop: 1 }}>
-                      Closest airport we cover — about {Math.round(nearest.miles)} miles away
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
 
               <TouchableOpacity
                 onPress={requestAirport}
@@ -483,6 +445,45 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
               </TouchableOpacity>
             </>
           )}
+
+          {/* The nearest airport we do cover. For a lot of people this is
+              a drive they already make. */}
+          {!!nearest && (
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                logEvent("airport_nearest_accepted", {
+                  from_query: trimmed,
+                  chosen_code: nearest.airport.code,
+                  miles: Math.round(nearest.miles),
+                });
+                handleSelect(nearest.airport);
+              }}
+              activeOpacity={0.8}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                backgroundColor: colors.brand.traceRed + "10",
+                borderWidth: 1.5,
+                borderColor: colors.brand.traceRed,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 11,
+              }}
+            >
+              <MapPin size={17} color={colors.brand.traceRed} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14.5, fontWeight: "700", color: theme.foreground }}>
+                  Use {nearest.airport.city} ({nearest.airport.code})
+                </Text>
+                <Text style={{ fontSize: 12.5, color: theme.mutedForeground, marginTop: 1 }}>
+                  Closest airport we cover — about {Math.round(nearest.miles)} miles away
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
         </Animated.View>
       )}
 

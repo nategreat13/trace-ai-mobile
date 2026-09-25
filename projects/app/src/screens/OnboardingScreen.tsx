@@ -519,7 +519,7 @@ export default function OnboardingScreen() {
     {
       key: "demo",
       title: "Swipe right on your next trip",
-      subtitle: "Try it — this is the whole app.",
+      subtitle: "Go on, try it.",
       canProceed: true,
       newUserOnly: true,
       content: <ProductDemoBeat deals={deals} />,
