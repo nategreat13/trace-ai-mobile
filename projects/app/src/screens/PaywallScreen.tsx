@@ -14,7 +14,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { X, Bell, Users, Crown, Clock, Sparkles, Map, Search, BookOpen } from "lucide-react-native";
+import { X, Mail } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -27,7 +27,6 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
-import TrialTimeline from "../components/TrialTimeline";
 import { giftOfferEligible } from "../lib/giftOffer";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -508,25 +507,6 @@ export default function PaywallScreen() {
     navigation.goBack();
   };
 
-  const FEATURES = isBusinessPaywall
-    ? [
-        { Icon: Crown, label: "Business-class fares at economy prices" },
-        { Icon: Bell, label: "Alerts the moment a premium seat drops" },
-        { Icon: Map, label: "Every destination on the map, unlocked" },
-        { Icon: BookOpen, label: "Personal travel guides, unlocked" },
-      ]
-    : [
-        {
-          Icon: Bell,
-          label: profile?.homeAirport
-            ? `Every ${profile.homeAirport} deal, in real time`
-            : "Every deal, in real time",
-        },
-        { Icon: Map, label: "Every destination on the map, unlocked" },
-        { Icon: Search, label: "Search and filter the full deal feed" },
-        { Icon: BookOpen, label: "Personal travel guides, unlocked" },
-      ];
-
   const annualPkg = isBusinessPaywall
     ? businessAnnualPackage
     : premiumAnnualPackage;
@@ -535,202 +515,230 @@ export default function PaywallScreen() {
     : premiumMonthlyPackage;
   const annualPerMonth = getPerMonthFromAnnual(annualPkg);
 
-  // The trial length goes ON the button. "Try for Free" was true but vague;
-  // "Try Free for 7 Days" is the actual offer, and nothing else on the way
-  // here has said it out loud yet.
   const ctaLabel = subscribeDisabled
     ? "You're subscribed"
     : hasFreeTrial
       ? `Try Free for ${trialDurationLabel}`
       : "Continue";
 
-  /** One selectable plan card. Annual leads with its per-month equivalent. */
-  const renderPlanCard = (
-    period: BillingPeriod,
-    pkg: PurchasesPackage | null,
-  ) => {
-    if (!pkg) return null;
-    const active = billingPeriod === period;
-    const isAnnual = period === "annual";
-    return (
-      <TouchableOpacity
-        key={period}
-        onPress={() => {
-          Haptics.selectionAsync().catch(() => {});
-          setBillingPeriod(period);
-        }}
-        activeOpacity={0.85}
-        accessibilityRole="radio"
-        accessibilityState={{ selected: active }}
-        style={{
-          flex: 1,
-          borderWidth: 2,
-          borderColor: active ? accent : theme.border,
-          backgroundColor: active ? accent + "10" : theme.card,
-          borderRadius: 16,
-          paddingVertical: 18,
-          paddingHorizontal: 14,
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: 116,
-        }}
-      >
-        {isAnnual && annualSavings != null && (
-          <View
-            style={{
-              position: "absolute",
-              top: -11,
-              backgroundColor: accent,
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 3,
-            }}
-          >
-            <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
-              SAVE {annualSavings}%
-            </Text>
-          </View>
-        )}
-        <Text
-          style={{
-            color: theme.mutedForeground,
-            fontSize: 13,
-            fontWeight: "700",
-            marginBottom: 4,
-          }}
-        >
-          {isAnnual ? "Annual" : "Monthly"}
-        </Text>
-        <Text
-          style={{ color: theme.foreground, fontSize: 24, fontWeight: "800" }}
-        >
-          {isAnnual ? annualPerMonth ?? pkg.product.priceString : pkg.product.priceString}
-        </Text>
-        <Text
-          style={{
-            color: theme.mutedForeground,
-            fontSize: 12,
-            marginTop: 3,
-            textAlign: "center",
-          }}
-        >
-          {isAnnual ? `${pkg.product.priceString} billed annually` : "per month"}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+  /**
+   * The value line, in the user's own numbers where we have them.
+   *
+   * This replaced a four-row feature list ("Every destination on the map,
+   * unlocked", and so on). Generic feature lists are the weakest thing that
+   * can occupy the most valuable space on a paywall — every one of those rows
+   * could belong to any travel app. "Unlock all 104 deals from SLC" is the
+   * same promise in the user's own terms, in one line instead of four, and it
+   * frees the space the offer actually needs.
+   */
+  const valueLine =
+    lockedStat ??
+    personalizedSub ??
+    (profile?.homeAirport
+      ? `Every deal from ${profile.homeAirport}, the moment prices drop.`
+      : "Every deal from your airport, the moment prices drop.");
 
+  /**
+   * One screen, no scroll, in the order a decision actually gets made:
+   * what you get -> what it costs -> how the trial runs -> go.
+   *
+   * The previous version had nine stacked blocks (eyebrow, headline, four
+   * feature rows, two plan cards, a price row, a timeline, CTA, footnote,
+   * legal) and pushed the timeline below the fold. A paywall that scrolls
+   * asks the user to work for the offer.
+   *
+   * Annual is the hero and monthly is a text link rather than an equal card.
+   * Two matched cards frame the choice as 50/50; at current retention a
+   * monthly subscriber churns inside a couple of cycles, so an annual
+   * conversion is worth several times a monthly one and the layout should
+   * say so.
+   */
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-        {/* Close.
-
-            Deliberately low-contrast on the forced post-onboarding view so
-            the offer reads as the primary action — but never hidden, delayed,
-            shrunk, or moved off the safe area. Apple rejects subscription
-            screens without an obvious way out (3.1.2 / HIG), so the tap
-            target stays a full 44pt via hitSlop and the glyph keeps real
-            contrast. Lower visual weight is fine; hard to leave is not. */}
-        {canDismiss ? (
-          <TouchableOpacity
-            onPress={handleDismiss}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            style={{
-              marginTop: 4,
-              marginLeft: 16,
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: isForcedView ? "transparent" : theme.muted,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <X
-              color={isForcedView ? theme.mutedForeground : theme.foreground}
-              size={22}
-            />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ height: 40 }} />
-        )}
-
-        <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 20 }}
-          showsVerticalScrollIndicator={false}
+        <TouchableOpacity
+          onPress={handleDismiss}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          style={{
+            marginTop: 4,
+            marginLeft: 16,
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            backgroundColor: isForcedView ? "transparent" : theme.muted,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
-          <Text
-            style={{
-              color: accent,
-              fontSize: 12,
-              fontWeight: "800",
-              letterSpacing: 1.1,
-              marginTop: 10,
-            }}
-          >
-            {heroContent.eyebrow}
-          </Text>
-          <Text
-            style={{
-              color: theme.foreground,
-              fontSize: 32,
-              fontWeight: "800",
-              letterSpacing: -0.7,
-              lineHeight: 38,
-              marginTop: 8,
-            }}
-          >
-            {heroContent.headline}
-          </Text>
-          {!!(heroContent.sub || lockedStat) && (
+          <X color={isForcedView ? theme.mutedForeground : theme.foreground} size={22} />
+        </TouchableOpacity>
+
+        <View style={{ flex: 1, paddingHorizontal: 24, justifyContent: "center", gap: 20 }}>
+          {/* 1 — what you get, in their numbers */}
+          <View style={{ gap: 8 }}>
             <Text
               style={{
-                color: theme.mutedForeground,
-                fontSize: 15,
-                lineHeight: 22,
-                marginTop: 10,
+                color: theme.foreground,
+                fontSize: 32,
+                fontWeight: "800",
+                letterSpacing: -0.8,
+                lineHeight: 37,
               }}
             >
-              {heroContent.sub ?? lockedStat}
+              {heroContent.headline}
             </Text>
-          )}
+            <Text style={{ color: theme.mutedForeground, fontSize: 16, lineHeight: 22 }}>
+              {valueLine}
+            </Text>
+          </View>
 
-          <View style={{ marginTop: 26, gap: 14 }}>
-            {FEATURES.map(({ Icon, label }) => (
-              <View
-                key={label}
-                style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
-              >
-                <Icon size={19} color={accent} />
-                <Text
+          {/* 2 — the offer, as one block.
+                 A previous pass had the annual card and a separate
+                 "$0 today / $47.99 after" row, which printed both numbers
+                 twice on one screen. The zero is the most persuasive fact
+                 here, so it leads, and everything else is the sentence
+                 underneath it. */}
+          {!!annualPkg && (
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setBillingPeriod("annual");
+              }}
+              activeOpacity={0.9}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: billingPeriod === "annual" }}
+              style={{
+                borderWidth: 2,
+                borderColor: billingPeriod === "annual" ? accent : theme.border,
+                backgroundColor: billingPeriod === "annual" ? accent + "0F" : theme.card,
+                borderRadius: 18,
+                paddingHorizontal: 18,
+                paddingVertical: 20,
+              }}
+            >
+              {annualSavings != null && billingPeriod === "annual" && (
+                <View
                   style={{
-                    color: theme.foreground,
-                    fontSize: 15,
-                    fontWeight: "500",
-                    flex: 1,
+                    position: "absolute",
+                    top: -11,
+                    left: 18,
+                    backgroundColor: accent,
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 3,
                   }}
                 >
-                  {label}
-                </Text>
-              </View>
-            ))}
-          </View>
+                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
+                    SAVE {annualSavings}%
+                  </Text>
+                </View>
+              )}
 
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 30 }}>
-            {renderPlanCard("annual", annualPkg)}
-            {renderPlanCard("monthly", monthlyPkg)}
-          </View>
+              {hasFreeTrial ? (
+                <>
+                  <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10 }}>
+                    <Text
+                      style={{
+                        color: colors.brand.traceGreen,
+                        fontSize: 40,
+                        fontWeight: "800",
+                        letterSpacing: -1.4,
+                      }}
+                    >
+                      $0
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.foreground,
+                        fontSize: 17,
+                        fontWeight: "700",
+                        paddingBottom: 7,
+                      }}
+                    >
+                      due today
+                    </Text>
+                  </View>
+                  <Text
+                    style={{
+                      color: theme.mutedForeground,
+                      fontSize: 14.5,
+                      lineHeight: 20,
+                      marginTop: 6,
+                    }}
+                  >
+                    Then{" "}
+                    <Text style={{ color: theme.foreground, fontWeight: "700" }}>
+                      {annualPerMonth ?? selectedPkg?.product.priceString}
+                    </Text>{" "}
+                    — {priceString} billed {billingPeriod === "annual" ? "annually" : "monthly"} after your{" "}
+                    {trialLengthLabel} trial. Cancel anytime.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text
+                    style={{
+                      color: theme.foreground,
+                      fontSize: 34,
+                      fontWeight: "800",
+                      letterSpacing: -1,
+                    }}
+                  >
+                    {annualPerMonth ?? annualPkg.product.priceString}
+                  </Text>
+                  <Text style={{ color: theme.mutedForeground, fontSize: 14, marginTop: 4 }}>
+                    {annualPkg.product.priceString} billed annually · cancel anytime
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
+          {/* Monthly stays available, deliberately quiet. */}
+          {!!monthlyPkg && (
+            <TouchableOpacity
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setBillingPeriod("monthly");
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: billingPeriod === "monthly" }}
+              style={{ alignSelf: "center" }}
+            >
+              <Text
+                style={{
+                  color: billingPeriod === "monthly" ? theme.foreground : theme.mutedForeground,
+                  fontSize: 14,
+                  fontWeight: billingPeriod === "monthly" ? "800" : "600",
+                  textDecorationLine: billingPeriod === "monthly" ? "none" : "underline",
+                }}
+              >
+                {billingPeriod === "monthly"
+                  ? `Monthly selected — ${monthlyPkg.product.priceString}/mo`
+                  : `or pay monthly — ${monthlyPkg.product.priceString}/mo`}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* The whole three-step timeline compressed to the one line that
+              carries its weight: the reminder is what removes the fear of
+              being charged unawares. */}
           {hasFreeTrial && (
-            <View style={{ marginTop: 26 }}>
-              <TrialTimeline
-                trialDuration={trialDurationLabel}
-                priceString={priceString}
-                period={periodSuffix}
-                perMonth={billingPeriod === "annual" ? annualPerMonth : null}
-              />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 9,
+                alignSelf: "center",
+              }}
+            >
+              <Mail size={15} color={theme.mutedForeground} />
+              <Text style={{ color: theme.mutedForeground, fontSize: 13.5 }}>
+                We'll email you before it renews
+              </Text>
             </View>
           )}
 
@@ -740,23 +748,15 @@ export default function PaywallScreen() {
                 color: colors.brand.rose500,
                 fontSize: 13,
                 textAlign: "center",
-                marginTop: 14,
               }}
             >
               {error}
             </Text>
           )}
-        </ScrollView>
+        </View>
 
-        <View
-          style={{
-            paddingHorizontal: 24,
-            paddingTop: 12,
-            paddingBottom: 16,
-            borderTopWidth: 1,
-            borderTopColor: theme.border,
-          }}
-        >
+        {/* 4 — go */}
+        <View style={{ paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16, gap: 10 }}>
           <TouchableOpacity
             onPress={handlePurchase}
             disabled={purchasing || subscribeDisabled || !selectedPkg}
@@ -769,7 +769,7 @@ export default function PaywallScreen() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={{
-                borderRadius: 12,
+                borderRadius: 14,
                 paddingVertical: 18,
                 alignItems: "center",
                 justifyContent: "center",
@@ -778,9 +778,7 @@ export default function PaywallScreen() {
               {purchasing ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text
-                  style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}
-                >
+                <Text style={{ color: "#fff", fontSize: 17.5, fontWeight: "800" }}>
                   {ctaLabel}
                 </Text>
               )}
@@ -790,9 +788,8 @@ export default function PaywallScreen() {
           <Text
             style={{
               textAlign: "center",
-              fontSize: 12,
+              fontSize: 12.5,
               color: theme.mutedForeground,
-              marginTop: 10,
             }}
           >
             {hasFreeTrial
@@ -805,36 +802,21 @@ export default function PaywallScreen() {
               flexDirection: "row",
               justifyContent: "center",
               alignItems: "center",
-              gap: 16,
-              marginTop: 12,
+              gap: 18,
             }}
           >
-            <TouchableOpacity onPress={handleRestore}>
-              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-                Restore
-              </Text>
+            <TouchableOpacity onPress={handleRestore} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>Restore</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
-              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-                Terms
-              </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>Terms</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
-              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-                Privacy
-              </Text>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+              <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>Privacy</Text>
             </TouchableOpacity>
-            {!canDismiss && (
-              <TouchableOpacity onPress={() => logout().catch(() => {})}>
-                <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-                  Sign out
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </SafeAreaView>
-
     </GestureHandlerRootView>
   );
 }
