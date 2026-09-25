@@ -17,6 +17,7 @@ import Animated, {
 import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
+import { SHOWCASE_DEALS } from "../../lib/showcaseDeals";
 import { fadeTo } from "../../lib/fade";
 import type { Deal } from "@trace/shared";
 
@@ -36,16 +37,24 @@ import type { Deal } from "@trace/shared";
  * imagery is still used where the user's feed has a photo for the city, so
  * the cards look like the product; the numbers are the demo's.
  */
-const ALERTS: { destination: string; price: number; was: number }[] = [
-  { destination: "Lisbon", price: 312, was: 780 },
-  { destination: "Cancún", price: 189, was: 512 },
-  { destination: "Tokyo", price: 539, was: 1180 },
-  { destination: "Rome", price: 389, was: 940 },
-  { destination: "Honolulu", price: 297, was: 690 },
-  { destination: "Paris", price: 362, was: 870 },
-  { destination: "Barcelona", price: 341, was: 810 },
-  { destination: "Mexico City", price: 178, was: 430 },
-];
+/**
+ * The alert stream runs on the shared showcase set — the same cities, prices
+ * and images as the landing deck and the swipe demo. It used to keep its own
+ * list, which is how Cancún ended up at $269 on the landing screen and $189
+ * two screens later. See lib/showcaseDeals.ts.
+ */
+const ALERTS: {
+  destination: string;
+  price: number;
+  was: number;
+  /** Absent on entries backfilled from the user's own feed. */
+  image?: string;
+}[] = SHOWCASE_DEALS.map((d) => ({
+  destination: d.destination,
+  price: d.price,
+  was: d.was,
+  image: d.image,
+}));
 
 const TICK_MS = 1400;
 const VISIBLE = 4;
@@ -158,7 +167,7 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
       {/* Alert stream */}
       <View style={styles.stream}>
         {visible.map((a, i) => {
-          const img = imageFor(a.destination);
+          const img = a.image || imageFor(a.destination);
           return (
             <Animated.View
               key={a.id}
