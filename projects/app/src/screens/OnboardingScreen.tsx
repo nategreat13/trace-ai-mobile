@@ -518,8 +518,8 @@ export default function OnboardingScreen() {
     },
     {
       key: "demo",
-      title: "Swipe and explore flights",
-      subtitle: "Save what you like, skip what you don't — then see every deal on the map.",
+      title: "Swipe right on your next trip",
+      subtitle: "Try it — this is the whole app.",
       canProceed: true,
       newUserOnly: true,
       content: <ProductDemoBeat deals={deals} />,

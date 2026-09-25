@@ -227,10 +227,23 @@ export default function GatedHomeScreen() {
 
   // Everything the page says about "the deals below" is computed from the
   // SAME selection FeedReveal renders — see selectRevealDeals.
+  const rankPrefs = useMemo(
+    () => ({
+      dealTypes: profile?.dealTypes,
+      travelTimeframe: profile?.travelTimeframe,
+      travelBarriers: profile?.travelBarriers,
+    }),
+    [profile?.dealTypes, profile?.travelTimeframe, profile?.travelBarriers],
+  );
+
   const selection = useMemo(
     () =>
-      selectRevealDeals(deals, profile?.destinationPreference ?? "both"),
-    [deals, profile?.destinationPreference],
+      selectRevealDeals(
+        deals,
+        profile?.destinationPreference ?? "both",
+        rankPrefs,
+      ),
+    [deals, profile?.destinationPreference, rankPrefs],
   );
 
   /**
@@ -461,6 +474,7 @@ export default function GatedHomeScreen() {
             homeAirport={airport}
             firstName={firstName}
             destinationPreference={profile?.destinationPreference ?? "both"}
+            prefs={rankPrefs}
             headerExtra={matchingBlock}
             footerExtra={savingsBlock}
             onPressDeal={(deal) => {

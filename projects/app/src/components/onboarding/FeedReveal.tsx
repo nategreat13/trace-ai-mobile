@@ -12,9 +12,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn, FadeInDown } from "react-native-reanimated";
 import { Lock, Plane } from "lucide-react-native";
 import { colors } from "../../theme/colors";
-import { marqueeRank } from "../../lib/marquee";
 import { fadeTo } from "../../lib/fade";
 import { applyPreviewPrice } from "../../lib/previewPrices";
+import { rankDeals, type RankPrefs } from "../../lib/dealRanker";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -56,6 +56,8 @@ interface FeedRevealProps {
   headerExtra?: React.ReactNode;
   /** Rendered after the locked-count line — the savings/price argument. */
   footerExtra?: React.ReactNode;
+  /** Travel style / timing / barriers, for ranking. */
+  prefs?: RankPrefs;
   /** Tapping an unlocked row. When absent, rows are static. */
   onPressDeal?: (deal: Deal) => void;
   /** Tapping a locked row — the upsell moment. */
@@ -77,6 +79,12 @@ function isDomestic(d: Deal): boolean {
 export function selectRevealDeals(
   deals: Deal[],
   destinationPreference: "" | "domestic" | "international" | "both",
+  /**
+   * The rest of what they told us in onboarding. Optional so existing call
+   * sites keep working, but pass it wherever a profile is available — without
+   * it the sample ignores travel style, timing and price sensitivity.
+   */
+  prefs: RankPrefs = {},
 ) {
   // One deal per destination — the cheapest — so the list reads as places
   // rather than as duplicate routes.
@@ -92,15 +100,11 @@ export function selectRevealDeals(
   const unique = [...cheapestByDest.values()];
 
   const byPrice = (a: Deal, b: Deal) => (a.price || 0) - (b.price || 0);
-  // Recognisable places first, cheapest within each — the sample is an
-  // advert for the feed, and "Paris $248" sells it in a way "Boise $89"
-  // doesn't, even though Boise is the better deal.
-  const byAppeal = (a: Deal, b: Deal) => {
-    const r = marqueeRank(a.destination) - marqueeRank(b.destination);
-    return r !== 0 ? r : byPrice(a, b);
-  };
-  const domestic = unique.filter(isDomestic).sort(byAppeal);
-  const intl = unique.filter((d) => !isDomestic(d)).sort(byAppeal);
+  // Ranked against their own answers — travel style, timing, and how
+  // price-sensitive they said they were — with recognisability as a
+  // tiebreaker rather than the driver. See lib/dealRanker.ts.
+  const domestic = rankDeals(unique.filter(isDomestic), prefs);
+  const intl = rankDeals(unique.filter((d) => !isDomestic(d)), prefs);
 
   // Compose the sample from their stated preference, always with at least
   // one international pick — even for domestic-only users, one far-away
@@ -148,6 +152,7 @@ export default function FeedReveal({
   homeAirport,
   firstName,
   destinationPreference,
+  prefs,
   headerExtra,
   footerExtra,
   onPressDeal,
