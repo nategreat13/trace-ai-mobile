@@ -41,6 +41,24 @@ const APP_RATING_COUNT: string | null = null;
  * web members are the place to source real ones — a genuine quote beats a
  * written one, and it removes the question entirely.
  */
+/**
+ * Stock travel photography, one per testimonial.
+ *
+ * The page used to illustrate social proof with destination scenery, which
+ * proves the places exist but says nothing about people using Trace. Faces do
+ * the work scenery can't: the claim is "30,000 travellers", so the page
+ * should show travellers. All verified to load before shipping.
+ */
+const FACES = [
+  "https://images.pexels.com/photos/1051075/pexels-photo-1051075.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/1058277/pexels-photo-1058277.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/3811082/pexels-photo-3811082.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/2422265/pexels-photo-2422265.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/1128318/pexels-photo-1128318.jpeg?auto=compress&cs=tinysrgb&w=400",
+  "https://images.pexels.com/photos/853168/pexels-photo-853168.jpeg?auto=compress&cs=tinysrgb&w=400",
+];
+
 const TESTIMONIALS = [
   {
     name: "Marcus T.",
@@ -183,15 +201,15 @@ export default function SocialProofBeat({
         </Text>
       </Animated.View>
 
-      {/* Destination strip — real photos from their own feed. */}
-      {strip.length > 0 && (
+      {/* People, not places — see FACES. */}
+      {true && (
         <Animated.View entering={FadeIn.duration(450).delay(80)}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.stripContent}
           >
-            {strip.map((uri, i) => (
+            {FACES.map((uri, i) => (
               <View key={`${uri}-${i}`} style={styles.stripTile}>
                 <Image
                   source={{ uri }}
@@ -256,11 +274,18 @@ export default function SocialProofBeat({
           entering={FadeInDown.duration(360).delay(200 + i * 70)}
           style={[styles.card, { backgroundColor: theme.muted }]}
         >
-          <Quote size={16} color={theme.mutedForeground} />
           <Text style={[styles.quote, { color: theme.foreground }]}>
             {t.text}
           </Text>
           <View style={styles.attrRow}>
+            <View style={styles.avatar}>
+              <Image
+                source={{ uri: FACES[i % FACES.length] }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={180}
+              />
+            </View>
             <View style={styles.stars}>
               {Array.from({ length: 5 }).map((_, s) => (
                 <Star
@@ -327,10 +352,17 @@ const styles = StyleSheet.create({
   attrRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 9,
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    overflow: "hidden",
+    backgroundColor: "#00000012",
   },
   stars: { flexDirection: "row", gap: 2 },
-  attr: { fontSize: 13, fontWeight: "600" },
+  attr: { fontSize: 13, fontWeight: "600", flex: 1 },
   kicker: {
     fontSize: 15,
     lineHeight: 21,

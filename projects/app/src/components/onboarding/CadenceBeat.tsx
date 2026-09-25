@@ -1,5 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, StyleSheet, useColorScheme } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  useColorScheme,
+  TouchableOpacity,
+} from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
@@ -8,11 +14,6 @@ import Animated, {
   FadeInDown,
   FadeOut,
   LinearTransition,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-  Easing,
 } from "react-native-reanimated";
 import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
@@ -56,9 +57,11 @@ const ALERTS: {
   image: d.image,
 }));
 
-const TICK_MS = 1400;
-const VISIBLE = 4;
-const TICKS = 42;
+// Slower and shorter than it was. Four cards arriving every 1.4s read as
+// churn rather than coverage — the page is making one point and needs to let
+// it land, not prove it repeatedly.
+const TICK_MS = 2200;
+const VISIBLE = 3;
 
 interface CadenceBeatProps {
   /** Used only to borrow a real photo for a city when the feed has one. */
@@ -127,6 +130,8 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
 
   // Rolling window of alerts. New one at the front, oldest falls off.
   const [visible, setVisible] = useState<Alert[]>([]);
+  /** Cards the user has tapped open — the page invites a tap, so it answers one. */
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const idxRef = useRef(0);
   const idRef = useRef(0);
   useEffect(() => {
@@ -152,16 +157,6 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerts]);
 
-  // The dense "Trace" tick-track sweeps in once.
-  const sweep = useSharedValue(0);
-  useEffect(() => {
-    sweep.value = withDelay(
-      300,
-      withTiming(1, { duration: 1100, easing: Easing.out(Easing.cubic) }),
-    );
-  }, []);
-  const sweepStyle = useAnimatedStyle(() => ({ width: `${sweep.value * 100}%` }));
-
   return (
     <View style={styles.wrap}>
       {/* Alert stream */}
@@ -171,16 +166,27 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
           return (
             <Animated.View
               key={a.id}
-              entering={FadeInDown.duration(360).springify().damping(18)}
-              exiting={FadeOut.duration(220)}
-              layout={LinearTransition.duration(320)}
+              entering={FadeInDown.duration(420).springify().damping(20)}
+              exiting={FadeOut.duration(260)}
+              layout={LinearTransition.duration(340)}
+              style={{ opacity: 1 - i * 0.16 }}
+            >
+            <TouchableOpacity
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${a.destination}, was $${a.was}, now $${a.price}`}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setRevealed((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(a.id)) next.delete(a.id);
+                  else next.add(a.id);
+                  return next;
+                });
+              }}
               style={[
                 styles.alert,
-                {
-                  backgroundColor: theme.card,
-                  borderColor: theme.border,
-                  opacity: 1 - i * 0.18,
-                },
+                { backgroundColor: theme.card, borderColor: theme.border },
               ]}
             >
               <View style={styles.alertThumb}>
@@ -214,9 +220,12 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
                   <Text style={{ color: colors.brand.traceGreen }}>${a.price}</Text>
                 </Text>
                 <Text style={[styles.alertSub, { color: theme.mutedForeground }]} numberOfLines={1}>
-                  was ${a.was} · {a.minutesAgo}m ago
+                  {revealed.has(a.id)
+                    ? `Was $${a.was} — you'd save $${a.was - a.price}`
+                    : `was $${a.was} · ${a.minutesAgo}m ago`}
                 </Text>
               </View>
+            </TouchableOpacity>
             </Animated.View>
           );
         })}
@@ -228,49 +237,11 @@ export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
         />
       </View>
 
-      {/* Compact contrast strip */}
-      <Animated.View
-        entering={FadeInDown.duration(400).delay(260)}
-        style={[styles.compare, { backgroundColor: theme.muted }]}
-      >
-        <View style={styles.compareRow}>
-          <Text style={[styles.compareLabel, { color: theme.foreground }]}>Trace</Text>
-          <View style={styles.compareTrack}>
-            <Animated.View style={[styles.sweep, sweepStyle]}>
-              <View style={styles.ticks}>
-                {Array.from({ length: TICKS }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[styles.tick, { backgroundColor: colors.brand.traceGreen }]}
-                  />
-                ))}
-              </View>
-            </Animated.View>
-          </View>
-          <Text style={[styles.compareValue, { color: colors.brand.traceGreen }]}>
-            Real time
-          </Text>
-        </View>
-        <View style={[styles.compareDivider, { backgroundColor: theme.border }]} />
-        <View style={styles.compareRow}>
-          <Text style={[styles.compareLabel, { color: theme.foreground }]}>You</Text>
-          <View style={styles.compareTrack}>
-            <View style={[styles.emptyTrack, { backgroundColor: theme.border }]}>
-              <View style={[styles.sparseTick, { backgroundColor: colors.brand.rose500, left: "18%" }]} />
-              <View style={[styles.sparseTick, { backgroundColor: colors.brand.rose500, left: "71%" }]} />
-            </View>
-          </View>
-          <Text style={[styles.compareValue, { color: colors.brand.rose500 }]}>
-            2× a week
-          </Text>
-        </View>
-      </Animated.View>
-
       <Animated.Text
         entering={FadeIn.duration(400).delay(600)}
         style={[styles.kicker, { color: theme.mutedForeground }]}
       >
-        A cheap fare lasts hours, not days. We're watching when it drops.
+        Tap one to see what it was going for.
       </Animated.Text>
     </View>
   );
@@ -316,16 +287,5 @@ const styles = StyleSheet.create({
   alertBody: { flex: 1, gap: 2 },
   alertTitle: { fontSize: 15, fontWeight: "700" },
   alertSub: { fontSize: 12 },
-  compare: { borderRadius: 18, paddingVertical: 6, paddingHorizontal: 16 },
-  compareRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
-  compareLabel: { width: 52, fontSize: 15, fontWeight: "700" },
-  compareTrack: { flex: 1, height: 22, justifyContent: "center" },
-  compareValue: { width: 76, textAlign: "right", fontSize: 14, fontWeight: "800" },
-  compareDivider: { height: StyleSheet.hairlineWidth },
-  sweep: { overflow: "hidden" },
-  ticks: { flexDirection: "row", gap: 3 },
-  tick: { width: 4, height: 18, borderRadius: 2 },
-  emptyTrack: { height: 4, borderRadius: 2, justifyContent: "center" },
-  sparseTick: { position: "absolute", width: 4, height: 18, borderRadius: 2 },
   kicker: { fontSize: 15, lineHeight: 22, textAlign: "center", paddingHorizontal: 4 },
 });

@@ -37,7 +37,15 @@ import type { Deal } from "@trace/shared";
 interface DealPeekProps {
   deal: Deal | null;
   homeAirport: string;
+  /**
+   * The button's words. This is the conversion moment, so it names the deal
+   * rather than the billing: "Get this deal" converts better than "Try Free"
+   * because the user is looking at a fare, not shopping for a subscription.
+   * The trial terms move to the line underneath, where they belong.
+   */
   ctaLabel: string;
+  /** e.g. "7 days" — for the reassurance line under the button. */
+  trialLabel?: string;
   onClose: () => void;
   onCta: () => void;
 }
@@ -50,6 +58,7 @@ export default function DealPeek({
   deal,
   homeAirport,
   ctaLabel,
+  trialLabel,
   onClose,
   onCta,
 }: DealPeekProps) {
@@ -71,12 +80,22 @@ export default function DealPeek({
         : { Icon: Plane, text: "International" },
   ].filter(Boolean) as { Icon: typeof Plane; text: string }[];
 
-  // One true reason to move. Only the API's own urgency flag earns the
-  // strong line; everything else gets the honest general one.
+  /**
+   * Urgency, in the deal's own numbers rather than a generic warning.
+   *
+   * "Fares like this usually last hours, not days" is true but abstract, and
+   * abstract urgency reads as boilerplate. Naming the saving makes the cost
+   * of waiting concrete: $687 is a number you can feel losing.
+   */
+  const saving = was ? Math.round(was - deal.price) : null;
   const urgency =
     (deal.urgency || "").toLowerCase() === "high"
-      ? "Fares like this usually sell out within 24–48 hours."
-      : "Fares like this usually last hours, not days.";
+      ? saving
+        ? `Going fast — this one's $${saving.toLocaleString("en-US")} below normal and usually sells out in 24–48 hours.`
+        : "Going fast — fares like this usually sell out within 24–48 hours."
+      : saving
+        ? `You'd save $${saving.toLocaleString("en-US")} on this one. Fares like it last hours, not days.`
+        : "Fares like this last hours, not days.";
 
   const teasers = (deal.experiences ?? []).slice(0, 2).map((e) => e.title);
 
@@ -201,7 +220,9 @@ export default function DealPeek({
             </LinearGradient>
           </TouchableOpacity>
           <Text style={[styles.ctaSub, { color: theme.mutedForeground }]}>
-            Unlock this fare, the guide, and every deal after it.
+            {trialLabel
+              ? `Free for ${trialLabel}, then $47.99/yr. Cancel anytime.`
+              : "Unlock this fare, the guide, and every deal after it."}
           </Text>
         </SafeAreaView>
       </Animated.View>

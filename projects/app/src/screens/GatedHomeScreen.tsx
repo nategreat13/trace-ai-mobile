@@ -570,7 +570,8 @@ export default function GatedHomeScreen() {
         <DealPeek
           deal={expandedDeal}
           homeAirport={airport}
-          ctaLabel={hasFreeTrial ? `Try Free for ${trialLabel}` : "Unlock every deal"}
+          ctaLabel="Get this deal"
+          trialLabel={hasFreeTrial ? trialLabel : undefined}
           onClose={() => setExpandedDeal(null)}
           onCta={() => upsellFromDeal("gated_deal_peek")}
         />

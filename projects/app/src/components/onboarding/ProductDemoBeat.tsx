@@ -14,6 +14,7 @@ import Animated, {
   FadeIn,
   FadeOut,
   FadeInDown,
+  LinearTransition,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -32,6 +33,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { MapPin, Heart, X, Hand, Bell, BookmarkCheck } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
+import DealsMap, { type MapDeal } from "../explore/DealsMap";
 import { SHOWCASE_DEALS, toDeal } from "../../lib/showcaseDeals";
 import type { Deal } from "@trace/shared";
 
@@ -44,17 +46,22 @@ import type { Deal } from "@trace/shared";
  * product, and it showed only the first move of the loop — swiping — with no
  * sign of why swiping matters.
  *
- * So the cards are now full size and the beat walks the whole loop in three
- * acts, ending on the payoff:
+ * So the cards are full size and the beat walks the loop in three acts:
  *
- *   1. SWIPE — a real card at real size, driven by a real gesture.
- *   2. SAVED — the card is caught by a tray that counts up.
- *   3. ALERT — a push notification for a saved city drops in from the top.
+ *   1. SWIPE  — real cards at real size, driven by a real gesture, landing
+ *               in a tray that counts up.
+ *   2. ALERTS — three notifications arrive for cities they kept. Three, not
+ *               one: a single notification reads as a one-off, a stream
+ *               reads as a service running in the background.
+ *   3. MAP    — everywhere we watch from their airport, locks already on.
  *
- * Act 3 is the point. Everything before it is a card game; the notification
- * is the reason anyone pays. The user has to have swiped the card themselves
- * for the alert to mean anything, which is why the demo is interactive rather
- * than a video.
+ * Act 2 is the point. Everything before it is a card game; the notification
+ * is the reason anyone pays, and it only means something because they swiped
+ * that card themselves — which is why the demo is interactive, not a video.
+ *
+ * Deliberately no summarising line at the end. "That's the whole app" was
+ * both untrue and a curiosity killer: the job of this beat is to make
+ * someone want the next screen, not to tell them they've seen everything.
  */
 const SWIPES = 3;
 const DECK = SWIPES + 1;
@@ -67,7 +74,11 @@ const SWIPE_THRESHOLD = 70;
 /** Beat between the last swipe and the notification arriving. */
 const ALERT_DELAY_MS = 700;
 
-type Act = "swipe" | "alert";
+type Act = "swipe" | "alerts" | "map";
+
+/** How long the alert act holds before the map, and the map before looping. */
+const ALERTS_MS = 5200;
+const MAP_MS = 5600;
 
 interface ProductDemoBeatProps {
   deals: Deal[];
@@ -76,8 +87,12 @@ interface ProductDemoBeatProps {
 export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  // Budget against the screen rather than a fixed aspect. The card used to be
+  // cardW * 1.32 — 449pt on a normal phone — which overflowed the chrome's
+  // content area and clipped the bottom of every image.
   const cardW = Math.min(width - 48, 340);
+  const cardH = Math.max(230, Math.min(cardW * 1.28, height * 0.38));
   const flingX = cardW + 90;
 
   /**
@@ -104,9 +119,32 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     return list.slice(0, DECK);
   }, [deals]);
 
+  /** Pins for the map act, with Explore's own free rule applied. */
+  const mapDeals: MapDeal[] = useMemo(() => {
+    const byDest = new Map<string, Deal>();
+    for (const d of deals) {
+      if (!d.destination) continue;
+      const prev = byDest.get(d.destination);
+      if (!prev || (d.price || Infinity) < (prev.price || Infinity)) {
+        byDest.set(d.destination, d);
+      }
+    }
+    const unique = [...byDest.values()];
+    const free = new Set(
+      unique
+        .filter((d) => /domestic/i.test(d.domestic_or_international || ""))
+        .sort((a, b) => (a.price || 0) - (b.price || 0))
+        .slice(0, 5)
+        .map((d) => d.destination),
+    );
+    return unique.map((deal) => ({ deal, locked: !free.has(deal.destination) }));
+  }, [deals]);
+
   const [act, setAct] = useState<Act>("swipe");
   const [savedCount, setSavedCount] = useState(0);
-  const [alertDeal, setAlertDeal] = useState<Deal | null>(null);
+  /** The alerts that have landed so far in act 2. */
+  const [alerts, setAlerts] = useState<Deal[]>([]);
+  const [searchTarget, setSearchTarget] = useState<string | null>(null);
   const [interacted, setInteracted] = useState(false);
 
   const pos = useSharedValue(0);
@@ -140,17 +178,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     lastInteractRef.current = Date.now();
 
     if (stepRef.current >= totalSwipes) {
-      // The alert is for something they actually kept. If they passed on
-      // everything, fall back to the best card in the deck — the beat still
-      // has to land, and "we'll watch this one" is true either way.
-      const subject = savedRef.current[0] ?? cards[0];
-      setTimeout(() => {
-        setAlertDeal(subject);
-        setAct("alert");
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-          () => {},
-        );
-      }, ALERT_DELAY_MS);
+      setTimeout(() => setAct("alerts"), ALERT_DELAY_MS);
     }
   };
 
@@ -203,6 +231,57 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
         dragY.value = withSpring(0, { damping: 18, stiffness: 220 });
       }
     });
+
+  /**
+   * Act 2: three alerts land in sequence, for cities they kept where
+   * possible. Three rather than one because a single notification reads as a
+   * one-off; a stream reads as a service running in the background.
+   */
+  useEffect(() => {
+    if (act !== "alerts") {
+      setAlerts([]);
+      return;
+    }
+    const pool = [
+      ...savedRef.current,
+      ...cards.filter((c) => !savedRef.current.includes(c)),
+    ].slice(0, 3);
+    const timers = pool.map((d, i) =>
+      setTimeout(() => {
+        setAlerts((prev) => [d, ...prev]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+          () => {},
+        );
+      }, 220 + i * 900),
+    );
+    timers.push(setTimeout(() => setAct("map"), ALERTS_MS));
+    return () => timers.forEach(clearTimeout);
+  }, [act, cards]);
+
+  /** Act 3: the map, flying to one real pin, then back to the deck. */
+  useEffect(() => {
+    if (act !== "map") {
+      setSearchTarget(null);
+      return;
+    }
+    // Rewind the deck while the map covers it — resetting on the way back in
+    // renders one frame with every card already gone.
+    pos.value = 0;
+    dragX.value = 0;
+    dragY.value = 0;
+    flinging.value = false;
+    stepRef.current = 0;
+    savedRef.current = [];
+    setSavedCount(0);
+
+    const pick = mapDeals.find((m) => !m.locked) ?? mapDeals[0];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    if (pick) {
+      timers.push(setTimeout(() => setSearchTarget(pick.deal.destination), 1100));
+    }
+    timers.push(setTimeout(() => setAct("swipe"), MAP_MS));
+    return () => timers.forEach(clearTimeout);
+  }, [act, mapDeals]);
 
   // Idle fallback so a passive viewer still sees the loop.
   useEffect(() => {
@@ -330,7 +409,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
         </Text>
       </Animated.View>
 
-      <View style={[styles.stage, { height: cardW * 1.32 }]}>
+      <View style={[styles.stage, { height: cardH }]}>
         {act === "swipe" ? (
           <GestureDetector gesture={pan}>
             <Animated.View
@@ -353,6 +432,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
                     dragY={dragY}
                     nudge={nudge}
                     width={cardW}
+                    cardH={cardH}
                     flingX={flingX}
                   >
                     {renderFace(deal)}
@@ -366,57 +446,99 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
               )}
             </Animated.View>
           </GestureDetector>
-        ) : (
-          /* Act 3 — the payoff. A real-looking notification for a city they
-             kept, arriving the way it would on their lock screen. */
+        ) : act === "alerts" ? (
+          /* Act 2 — the payoff. Three alerts land in sequence, each with the
+             destination's own photo, because one notification reads as a
+             one-off and a stream reads as something running for you. */
           <Animated.View
-            key="alert"
-            entering={FadeIn.duration(320)}
+            key="alerts"
+            entering={FadeIn.duration(300)}
+            exiting={FadeOut.duration(240)}
             style={[StyleSheet.absoluteFill, styles.alertStage]}
           >
-            {!!alertDeal && (
-              <>
-                <Animated.View
-                  entering={FadeInDown.duration(460).springify().damping(17)}
-                  style={[styles.notif, { backgroundColor: theme.card, borderColor: theme.border }]}
-                >
-                  <View style={styles.notifIcon}>
-                    <Bell size={15} color="#ffffff" strokeWidth={2.6} />
+            {alerts.map((d, i) => (
+              <Animated.View
+                key={`${d.id}-${i}`}
+                entering={FadeInDown.duration(420).springify().damping(18)}
+                layout={LinearTransition.duration(280)}
+                style={[
+                  styles.notif,
+                  {
+                    backgroundColor: theme.card,
+                    borderColor: theme.border,
+                    opacity: 1 - i * 0.16,
+                  },
+                ]}
+              >
+                <View style={styles.notifThumb}>
+                  {!!d.image_url && (
+                    <Image
+                      source={{ uri: d.image_url }}
+                      style={StyleSheet.absoluteFill}
+                      contentFit="cover"
+                      transition={180}
+                    />
+                  )}
+                  <View style={styles.notifBell}>
+                    <Bell size={10} color="#fff" strokeWidth={2.8} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.notifApp, { color: theme.mutedForeground }]}>
-                      TRACE · now
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.notifApp, { color: theme.mutedForeground }]}>
+                    TRACE · now
+                  </Text>
+                  <Text
+                    style={[styles.notifTitle, { color: theme.foreground }]}
+                    numberOfLines={1}
+                  >
+                    {d.destination} dropped to ${Math.round(d.price)}
+                  </Text>
+                  {!!d.original_price && d.original_price > d.price && (
+                    <Text style={[styles.notifSub, { color: theme.mutedForeground }]}>
+                      Was ${Math.round(d.original_price)} · book before it's gone
                     </Text>
-                    <Text style={[styles.notifTitle, { color: theme.foreground }]}>
-                      {alertDeal.destination} just dropped to $
-                      {Math.round(alertDeal.price)}
-                    </Text>
-                    {!!alertDeal.original_price && alertDeal.original_price > alertDeal.price && (
-                      <Text style={[styles.notifSub, { color: theme.mutedForeground }]}>
-                        Was ${Math.round(alertDeal.original_price)} — book before it's gone
-                      </Text>
-                    )}
-                  </View>
-                </Animated.View>
-
-                <Animated.Text
-                  entering={FadeIn.duration(400).delay(520)}
-                  style={[styles.payoff, { color: theme.foreground }]}
-                >
-                  That's the whole app.
-                </Animated.Text>
-                <Animated.Text
-                  entering={FadeIn.duration(400).delay(680)}
-                  style={[styles.payoffSub, { color: theme.mutedForeground }]}
-                >
-                  You swipe what you like. We watch those prices around the
-                  clock. The moment one drops, you hear about it first.
-                </Animated.Text>
-              </>
-            )}
+                  )}
+                </View>
+              </Animated.View>
+            ))}
+          </Animated.View>
+        ) : (
+          /* Act 3 — the map. Every place we watch from their airport, with
+             the free tier's locks already on it. */
+          <Animated.View
+            key="map"
+            entering={FadeIn.duration(320)}
+            exiting={FadeOut.duration(260)}
+            style={[StyleSheet.absoluteFill, styles.mapWrap]}
+            pointerEvents="none"
+          >
+            <DealsMap
+              deals={mapDeals}
+              onSelectDeal={() => {}}
+              onSaveDeal={() => {}}
+              savedDealIds={EMPTY_SET}
+              onLockedPress={() => {}}
+              searchTarget={searchTarget}
+              onRequestAlert={() => {}}
+              initialZoom={0.7}
+              searchZoom={2.9}
+              chromeless
+            />
           </Animated.View>
         )}
       </View>
+
+      {act !== "swipe" && (
+        <Animated.Text
+          key={act}
+          entering={FadeIn.duration(320)}
+          style={[styles.actCaption, { color: theme.mutedForeground }]}
+        >
+          {act === "alerts"
+            ? "We watch the prices you care about. You hear first."
+            : "Every place we're tracking from your airport."}
+        </Animated.Text>
+      )}
 
       {act === "swipe" && (
         <Animated.View entering={FadeIn.duration(300)} style={styles.legend}>
@@ -449,6 +571,7 @@ function DeckCard({
   dragY,
   nudge,
   width,
+  cardH,
   flingX,
   children,
 }: {
@@ -458,6 +581,7 @@ function DeckCard({
   dragY: SharedValue<number>;
   nudge: SharedValue<number>;
   width: number;
+  cardH: number;
   flingX: number;
   children: React.ReactNode;
 }) {
@@ -505,7 +629,7 @@ function DeckCard({
   }));
 
   return (
-    <Animated.View style={[styles.card, { width, height: width * 1.32 }, style]}>
+    <Animated.View style={[styles.card, { width, height: cardH }, style]}>
       {children}
       <Animated.View style={[styles.badge, styles.badgeSave, saveStyle]}>
         <Text style={styles.badgeText}>SAVED</Text>
@@ -516,6 +640,8 @@ function DeckCard({
     </Animated.View>
   );
 }
+
+const EMPTY_SET = new Set<string>();
 
 const styles = StyleSheet.create({
   wrap: { alignItems: "center", gap: 14 },
@@ -594,7 +720,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   legendText: { fontSize: 13.5, fontWeight: "600" },
-  alertStage: { alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  actCaption: {
+    fontSize: 14.5,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingHorizontal: 12,
+    minHeight: 26,
+  },
+  alertStage: {
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 4,
+  },
+  notifThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    overflow: "hidden",
+    backgroundColor: "#00000012",
+  },
+  notifBell: {
+    position: "absolute",
+    right: 2,
+    bottom: 2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.brand.traceRed,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapWrap: { borderRadius: 20, overflow: "hidden" },
   notif: {
     flexDirection: "row",
     gap: 11,
@@ -609,29 +765,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 5,
   },
-  notifIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: colors.brand.traceRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   notifApp: { fontSize: 10.5, fontWeight: "800", letterSpacing: 0.7 },
   notifTitle: { fontSize: 15.5, fontWeight: "700", marginTop: 3 },
   notifSub: { fontSize: 13, marginTop: 2 },
-  payoff: {
-    fontSize: 22,
-    fontWeight: "800",
-    letterSpacing: -0.4,
-    marginTop: 30,
-    textAlign: "center",
-  },
-  payoffSub: {
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: "center",
-    marginTop: 8,
-    paddingHorizontal: 8,
-  },
 });
