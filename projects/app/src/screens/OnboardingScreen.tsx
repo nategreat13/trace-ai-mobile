@@ -29,6 +29,7 @@ import { logEvent } from "../lib/analytics";
 import AirportInput from "../components/onboarding/AirportInput";
 import OptionGrid from "../components/onboarding/OptionGrid";
 import OptionList from "../components/onboarding/OptionList";
+import AirportProofBeat from "../components/onboarding/AirportProofBeat";
 import CadenceBeat from "../components/onboarding/CadenceBeat";
 import SocialProofBeat from "../components/onboarding/SocialProofBeat";
 import BuildingFeed from "../components/onboarding/BuildingFeed";
@@ -439,6 +440,23 @@ export default function OnboardingScreen() {
       ),
     },
     {
+      // The payoff for typing three letters: their airport's real cheapest
+      // fare, shown immediately rather than eight screens later. The fetch
+      // is already in flight by the time this renders.
+      key: "airportProof",
+      title: `${data.homeAirport || "Your airport"} is live`,
+      subtitle: "Here's what's on the board right now",
+      canProceed: true,
+      newUserOnly: true,
+      content: (
+        <AirportProofBeat
+          deals={deals}
+          ready={dealsReady}
+          homeAirport={data.homeAirport}
+        />
+      ),
+    },
+    {
       key: "cadence",
       title: "Deals don't wait for you",
       subtitle: "So we watch them for you instead",
@@ -539,16 +557,6 @@ export default function OnboardingScreen() {
               : null
           }
           homeAirport={data.homeAirport}
-          // One image per destination, biggest discounts first — the strip
-          // should show places worth wanting, not whatever came back first.
-          images={[
-            ...new Map(
-              [...deals]
-                .sort((a, b) => (b.discount_pct || 0) - (a.discount_pct || 0))
-                .filter((d) => d.image_url && d.destination)
-                .map((d) => [d.destination, d.image_url]),
-            ).values(),
-          ]}
         />
       ),
     },
@@ -590,12 +598,15 @@ export default function OnboardingScreen() {
     });
   }, [beat?.key]);
 
-  // Start the deal prefetch as soon as an airport exists and we've moved past
-  // picking it, so the network round-trip overlaps the remaining questions.
+  // Start the deal prefetch the moment an airport is picked — while they're
+  // still looking at the picker, not once they've tapped Continue. The very
+  // next screen shows their cheapest real fare, so those couple of seconds
+  // are the difference between it landing on arrival and it opening on a
+  // spinner.
   useEffect(() => {
     if (isEditing) return;
     if (!data.homeAirport) return;
-    if (safeStep <= 1) return;
+    if (safeStep < 1) return;
     startDealFetch(data.homeAirport);
   }, [data.homeAirport, safeStep, isEditing, startDealFetch]);
 

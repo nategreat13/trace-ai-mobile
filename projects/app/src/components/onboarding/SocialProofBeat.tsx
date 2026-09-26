@@ -18,6 +18,53 @@ import { colors } from "../../theme/colors";
 const MEMBER_COUNT = 30000;
 
 /**
+ * Real travellers, bundled with the app rather than hotlinked.
+ *
+ * Each entry carries two crops of the same photo: `tile` for the 92×116 strip
+ * and `avatar` for the 30px circle beside a quote. One asset can't do both —
+ * a strip tile wants the person with some of where they are, and at 30px that
+ * same framing renders the face about five pixels wide. The avatar crops are
+ * cut tight using detected face coordinates.
+ *
+ * The previous attempt here shipped stock URLs whose contents I couldn't see,
+ * and used a camera flat-lay as someone's face. These are Trevor's, checked.
+ */
+const FACES: { tile: number; avatar: number }[] = [
+  {
+    tile: require("../../../assets/social/traveler-1.jpg"),
+    avatar: require("../../../assets/social/traveler-1-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-2.jpg"),
+    avatar: require("../../../assets/social/traveler-2-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-3.jpg"),
+    avatar: require("../../../assets/social/traveler-3-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-4.jpg"),
+    avatar: require("../../../assets/social/traveler-4-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-5.jpg"),
+    avatar: require("../../../assets/social/traveler-5-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-6.jpg"),
+    avatar: require("../../../assets/social/traveler-6-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-7.jpg"),
+    avatar: require("../../../assets/social/traveler-7-avatar.jpg"),
+  },
+  {
+    tile: require("../../../assets/social/traveler-8.jpg"),
+    avatar: require("../../../assets/social/traveler-8-avatar.jpg"),
+  },
+];
+
+/**
  * ─────────────────────────────────────────────────────────────────────────
  *  TREVOR: `APP_RATING` is the one number here that is NOT set. Left null on
  *  purpose — the rating block hides cleanly and the screen stands on the
@@ -31,30 +78,6 @@ const MEMBER_COUNT = 30000;
  */
 const APP_RATING: number | null = null;
 const APP_RATING_COUNT: string | null = null;
-
-/**
- * Testimonial copy — marketing copy Trevor owns, not sourced reviews.
- *
- * Written to be plausible and non-specific rather than to dazzle: no invented
- * dollar savings, no named airlines, nothing that reads as a verifiable claim
- * about a particular trip. If these ever need to carry more weight, the 30k
- * web members are the place to source real ones — a genuine quote beats a
- * written one, and it removes the question entirely.
- */
-/**
- * ─────────────────────────────────────────────────────────────────────────
- *  TREVOR: drop 5-7 image URLs in here — couples, families, people actually
- *  travelling — and both the photo strip and the testimonial avatars light
- *  up automatically. Empty is the safe default: the page falls back to the
- *  membership number and the quotes, which still works.
- *
- *  It's empty because I can't see what a stock URL contains from here, only
- *  that it loads. The first attempt shipped a camera flat-lay, a bar
- *  interior, and an office desk — and used the flat-lay as someone's face.
- *  Real customer photos would beat stock anyway, if any exist.
- * ─────────────────────────────────────────────────────────────────────────
- */
-const FACES: string[] = [];
 
 const TESTIMONIALS = [
   {
@@ -114,12 +137,6 @@ interface SocialProofBeatProps {
   /** Live, from their own feed — never a marketing number. */
   destinationCount: number | null;
   homeAirport: string;
-  /**
-   * Destination photos pulled from their real feed. Using their own results
-   * as the imagery means the screen is illustrated with places we can
-   * actually fly them to, rather than stock travel photography.
-   */
-  images?: string[];
 }
 
 /**
@@ -152,12 +169,9 @@ function MaskedNumber({
 export default function SocialProofBeat({
   destinationCount,
   homeAirport,
-  images = [],
 }: SocialProofBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-
-  const strip = useMemo(() => images.filter(Boolean).slice(0, 8), [images]);
 
   // Count the member figure up rather than printing it. It is the single
   // biggest number on the screen and the one thing here that is pure social
@@ -198,31 +212,29 @@ export default function SocialProofBeat({
         </Text>
       </Animated.View>
 
-      {/* People, not places — see FACES. Hidden until it's populated. */}
-      {FACES.length > 0 && (
-        <Animated.View entering={FadeIn.duration(450).delay(80)}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.stripContent}
-          >
-            {FACES.map((uri, i) => (
-              <View key={`${uri}-${i}`} style={styles.stripTile}>
-                <Image
-                  source={{ uri }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                  transition={240}
-                />
-                <LinearGradient
-                  colors={["transparent", "rgba(0,0,0,0.28)"]}
-                  style={StyleSheet.absoluteFill}
-                />
-              </View>
-            ))}
-          </ScrollView>
-        </Animated.View>
-      )}
+      {/* People, not places — see FACES. */}
+      <Animated.View entering={FadeIn.duration(450).delay(80)}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.stripContent}
+        >
+          {FACES.map((f, i) => (
+            <View key={i} style={styles.stripTile}>
+              <Image
+                source={f.tile}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={240}
+              />
+              <LinearGradient
+                colors={["transparent", "rgba(0,0,0,0.28)"]}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      </Animated.View>
 
       <Animated.View
         entering={FadeInDown.duration(400).delay(140)}
@@ -275,16 +287,14 @@ export default function SocialProofBeat({
             {t.text}
           </Text>
           <View style={styles.attrRow}>
-            {FACES.length > 0 && (
-              <View style={styles.avatar}>
-                <Image
-                  source={{ uri: FACES[i % FACES.length] }}
-                  style={StyleSheet.absoluteFill}
-                  contentFit="cover"
-                  transition={180}
-                />
-              </View>
-            )}
+            <View style={styles.avatar}>
+              <Image
+                source={FACES[i % FACES.length].avatar}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                transition={180}
+              />
+            </View>
             <View style={styles.stars}>
               {Array.from({ length: 5 }).map((_, s) => (
                 <Star
