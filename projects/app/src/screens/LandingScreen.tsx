@@ -9,6 +9,8 @@ import {
   Animated,
   useColorScheme,
   Linking,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -21,6 +23,7 @@ import { Deal } from "@trace/shared";
 import SwipeCard from "../components/swipe/SwipeCard";
 import { SHOWCASE_DEALS, toDeal } from "../lib/showcaseDeals";
 import { logEvent } from "../lib/analytics";
+import { startAnonymousSession } from "../services/auth";
 import { getEnv } from "../lib/env";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -56,6 +59,10 @@ export default function LandingScreen() {
 
   const [showDetailPrompt, setShowDetailPrompt] = useState(false);
   const [showHardWall, setShowHardWall] = useState(false);
+  // Opening the anonymous session is a network call, so the CTA has to show
+  // it's working. The ref guards a double-tap creating two sessions.
+  const [starting, setStarting] = useState(false);
+  const startingRef = useRef(false);
 
   useEffect(() => {
     logEvent("landing_viewed", {});
@@ -102,11 +109,48 @@ export default function LandingScreen() {
     [currentIndex]
   );
 
-  const goToSignup = (source: string) => {
+  /**
+   * Start onboarding, not signup.
+   *
+   * This used to push straight to the email/password form. Now it opens an
+   * anonymous session and lets RootNavigator route into onboarding — the
+   * account gets created at the end of it, once there's something to save.
+   * The uid is the same one the account is later linked to, so nothing
+   * recorded during onboarding is orphaned.
+   */
+  const goToSignup = async (source: string) => {
+    if (startingRef.current) return;
+    startingRef.current = true;
     setShowDetailPrompt(false);
     setShowHardWall(false);
     logEvent("signup_viewed", { source });
-    navigation.navigate("Login", { mode: "signup" });
+    setStarting(true);
+    try {
+      await startAnonymousSession();
+      // No navigation: RootNavigator swaps the stack once auth state lands.
+    } catch (err: any) {
+      // Anonymous sign-in is a project-level Firebase setting, not something
+      // the app controls. With the provider switched off this throws
+      // `auth/admin-restricted-operation`, so fall back to the old front-door
+      // form rather than stranding anyone on the landing screen.
+      //
+      // This fallback is what makes the change safe to ship in either order:
+      // the build works whether or not the provider is on, and flips to the
+      // deferred-signup flow by itself the moment it's enabled — no OTA
+      // needed, and no window where Get Started is dead.
+      startingRef.current = false;
+      setStarting(false);
+      const code = err?.code || "";
+      logEvent("signup_viewed", { source, fallback: code || "unknown" });
+      if (code === "auth/network-request-failed") {
+        Alert.alert(
+          "No connection",
+          "Check your connection and try again.",
+        );
+        return;
+      }
+      navigation.navigate("Login", { mode: "signup" });
+    }
   };
 
   const goToSignin = () => {
@@ -238,12 +282,13 @@ export default function LandingScreen() {
             lineHeight: 22,
           }}
         >
-          Create an account to get the latest flight deals{" "}
+          Find the cheapest flights from your airport{" "}
           <Text style={{ color: colors.brand.traceRed }}>right when they drop.</Text>
         </Text>
 
         <TouchableOpacity
           onPress={() => goToSignup("bottom_cta")}
+          disabled={starting}
           style={{
             backgroundColor: colors.brand.traceRed,
             borderRadius: 14,
@@ -251,9 +296,14 @@ export default function LandingScreen() {
             alignItems: "center",
             marginBottom: 14,
             marginHorizontal: 16,
+            opacity: starting ? 0.7 : 1,
           }}
         >
+          {starting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
           <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Get Started</Text>
+          )}
         </TouchableOpacity>
 
         <Text
@@ -415,15 +465,23 @@ export default function LandingScreen() {
             </View>
             <TouchableOpacity
               onPress={() => goToSignup("hard_wall")}
+              disabled={starting}
               style={{
                 width: "100%",
                 backgroundColor: colors.brand.traceRed,
                 borderRadius: 12,
                 paddingVertical: 14,
                 alignItems: "center",
+                opacity: starting ? 0.7 : 1,
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Get Started</Text>
+              {starting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+                  Get Started
+                </Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={goToSignin} style={{ paddingVertical: 10, marginTop: 4 }}>
               <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>

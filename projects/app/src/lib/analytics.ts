@@ -43,6 +43,9 @@ export type AnalyticsEventName =
   // Signup / onboarding
   | "signup_viewed"
   | "signup_completed"
+  // Account creation is the last onboarding step now, so a failure here
+  // costs a fully-onboarded user rather than a bounce off the front door.
+  | "signup_failed"
   | "onboarding_started"
   // Fires once per beat in the rebuilt flow. The rebuild trades a 5-step
   // form for a ~10-beat one on the bet that completers convert far harder,

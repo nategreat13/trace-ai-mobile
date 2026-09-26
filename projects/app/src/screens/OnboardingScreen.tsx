@@ -18,6 +18,9 @@ import {
   getUserProfile,
 } from "../services/firestore";
 import { fetchDeals } from "../services/dealsApi";
+import { linkEmailPassword, login } from "../services/auth";
+import { auth } from "../services/firebase";
+import { trackSignup } from "../services/trackingApi";
 import {
   DEAL_TYPES,
   TIMEFRAMES,
@@ -29,6 +32,9 @@ import { logEvent } from "../lib/analytics";
 import AirportInput from "../components/onboarding/AirportInput";
 import OptionGrid from "../components/onboarding/OptionGrid";
 import OptionList from "../components/onboarding/OptionList";
+import AccountBeat, {
+  AccountDraft,
+} from "../components/onboarding/AccountBeat";
 import AirportProofBeat from "../components/onboarding/AirportProofBeat";
 import CadenceBeat from "../components/onboarding/CadenceBeat";
 import SocialProofBeat from "../components/onboarding/SocialProofBeat";
@@ -124,6 +130,16 @@ export default function OnboardingScreen() {
   // dead API must not strand the user on the progress screen.
   const [deals, setDeals] = useState<Deal[]>([]);
   const [dealsReady, setDealsReady] = useState(false);
+
+  // The account step's draft. Held here rather than inside AccountBeat so the
+  // beat's `canProceed` and `submit` can both see it.
+  const [account, setAccount] = useState<AccountDraft>({
+    email: "",
+    password: "",
+  });
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [linking, setLinking] = useState(false);
+  const [emailTaken, setEmailTaken] = useState(false);
   const dealFetchRef = useRef<string | null>(null);
 
   const startDealFetch = useCallback((airport: string) => {
@@ -180,6 +196,89 @@ export default function OnboardingScreen() {
     const personality = computePersonality(data.dealTypes);
     setGeneratedPersonality(personality);
     setShowPersonality(true);
+  };
+
+  /**
+   * Turn the anonymous session into a real account. Returns false to keep the
+   * user on this step — the beat's `submit` gate then blocks advancing, so a
+   * failure never writes a profile or moves them on.
+   */
+  const linkAccount = async (): Promise<boolean> => {
+    const email = account.email.trim();
+    if (!email || account.password.length < 6) {
+      setAccountError("Enter an email and a password of at least 6 characters.");
+      return false;
+    }
+    setLinking(true);
+    setAccountError(null);
+    setEmailTaken(false);
+    try {
+      const fullName = [
+        data.firstName.trim() ? capitalizeName(data.firstName) : "",
+        data.lastName.trim() ? capitalizeName(data.lastName) : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      await linkEmailPassword(email, account.password, fullName || undefined);
+      logEvent("signup_completed", { method: "email", at: "onboarding_end" });
+
+      // Meta CAPI CompleteRegistration, same as the old front-door signup
+      // fired. Fire-and-forget — it must never hold up the feed.
+      let country: string | null = null;
+      try {
+        const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+        if (locale && locale.includes("-")) country = locale.split("-")[1];
+      } catch {
+        /* best-effort */
+      }
+      const current = auth.currentUser;
+      if (current) {
+        trackSignup({ userId: current.uid, email, country });
+      }
+      return true;
+    } catch (err: any) {
+      const code = err?.code || "";
+      if (code === "auth/email-already-in-use") setEmailTaken(true);
+      setAccountError(
+        code === "auth/email-already-in-use"
+          ? "That email already has a Trace account."
+          : code === "auth/invalid-email"
+            ? "That doesn't look like a valid email address."
+            : code === "auth/weak-password"
+              ? "Pick a password with at least 6 characters."
+              : err?.message || "Could not create your account. Try again.",
+      );
+      logEvent("signup_failed", { method: "email", code });
+      return false;
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  /**
+   * Recovery for an email that already has an account. Most people retyping
+   * their usual email type their usual password with it, so try signing them
+   * in with exactly what's in the form — on success RootNavigator routes to
+   * whatever their existing profile says, which for a finished account is
+   * their feed.
+   *
+   * The answers they just gave are lost in that case. That's the right trade:
+   * the account they already have has its own preferences, and the
+   * alternative is leaving them holding an email they can't use.
+   */
+  const signInInstead = async () => {
+    setLinking(true);
+    setAccountError(null);
+    try {
+      await login(account.email.trim(), account.password);
+      logEvent("login", { method: "email", at: "onboarding_end" });
+    } catch {
+      setAccountError(
+        "That password doesn't match the account for this email. Try again, or reset it from the sign-in screen.",
+      );
+    } finally {
+      setLinking(false);
+    }
   };
 
   const handleContinue = async (personalityOverride?: string) => {
@@ -239,7 +338,7 @@ export default function OnboardingScreen() {
 
         await createUserProfile({
           userId: user.uid,
-          email: user.email || "",
+          email: auth.currentUser?.email || user.email || "",
           displayName: fullName || "Travel Explorer",
           // Persist first/last name separately too. UserProfile schema
           // already supports these optional fields; the userProfile-
@@ -360,6 +459,12 @@ export default function OnboardingScreen() {
     newUserOnly?: boolean;
     /** Keep the CTA disabled this long after the beat appears. */
     holdMs?: number;
+    /**
+     * Runs when the CTA is pressed; advancing waits on it and is cancelled
+     * if it resolves false. Used by the account beat, which has to actually
+     * create the account before onboarding can be written against it.
+     */
+    submit?: () => Promise<boolean>;
   };
 
   const nameBeat: Beat = {
@@ -568,7 +673,31 @@ export default function OnboardingScreen() {
       content: (
         <BuildingFeed
           ready={dealsReady}
-          onDone={() => handleContinue(computePersonality(data.dealTypes))}
+          // Advance rather than finish: the account step now follows. When it
+          // isn't in the list (a user who already signed in), `goNext` sees
+          // this as the last beat and finishes as before.
+          onDone={() => goNext()}
+        />
+      ),
+    },
+    {
+      // The account ask, last instead of second. See AccountBeat.
+      key: "account",
+      title: "Save your feed",
+      subtitle: "So it's here the next time you open Trace",
+      canProceed:
+        account.email.trim().length > 3 && account.password.length >= 6 && !linking,
+      newUserOnly: true,
+      ctaLabel: "Create my account",
+      submit: linkAccount,
+      content: (
+        <AccountBeat
+          value={account}
+          onChange={setAccount}
+          error={accountError}
+          busy={linking}
+          firstName={data.firstName.trim() || undefined}
+          onSignInInstead={emailTaken ? signInInstead : undefined}
         />
       ),
     },
@@ -577,9 +706,13 @@ export default function OnboardingScreen() {
   // EditPreferences reuses this screen to change travel prefs — it should be
   // the questions and nothing else. No name step, no interstitials, no
   // reveal: someone tweaking their timeframe doesn't need to be re-sold.
-  const activeBeats = isEditing
-    ? beats.filter((b) => !b.newUserOnly && b.key !== "name")
-    : beats;
+  const activeBeats = (
+    isEditing ? beats.filter((b) => !b.newUserOnly && b.key !== "name") : beats
+  ).filter(
+    // Only anonymous sessions need an account created. Someone who signed in
+    // and then abandoned onboarding already has one.
+    (b) => b.key !== "account" || user?.isAnonymous === true,
+  );
 
   const safeStep = Math.min(step, activeBeats.length - 1);
   const beat = activeBeats[safeStep];
@@ -610,7 +743,11 @@ export default function OnboardingScreen() {
     startDealFetch(data.homeAirport);
   }, [data.homeAirport, safeStep, isEditing, startDealFetch]);
 
-  const goNext = () => {
+  const goNext = async () => {
+    if (beat?.submit) {
+      const ok = await beat.submit();
+      if (!ok) return;
+    }
     if (!isLast) {
       setStep(safeStep + 1);
       return;
