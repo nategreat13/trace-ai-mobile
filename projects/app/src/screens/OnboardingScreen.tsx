@@ -35,7 +35,6 @@ import OptionList from "../components/onboarding/OptionList";
 import AccountBeat, {
   AccountDraft,
 } from "../components/onboarding/AccountBeat";
-import AirportProofBeat from "../components/onboarding/AirportProofBeat";
 import CadenceBeat from "../components/onboarding/CadenceBeat";
 import SocialProofBeat from "../components/onboarding/SocialProofBeat";
 import BuildingFeed from "../components/onboarding/BuildingFeed";
@@ -545,23 +544,6 @@ export default function OnboardingScreen() {
       ),
     },
     {
-      // The payoff for typing three letters: their airport's real cheapest
-      // fare, shown immediately rather than eight screens later. The fetch
-      // is already in flight by the time this renders.
-      key: "airportProof",
-      title: `${data.homeAirport || "Your airport"} is live`,
-      subtitle: "Here's what's on the board right now",
-      canProceed: true,
-      newUserOnly: true,
-      content: (
-        <AirportProofBeat
-          deals={deals}
-          ready={dealsReady}
-          homeAirport={data.homeAirport}
-        />
-      ),
-    },
-    {
       key: "cadence",
       title: "Deals don't wait for you",
       subtitle: "So we watch them for you instead",
@@ -732,10 +714,9 @@ export default function OnboardingScreen() {
   }, [beat?.key]);
 
   // Start the deal prefetch the moment an airport is picked — while they're
-  // still looking at the picker, not once they've tapped Continue. The very
-  // next screen shows their cheapest real fare, so those couple of seconds
-  // are the difference between it landing on arrival and it opening on a
-  // spinner.
+  // still looking at the picker, rather than once they've tapped Continue.
+  // Those couple of seconds come straight off whatever BuildingFeed would
+  // otherwise have to wait for at the end.
   useEffect(() => {
     if (isEditing) return;
     if (!data.homeAirport) return;

@@ -27,7 +27,7 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
-import { giftOfferEligible } from "../lib/giftOffer";
+import { giftOfferEligible, recordPaywallDismissal } from "../lib/giftOffer";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -493,13 +493,19 @@ export default function PaywallScreen() {
   // always recover and nobody is trapped in the app with no way out.
   const canDismiss = navigation.canGoBack();
 
-  const handleDismiss = () => {
-    logEvent("paywall_dismissed", { entry_point: entryPoint });
+  const handleDismiss = async () => {
+    // Counted before the check: the gift lands on every second close, so the
+    // running total is what decides this, not the profile's show budget.
+    const dismissals = await recordPaywallDismissal();
+    logEvent("paywall_dismissed", {
+      entry_point: entryPoint,
+      dismissal_count: dismissals,
+    });
     const eligibleForGift =
       !isBusinessPaywall &&
       !hasPremium &&
       !subscribeDisabled &&
-      giftOfferEligible(profile, { onDismiss: true });
+      giftOfferEligible(profile, { onDismiss: true, dismissalCount: dismissals });
     if (eligibleForGift) {
       navigation.replace("GiftOffer", { fromEntryPoint: entryPoint });
       return;
