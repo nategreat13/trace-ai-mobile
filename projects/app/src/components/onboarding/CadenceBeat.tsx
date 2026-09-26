@@ -13,7 +13,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { Bell } from "lucide-react-native";
 import { colors } from "../../theme/colors";
-import { SHOWCASE_DEALS, toDeal } from "../../lib/showcaseDeals";
+import { funnelDeals } from "../../lib/funnelDeals";
+import type { RankPrefs } from "../../lib/dealRanker";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -27,33 +28,20 @@ import type { Deal } from "@trace/shared";
  * Underneath, three alerts rather than one. A single example didn't look
  * like a stream of drops, it looked like the one deal we had.
  *
- * Those three are pulled from the user's own airport whenever the prefetch
- * has landed, which by this point in the flow it usually has. That matters
- * beyond relevance: the showcase set carries cross-airport lows, so a
- * showcase Reykjavík at $422 here would be followed ninety seconds later by
- * the real $802 from their airport on the swipe beat. Same city, two prices,
- * one sitting. Using their real fares makes the two screens agree.
+ * Both the three destinations and their prices come from `funnelDeals`, the
+ * one place the whole pre-purchase funnel gets its deals from, so what's
+ * shown here is exactly what the demo deck, the map and the gated feed show.
  */
 const TICKS = 42;
-/** Alerts to show, and the floor a real deal must clear to be worth one. */
+/** Alerts to show. Selection and pricing both live in lib/funnelDeals. */
 const ALERTS = 3;
-const MIN_SAVING = 40;
-const MIN_DISCOUNT = 25;
-/**
- * Dollars of fare that cancel out one point of discount when ranking.
- *
- * Sorting these by absolute saving alone surfaced the most expensive seats on
- * the board — "Saint Lucia dropped to $1827" is a true statement and a bad
- * advertisement. What sells here is the same thing that sells on the deck: a
- * low number next to a big percentage. At 25, a $38 fare at 57% off comfortably
- * beats an $1827 one at 38%, while a genuinely exceptional long-haul discount
- * can still place.
- */
-const PRICE_WEIGHT = 25;
+
 
 interface CadenceBeatProps {
   /** Live deals for the user's airport; falls back to the showcase set. */
   deals?: Deal[];
+  /** Onboarding answers, so these are the drops they'd care about. */
+  prefs?: RankPrefs;
 }
 
 interface Alert {
@@ -65,42 +53,23 @@ interface Alert {
   minutesAgo: number;
 }
 
-export default function CadenceBeat({ deals = [] }: CadenceBeatProps) {
+export default function CadenceBeat({ deals = [], prefs = {} }: CadenceBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  const alerts = useMemo<Alert[]>(() => {
-    const score = (d: Deal) =>
-      (d.discount_pct || 0) - (d.price || 0) / PRICE_WEIGHT;
-    const build = (list: Deal[]): Alert[] => {
-      const seen = new Set<string>();
-      return list
-        .filter((d) => {
-          const saving = (d.original_price || 0) - (d.price || 0);
-          if (!d.destination || !d.image_url) return false;
-          if (saving < MIN_SAVING) return false;
-          if ((d.discount_pct || 0) < MIN_DISCOUNT) return false;
-          if (seen.has(d.destination)) return false;
-          seen.add(d.destination);
-          return true;
-        })
-        .sort((a, b) => score(b) - score(a))
-        .slice(0, ALERTS)
-        .map((d, i) => ({
-          id: d.id ?? `${d.destination}-${i}`,
-          destination: d.destination as string,
-          price: d.price || 0,
-          was: d.original_price || 0,
-          image: d.image_url as string,
-          // Staggered so the three read as a stream rather than a batch.
-          minutesAgo: 4 + i * 9,
-        }));
-    };
-
-    const real = build(deals);
-    if (real.length === ALERTS) return real;
-    return build(SHOWCASE_DEALS.map((d) => toDeal(d)));
-  }, [deals]);
+  const alerts = useMemo<Alert[]>(
+    () =>
+      funnelDeals(deals, prefs, ALERTS).map((d, i) => ({
+        id: d.id ?? `${d.destination}-${i}`,
+        destination: d.destination as string,
+        price: d.price || 0,
+        was: d.original_price || 0,
+        image: d.image_url as string,
+        // Staggered so the three read as a stream rather than a batch.
+        minutesAgo: 4 + i * 9,
+      })),
+    [deals, prefs],
+  );
 
   /** Which alert has had its saving revealed. */
   const [openId, setOpenId] = useState<string | null>(null);

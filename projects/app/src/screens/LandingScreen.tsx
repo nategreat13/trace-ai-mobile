@@ -22,6 +22,7 @@ import { colors } from "../theme/colors";
 import { Deal } from "@trace/shared";
 import SwipeCard from "../components/swipe/SwipeCard";
 import { SHOWCASE_DEALS, toDeal } from "../lib/showcaseDeals";
+import { repriceDeal } from "../lib/funnelDeals";
 import { logEvent } from "../lib/analytics";
 import { startAnonymousSession } from "../services/auth";
 import { getEnv } from "../lib/env";
@@ -44,7 +45,9 @@ function shuffle<T>(arr: T[]): T[] {
  * a user meets first are the same ones the ads run and the same ones the rest
  * of onboarding shows. See lib/showcaseDeals.ts.
  */
-const PREVIEW_DEALS: Deal[] = SHOWCASE_DEALS.map((d) => toDeal(d));
+// Priced by the funnel's own function, so a city seen here carries the same
+// number if it turns up again after onboarding. See lib/funnelDeals.
+const PREVIEW_DEALS: Deal[] = SHOWCASE_DEALS.map((d) => repriceDeal(toDeal(d)));
 
 export default function LandingScreen() {
   const scheme = useColorScheme();

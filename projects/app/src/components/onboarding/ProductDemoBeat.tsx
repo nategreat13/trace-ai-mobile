@@ -33,9 +33,9 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { MapPin, Heart, X, Hand, Bell, BookmarkCheck } from "lucide-react-native";
 import { colors } from "../../theme/colors";
-import { marqueeRank } from "../../lib/marquee";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
-import { SHOWCASE_DEALS, toDeal } from "../../lib/showcaseDeals";
+import { funnelDeals } from "../../lib/funnelDeals";
+import type { RankPrefs } from "../../lib/dealRanker";
 import { coordsForDestination } from "../../lib/destinationCoords";
 import type { Deal } from "@trace/shared";
 
@@ -80,9 +80,14 @@ type DemoView = "swipe" | "map";
 
 interface ProductDemoBeatProps {
   deals: Deal[];
+  /** Onboarding answers, so the deck leads with what they said they want. */
+  prefs?: RankPrefs;
 }
 
-export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
+export default function ProductDemoBeat({
+  deals,
+  prefs = {},
+}: ProductDemoBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { width, height } = useWindowDimensions();
@@ -94,71 +99,34 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
   const flingX = cardW + 90;
 
   /**
-   * Their real deals where the feed has them, the shared showcase set as the
-   * fallback. Either way the cards carry the same prices as the landing deck
-   * and the alert stream — see lib/showcaseDeals.ts.
-   */
-  /**
-   * The deck is an advertisement, so it has a quality bar.
+   * The deck, from the one list the whole funnel shares.
    *
-   * Sorting the real feed by recognisability alone put Paris at $868 / 2% off
-   * on the first card — the beat meant to sell the product was showing the
-   * worst deal in it. Marquee cities are often the *expensive* ones, and a
-   * famous name with a bad number is worse than an unfamiliar name with a
-   * great one.
-   *
-   * So: keep only genuinely good fares, then prefer recognisable ones among
-   * those. If their airport can't fill a deck that way — which is common for
-   * international out of a mid-size origin — fall back to the showcase set,
-   * which is what the landing deck and the alert stream already show.
+   * It used to select and sort here, which is how the beat meant to sell the
+   * product ended up leading with Paris at $868 / 2% off — marquee cities are
+   * often the expensive ones. Selection, pricing and preference-ranking all
+   * live in `funnelDeals` now, so this deck holds exactly the cards the
+   * cadence alerts, the map and the gated feed hold.
    */
-  const cards = useMemo(() => {
-    const MIN_DISCOUNT = 30;
-    const byDest = new Map<string, Deal>();
-    for (const d of deals) {
-      if (!d.destination || !d.image_url) continue;
-      if ((d.discount_pct || 0) < MIN_DISCOUNT) continue;
-      const prev = byDest.get(d.destination);
-      if (!prev || (d.discount_pct || 0) > (prev.discount_pct || 0)) {
-        byDest.set(d.destination, d);
-      }
-    }
-    const good = [...byDest.values()].sort((a, b) => {
-      const ra = marqueeRank(a.destination);
-      const rb = marqueeRank(b.destination);
-      if (ra !== rb) return ra - rb;
-      return (b.discount_pct || 0) - (a.discount_pct || 0);
-    });
-    const list = good.length >= DECK ? good : SHOWCASE_DEALS.map((d) => toDeal(d));
-    return list.slice(0, DECK);
-  }, [deals]);
+  const cards = useMemo(
+    () => funnelDeals(deals, prefs, DECK),
+    [deals, prefs],
+  );
 
-  /** Pins for the map act, with Explore's own free rule applied. */
+  /**
+   * Pins, from that same list. Nothing is locked: this beat's job is to show
+   * what the app does, and the free tier's cap turned the map into a field of
+   * padlocks around five prices — a wall shown to someone not yet given a
+   * reason to want past it. The gate is untouched where it actually decides
+   * something: the gated home and the paywall.
+   *
+   * Thinned because an unlocked pin is a wide price pill rather than a small
+   * badge, and a hundred of those pile into an unreadable heap over the
+   * eastern seaboard. Cheapest-first, keeping only pins that sit clear of the
+   * ones already kept, so each crowded region is represented by its best fare.
+   */
   const mapDeals: MapDeal[] = useMemo(() => {
-    const byDest = new Map<string, Deal>();
-    for (const d of deals) {
-      if (!d.destination) continue;
-      const prev = byDest.get(d.destination);
-      if (!prev || (d.price || Infinity) < (prev.price || Infinity)) {
-        byDest.set(d.destination, d);
-      }
-    }
-    // Nothing is locked here. This beat's only job is to show what the app
-    // does, and the free tier's five-deal cap turned the map into a field of
-    // padlocks with five prices — a wall, shown to someone who hasn't yet been
-    // given a reason to want past it. The padlocks also answered a tap with
-    // nothing, since this map is chromeless and onLockedPress is a no-op.
-    // The gate itself is unchanged everywhere it actually decides something:
-    // the feed reveal, the gated home and the paywall.
-    //
-    // Unlocking everything means every pin becomes a wide price pill rather
-    // than a small badge, and a hundred of those pile into an unreadable heap
-    // over the eastern seaboard. So thin them: cheapest first, and keep one
-    // only if it sits clear of every pin already kept. Cheapest-first matters
-    // because the survivor of each crowded region is its best fare, which is
-    // also the one worth advertising.
     const kept: { deal: Deal; lat: number; lng: number }[] = [];
-    for (const deal of [...byDest.values()].sort(
+    for (const deal of [...funnelDeals(deals, prefs)].sort(
       (a, b) => (a.price || Infinity) - (b.price || Infinity),
     )) {
       if (kept.length >= MAP_PINS) break;
@@ -172,7 +140,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
       if (!crowded) kept.push({ deal, lat: c.lat, lng: c.lng });
     }
     return kept.map(({ deal }) => ({ deal, locked: false }));
-  }, [deals]);
+  }, [deals, prefs]);
 
   const [view, setView] = useState<DemoView>("swipe");
   const [savedCount, setSavedCount] = useState(0);

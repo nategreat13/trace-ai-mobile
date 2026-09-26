@@ -18,6 +18,7 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { fetchDeals } from "../services/dealsApi";
+import { repriceDeal } from "../lib/funnelDeals";
 import { logout } from "../services/auth";
 import { logEvent } from "../lib/analytics";
 import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
@@ -223,6 +224,14 @@ export default function GatedHomeScreen() {
 
   const showGiftPill = giftOfferSeen(profile) && giftOfferEligible(profile, { manual: true });
 
+  /**
+   * The gated feed advertises at funnel prices, like every other screen
+   * before the paywall. Repriced here rather than inside the selection so
+   * the savings strip, the "cheapest right now" line and the rows below it
+   * are all reading the same numbers. Past the paywall nothing is repriced.
+   */
+  const pricedDeals = useMemo(() => deals.map(repriceDeal), [deals]);
+
   // Everything the page says about "the deals below" is computed from the
   // SAME selection FeedReveal renders — see selectRevealDeals.
   const rankPrefs = useMemo(
@@ -237,11 +246,11 @@ export default function GatedHomeScreen() {
   const selection = useMemo(
     () =>
       selectRevealDeals(
-        deals,
+        pricedDeals,
         profile?.destinationPreference ?? "both",
         rankPrefs,
       ),
-    [deals, profile?.destinationPreference, rankPrefs],
+    [pricedDeals, profile?.destinationPreference, rankPrefs],
   );
 
   /**
@@ -463,7 +472,7 @@ export default function GatedHomeScreen() {
       >
         <View style={{ paddingTop: 12, paddingBottom: 4 }}>
           <FeedReveal
-            deals={deals}
+            deals={pricedDeals}
             homeAirport={airport}
             firstName={firstName}
             destinationPreference={profile?.destinationPreference ?? "both"}

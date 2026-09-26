@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -529,6 +529,21 @@ export default function OnboardingScreen() {
     ),
   };
 
+  /**
+   * The answers so far, handed to every beat that shows deals so the whole
+   * funnel ranks on the same thing. Partial by design — the cadence beat runs
+   * before the preference questions, and an empty prefs object simply means
+   * "no signal yet" to the ranker.
+   */
+  const beatPrefs = useMemo(
+    () => ({
+      dealTypes: data.dealTypes,
+      travelTimeframe: data.travelTimeframe,
+      travelBarriers: data.travelBarriers,
+    }),
+    [data.dealTypes, data.travelTimeframe, data.travelBarriers],
+  );
+
   const beats: Beat[] = [
     nameBeat,
     {
@@ -549,7 +564,7 @@ export default function OnboardingScreen() {
       subtitle: "So we watch them for you instead",
       canProceed: true,
       newUserOnly: true,
-      content: <CadenceBeat deals={deals} />,
+      content: <CadenceBeat deals={deals} prefs={beatPrefs} />,
     },
     {
       key: "destination",
@@ -627,7 +642,7 @@ export default function OnboardingScreen() {
       subtitle: "Go on, try it.",
       canProceed: true,
       newUserOnly: true,
-      content: <ProductDemoBeat deals={deals} />,
+      content: <ProductDemoBeat deals={deals} prefs={beatPrefs} />,
     },
     {
       key: "proof",

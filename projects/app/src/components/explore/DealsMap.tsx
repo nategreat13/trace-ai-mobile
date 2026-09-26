@@ -428,6 +428,26 @@ export default function DealsMap({
         </View>
       )}
 
+      {/* Chromeless (the onboarding demo) gets a name and a price and nothing
+          else — no photo, no save, no CTA. A pin that answers a tap with
+          silence reads as broken, and a pin that opens a whole sheet is a
+          detour out of a beat the user is still playing with. */}
+      {chromeless && selectedPin && (
+        <View
+          style={[
+            styles.miniCard,
+            { backgroundColor: theme.card, borderColor: theme.border },
+          ]}
+        >
+          <Text style={[styles.miniDest, { color: theme.foreground }]} numberOfLines={1}>
+            {selectedPin.deal.destination}
+          </Text>
+          <Text style={[styles.miniPrice, { color: colors.brand.traceRed }]}>
+            ${selectedPin.deal.price}
+          </Text>
+        </View>
+      )}
+
       {/* Deal preview card — locked variant hides the price. For unlocked
           deals, tapping the card opens the full deal; the bookmark saves it. */}
       {!chromeless && selectedPin && (
@@ -627,6 +647,27 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   // — preview / alert cards —
+  miniCard: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  miniDest: { flex: 1, fontSize: 16, fontWeight: "800", letterSpacing: -0.3 },
+  miniPrice: { fontSize: 20, fontWeight: "800", letterSpacing: -0.6 },
   previewCard: {
     position: "absolute",
     left: 12,
