@@ -5,6 +5,7 @@ import {
   StyleSheet,
   useColorScheme,
   useWindowDimensions,
+  TouchableOpacity,
 } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -35,6 +36,7 @@ import { colors } from "../../theme/colors";
 import { marqueeRank } from "../../lib/marquee";
 import DealsMap, { type MapDeal } from "../explore/DealsMap";
 import { SHOWCASE_DEALS, toDeal } from "../../lib/showcaseDeals";
+import { coordsForDestination } from "../../lib/destinationCoords";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -46,39 +48,35 @@ import type { Deal } from "@trace/shared";
  * product, and it showed only the first move of the loop — swiping — with no
  * sign of why swiping matters.
  *
- * So the cards are full size and the beat walks the loop in three acts:
+ * The deck never runs out and the map is pannable, and moving between them
+ * is a tap the user makes.
  *
- *   1. SWIPE  — real cards at real size, driven by a real gesture, landing
- *               in a tray that counts up.
- *   2. ALERTS — three notifications arrive for cities they kept. Three, not
- *               one: a single notification reads as a one-off, a stream
- *               reads as a service running in the background.
- *   3. MAP    — everywhere we watch from their airport, locks already on.
+ * This used to auto-advance: three swipes, then notifications that played
+ * themselves, then a map, then a loop back. The first act invited
+ * interaction and the two after it took it away, so someone who was happily
+ * swiping suddenly found themselves watching a video. That inconsistency was
+ * the complaint, and it was a fair one — a screen that responds to touch
+ * should keep responding to touch.
  *
- * Act 2 is the point. Everything before it is a card game; the notification
- * is the reason anyone pays, and it only means something because they swiped
- * that card themselves — which is why the demo is interactive, not a video.
- *
- * Deliberately no summarising line at the end. "That's the whole app" was
- * both untrue and a curiosity killer: the job of this beat is to make
- * someone want the next screen, not to tell them they've seen everything.
+ * The notifications moved to the cadence beat, which was already making the
+ * same argument with the same visual. Two screens showing alerts is why both
+ * had started to feel redundant.
  */
-const SWIPES = 3;
-const DECK = SWIPES + 1;
+/** Cards mounted. The deck cycles, so this is a window rather than a limit. */
+const DECK = 10;
+
+/** Pins on the demo map, and how far apart in degrees they have to sit. */
+const MAP_PINS = 16;
+const MIN_PIN_SEPARATION = 7;
 /** How long the deck waits for a touch before swiping a card itself. */
 const IDLE_MS = 2600;
 const ENTRANCE_MS = 700;
 const FLING_MS = 300;
 /** Drag distance that commits a swipe; a fast flick commits sooner. */
 const SWIPE_THRESHOLD = 70;
-/** Beat between the last swipe and the notification arriving. */
-const ALERT_DELAY_MS = 700;
 
-type Act = "swipe" | "alerts" | "map";
 
-/** How long the alert act holds before the map, and the map before looping. */
-const ALERTS_MS = 5200;
-const MAP_MS = 5600;
+type DemoView = "swipe" | "map";
 
 interface ProductDemoBeatProps {
   deals: Deal[];
@@ -145,22 +143,39 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
         byDest.set(d.destination, d);
       }
     }
-    const unique = [...byDest.values()];
-    const free = new Set(
-      unique
-        .filter((d) => /domestic/i.test(d.domestic_or_international || ""))
-        .sort((a, b) => (a.price || 0) - (b.price || 0))
-        .slice(0, 5)
-        .map((d) => d.destination),
-    );
-    return unique.map((deal) => ({ deal, locked: !free.has(deal.destination) }));
+    // Nothing is locked here. This beat's only job is to show what the app
+    // does, and the free tier's five-deal cap turned the map into a field of
+    // padlocks with five prices — a wall, shown to someone who hasn't yet been
+    // given a reason to want past it. The padlocks also answered a tap with
+    // nothing, since this map is chromeless and onLockedPress is a no-op.
+    // The gate itself is unchanged everywhere it actually decides something:
+    // the feed reveal, the gated home and the paywall.
+    //
+    // Unlocking everything means every pin becomes a wide price pill rather
+    // than a small badge, and a hundred of those pile into an unreadable heap
+    // over the eastern seaboard. So thin them: cheapest first, and keep one
+    // only if it sits clear of every pin already kept. Cheapest-first matters
+    // because the survivor of each crowded region is its best fare, which is
+    // also the one worth advertising.
+    const kept: { deal: Deal; lat: number; lng: number }[] = [];
+    for (const deal of [...byDest.values()].sort(
+      (a, b) => (a.price || Infinity) - (b.price || Infinity),
+    )) {
+      if (kept.length >= MAP_PINS) break;
+      const c = coordsForDestination(deal.destination);
+      if (!c) continue;
+      const crowded = kept.some(
+        (k) =>
+          Math.abs(k.lat - c.lat) < MIN_PIN_SEPARATION &&
+          Math.abs(k.lng - c.lng) < MIN_PIN_SEPARATION,
+      );
+      if (!crowded) kept.push({ deal, lat: c.lat, lng: c.lng });
+    }
+    return kept.map(({ deal }) => ({ deal, locked: false }));
   }, [deals]);
 
-  const [act, setAct] = useState<Act>("swipe");
+  const [view, setView] = useState<DemoView>("swipe");
   const [savedCount, setSavedCount] = useState(0);
-  /** The alerts that have landed so far in act 2. */
-  const [alerts, setAlerts] = useState<Deal[]>([]);
-  const [searchTarget, setSearchTarget] = useState<string | null>(null);
   const [interacted, setInteracted] = useState(false);
 
   const pos = useSharedValue(0);
@@ -172,8 +187,6 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
   const stepRef = useRef(0);
   const lastInteractRef = useRef(0);
   const savedRef = useRef<Deal[]>([]);
-
-  const totalSwipes = Math.min(SWIPES, cards.length);
 
   const onCommitted = (dir: number, index: number) => {
     Haptics.impactAsync(
@@ -193,8 +206,13 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
     stepRef.current += 1;
     lastInteractRef.current = Date.now();
 
-    if (stepRef.current >= totalSwipes) {
-      setTimeout(() => setAct("alerts"), ALERT_DELAY_MS);
+    // The deck cycles rather than ending. Running out mid-gesture is the
+    // thing that used to force a handoff to something passive.
+    if (stepRef.current >= cards.length) {
+      stepRef.current = 0;
+      savedRef.current = [];
+      setSavedCount(0);
+      pos.value = 0;
     }
   };
 
@@ -248,63 +266,14 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
       }
     });
 
-  /**
-   * Act 2: three alerts land in sequence, for cities they kept where
-   * possible. Three rather than one because a single notification reads as a
-   * one-off; a stream reads as a service running in the background.
-   */
+  // Idle fallback so a passive viewer still sees the loop. It stops for good
+  // at the first touch: a user who is swiping doesn't need the demo to swipe
+  // for them, and while it did, cards flew past mid-read and the saved count
+  // climbed on its own.
   useEffect(() => {
-    if (act !== "alerts") {
-      setAlerts([]);
-      return;
-    }
-    const pool = [
-      ...savedRef.current,
-      ...cards.filter((c) => !savedRef.current.includes(c)),
-    ].slice(0, 3);
-    const timers = pool.map((d, i) =>
-      setTimeout(() => {
-        setAlerts((prev) => [d, ...prev]);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-          () => {},
-        );
-      }, 220 + i * 900),
-    );
-    timers.push(setTimeout(() => setAct("map"), ALERTS_MS));
-    return () => timers.forEach(clearTimeout);
-  }, [act, cards]);
-
-  /** Act 3: the map, flying to one real pin, then back to the deck. */
-  useEffect(() => {
-    if (act !== "map") {
-      setSearchTarget(null);
-      return;
-    }
-    // Rewind the deck while the map covers it — resetting on the way back in
-    // renders one frame with every card already gone.
-    pos.value = 0;
-    dragX.value = 0;
-    dragY.value = 0;
-    flinging.value = false;
-    stepRef.current = 0;
-    savedRef.current = [];
-    setSavedCount(0);
-
-    const pick = mapDeals.find((m) => !m.locked) ?? mapDeals[0];
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    if (pick) {
-      timers.push(setTimeout(() => setSearchTarget(pick.deal.destination), 1100));
-    }
-    timers.push(setTimeout(() => setAct("swipe"), MAP_MS));
-    return () => timers.forEach(clearTimeout);
-  }, [act, mapDeals]);
-
-  // Idle fallback so a passive viewer still sees the loop.
-  useEffect(() => {
-    if (act !== "swipe" || cards.length === 0) return;
+    if (view !== "swipe" || cards.length === 0 || interacted) return;
     lastInteractRef.current = Date.now() + ENTRANCE_MS;
     const id = setInterval(() => {
-      if (stepRef.current >= totalSwipes) return;
       if (Date.now() - lastInteractRef.current < IDLE_MS) return;
       lastInteractRef.current = Date.now();
       // Bias toward saving: the loop only reaches its payoff via a save.
@@ -312,13 +281,13 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
       runOnUI(flingRef.current)(dir);
     }, 200);
     return () => clearInterval(id);
-  }, [act, cards.length, totalSwipes]);
+  }, [view, cards.length, interacted]);
 
   // "You can swipe this" hint, until the first real touch.
   const hint = useSharedValue(0);
   const nudge = useSharedValue(0);
   useEffect(() => {
-    if (act !== "swipe" || interacted) {
+    if (view !== "swipe" || interacted) {
       cancelAnimation(hint);
       cancelAnimation(nudge);
       hint.value = 0;
@@ -349,7 +318,7 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
         false,
       ),
     );
-  }, [act, interacted]);
+  }, [view, interacted]);
 
   const handStyle = useAnimatedStyle(() => ({
     opacity: interpolate(hint.value, [0, 0.12, 0.78, 1], [0, 1, 1, 0], Extrapolation.CLAMP),
@@ -426,12 +395,12 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
       </Animated.View>
 
       <View style={[styles.stage, { height: cardH }]}>
-        {act === "swipe" ? (
+        {view === "swipe" ? (
           <GestureDetector gesture={pan}>
             <Animated.View
               key="deck"
-              entering={FadeIn.duration(320)}
-              exiting={FadeOut.duration(260)}
+              entering={FadeIn.duration(280)}
+              exiting={FadeOut.duration(220)}
               style={StyleSheet.absoluteFill}
             >
               {/* Back-to-front so card 0 is the last child and sits on top —
@@ -462,71 +431,14 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
               )}
             </Animated.View>
           </GestureDetector>
-        ) : act === "alerts" ? (
-          /* Act 2 — the payoff. Three alerts land in sequence, each with the
-             destination's own photo, because one notification reads as a
-             one-off and a stream reads as something running for you. */
-          <Animated.View
-            key="alerts"
-            entering={FadeIn.duration(300)}
-            exiting={FadeOut.duration(240)}
-            style={[StyleSheet.absoluteFill, styles.alertStage]}
-          >
-            {alerts.map((d, i) => (
-              <Animated.View
-                key={`${d.id}-${i}`}
-                entering={FadeInDown.duration(420).springify().damping(18)}
-                layout={LinearTransition.duration(280)}
-                style={[
-                  styles.notif,
-                  {
-                    backgroundColor: theme.card,
-                    borderColor: theme.border,
-                    opacity: 1 - i * 0.16,
-                  },
-                ]}
-              >
-                <View style={styles.notifThumb}>
-                  {!!d.image_url && (
-                    <Image
-                      source={{ uri: d.image_url }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                      transition={180}
-                    />
-                  )}
-                  <View style={styles.notifBell}>
-                    <Bell size={10} color="#fff" strokeWidth={2.8} />
-                  </View>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.notifApp, { color: theme.mutedForeground }]}>
-                    TRACE · now
-                  </Text>
-                  <Text
-                    style={[styles.notifTitle, { color: theme.foreground }]}
-                    numberOfLines={1}
-                  >
-                    {d.destination} dropped to ${Math.round(d.price)}
-                  </Text>
-                  {!!d.original_price && d.original_price > d.price && (
-                    <Text style={[styles.notifSub, { color: theme.mutedForeground }]}>
-                      Was ${Math.round(d.original_price)} · book before it's gone
-                    </Text>
-                  )}
-                </View>
-              </Animated.View>
-            ))}
-          </Animated.View>
         ) : (
-          /* Act 3 — the map. Every place we watch from their airport, with
-             the free tier's locks already on it. */
+          /* Pannable, not a slideshow. Same reason the deck is swipeable:
+             a screen that responds to touch should keep responding to it. */
           <Animated.View
             key="map"
-            entering={FadeIn.duration(320)}
-            exiting={FadeOut.duration(260)}
+            entering={FadeIn.duration(280)}
+            exiting={FadeOut.duration(220)}
             style={[StyleSheet.absoluteFill, styles.mapWrap]}
-            pointerEvents="none"
           >
             <DealsMap
               deals={mapDeals}
@@ -534,29 +446,49 @@ export default function ProductDemoBeat({ deals }: ProductDemoBeatProps) {
               onSaveDeal={() => {}}
               savedDealIds={EMPTY_SET}
               onLockedPress={() => {}}
-              searchTarget={searchTarget}
+              searchTarget={null}
               onRequestAlert={() => {}}
-              initialZoom={0.7}
-              searchZoom={2.9}
+              initialZoom={2.4}
+              searchZoom={3.6}
               chromeless
             />
           </Animated.View>
         )}
       </View>
 
-      {act !== "swipe" && (
-        <Animated.Text
-          key={act}
-          entering={FadeIn.duration(320)}
-          style={[styles.actCaption, { color: theme.mutedForeground }]}
-        >
-          {act === "alerts"
-            ? "We watch the prices you care about. You hear first."
-            : "Every place we're tracking from your airport."}
-        </Animated.Text>
-      )}
+      {/* The toggle. Both views are live, so this is a choice rather than a
+          chapter marker. */}
+      <View style={[styles.switcher, { backgroundColor: theme.muted }]}>
+        {(["swipe", "map"] as DemoView[]).map((v) => {
+          const active = view === v;
+          return (
+            <TouchableOpacity
+              key={v}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setView(v);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              style={[
+                styles.switchTab,
+                active && { backgroundColor: theme.background },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.switchText,
+                  { color: active ? theme.foreground : theme.mutedForeground },
+                ]}
+              >
+                {v === "swipe" ? "Swipe deals" : "See the map"}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
-      {act === "swipe" && (
+      {view === "swipe" && (
         <Animated.View entering={FadeIn.duration(300)} style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendIcon, { backgroundColor: colors.brand.rose500 + "1A" }]}>
@@ -736,6 +668,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   legendText: { fontSize: 13.5, fontWeight: "600" },
+  switcher: {
+    flexDirection: "row",
+    borderRadius: 999,
+    padding: 4,
+    gap: 4,
+    alignSelf: "center",
+  },
+  switchTab: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  switchText: { fontSize: 14, fontWeight: "700" },
   actCaption: {
     fontSize: 14.5,
     fontWeight: "600",
@@ -743,45 +688,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     minHeight: 26,
   },
-  alertStage: {
-    justifyContent: "center",
-    gap: 10,
-    paddingHorizontal: 4,
-  },
-  notifThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    overflow: "hidden",
-    backgroundColor: "#00000012",
-  },
-  notifBell: {
-    position: "absolute",
-    right: 2,
-    bottom: 2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: colors.brand.traceRed,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   mapWrap: { borderRadius: 20, overflow: "hidden" },
-  notif: {
-    flexDirection: "row",
-    gap: 11,
-    alignItems: "flex-start",
-    width: "100%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 18,
-    padding: 13,
-    shadowColor: "#000",
-    shadowOpacity: 0.14,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
-  },
-  notifApp: { fontSize: 10.5, fontWeight: "800", letterSpacing: 0.7 },
-  notifTitle: { fontSize: 15.5, fontWeight: "700", marginTop: 3 },
-  notifSub: { fontSize: 13, marginTop: 2 },
 });

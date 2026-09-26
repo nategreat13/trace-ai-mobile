@@ -27,7 +27,7 @@ import {
   trialsEnabledByRemote,
 } from "../lib/trial";
 import { logEvent } from "../lib/analytics";
-import { giftOfferEligible, markGiftShownOnDismiss } from "../lib/giftOffer";
+import { giftOfferEligible } from "../lib/giftOffer";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -501,7 +501,6 @@ export default function PaywallScreen() {
       !subscribeDisabled &&
       giftOfferEligible(profile, { onDismiss: true });
     if (eligibleForGift) {
-      markGiftShownOnDismiss();
       navigation.replace("GiftOffer", { fromEntryPoint: entryPoint });
       return;
     }

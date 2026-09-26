@@ -28,7 +28,6 @@ import FeedReveal, {
 import { useIAP } from "../hooks/useIAP";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
-import DealPeek from "../components/onboarding/DealPeek";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import type { Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
@@ -156,7 +155,6 @@ export default function GatedHomeScreen() {
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedDeal, setExpandedDeal] = useState<Deal | null>(null);
 
   const airport = profile?.homeAirport ?? "";
   const firstName = (profile?.firstName || profile?.displayName || "").split(
@@ -317,11 +315,6 @@ export default function GatedHomeScreen() {
    * so the paywall isn't pushed underneath an RN <Modal> that would sit on
    * top of it.
    */
-  const upsellFromDeal = (entryPoint: string) => {
-    setExpandedDeal(null);
-    setTimeout(() => openPaywall(entryPoint), 120);
-  };
-
   const prefChips = [
     ...(profile?.dealTypes ?? [])
       .map((v) => labelFor(DEAL_TYPES, v))
@@ -477,10 +470,11 @@ export default function GatedHomeScreen() {
             prefs={rankPrefs}
             headerExtra={matchingBlock}
             footerExtra={savingsBlock}
-            onPressDeal={(deal) => {
-              logEvent("gated_deal_opened", { destination: deal.destination });
-              setExpandedDeal(deal);
-            }}
+            // Straight to the paywall. The peek sheet was a good sales page
+            // but it was a stop on the way to the only action that matters
+            // here — a gated user can't open a deal, so the tap should move
+            // them forward rather than describe what they can't have.
+            onPressDeal={() => openPaywall("gated_deal_tapped")}
             onPressLocked={() => openPaywall("gated_deal_locked")}
           />
         </View>
@@ -566,16 +560,6 @@ export default function GatedHomeScreen() {
         </View>
       </View>
 
-      {expandedDeal && (
-        <DealPeek
-          deal={expandedDeal}
-          homeAirport={airport}
-          ctaLabel="Get this deal"
-          trialLabel={hasFreeTrial ? trialLabel : undefined}
-          onClose={() => setExpandedDeal(null)}
-          onCta={() => upsellFromDeal("gated_deal_peek")}
-        />
-      )}
     </SafeAreaView>
   );
 }
