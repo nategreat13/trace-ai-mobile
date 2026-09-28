@@ -2,6 +2,40 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Airport waitlist writes (airportRequests + staging_airportRequests).
+    // Shared at this level so prod and staging can't drift apart.
+    //
+    // Must be signed in — an anonymous onboarding session counts, and the
+    // navigator never renders the airport picker to a signed-out user, so no
+    // legitimate write is refused. The entry must be the caller's own:
+    // userId is their uid, and an email is only accepted if it is the one on
+    // their own account. Without that, anyone holding the project ID could
+    // plant arbitrary addresses on a list we intend to email.
+    //
+    // token.get('email', null), not token.email: anonymous tokens carry no
+    // email claim, and reading a missing key errors the rule into a denial —
+    // which would reject exactly the users the anonymous flow creates.
+    //
+    // Every field is allowlisted and size-bounded. This caps what one entry
+    // can hold; it does not cap how many entries a determined caller makes.
+    // That needs App Check.
+    function validAirportRequest() {
+      let d = request.resource.data;
+      return request.auth != null
+        && d.keys().hasOnly(['userId', 'email', 'airportCode', 'query',
+                             'nearestCode', 'nearestMiles', 'createdAt'])
+        && d.query is string && d.query.size() > 0 && d.query.size() < 120
+        && d.get('userId', null) == request.auth.uid
+        && (d.get('email', null) == null
+            || d.email == request.auth.token.get('email', null))
+        && (d.get('airportCode', null) == null
+            || (d.airportCode is string && d.airportCode.size() <= 4))
+        && (d.get('nearestCode', null) == null
+            || (d.nearestCode is string && d.nearestCode.size() <= 4))
+        && (d.get('nearestMiles', null) == null || d.nearestMiles is number)
+        && (d.get('createdAt', null) == null || d.createdAt is timestamp);
+    }
+
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║                        PROD COLLECTIONS                          ║
     // ║                                                                  ║
@@ -94,9 +128,7 @@ service cloud.firestore {
     // to be discarded in silence. Reads and edits stay server-only.
     match /airportRequests/{docId} {
       allow read, update, delete: if false;
-      allow create: if request.resource.data.query is string
-                    && request.resource.data.query.size() > 0
-                    && request.resource.data.query.size() < 120;
+      allow create: if validAirportRequest();
     }
 
     match /dealAlerts/{docId} {
@@ -288,9 +320,7 @@ service cloud.firestore {
     // to be discarded in silence. Reads and edits stay server-only.
     match /staging_airportRequests/{docId} {
       allow read, update, delete: if false;
-      allow create: if request.resource.data.query is string
-                    && request.resource.data.query.size() > 0
-                    && request.resource.data.query.size() < 120;
+      allow create: if validAirportRequest();
     }
 
     match /staging_dealAlerts/{docId} {
