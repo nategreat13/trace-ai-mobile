@@ -309,6 +309,21 @@ export default function LandingScreen() {
           )}
         </TouchableOpacity>
 
+        {/* Get Started used to open the Login screen, whose Sign Up / Sign In
+            toggle was how returning users got in. It now goes straight into
+            onboarding on an anonymous session, so this link is the front
+            door for anyone with an account. */}
+        <TouchableOpacity
+          onPress={goToSignin}
+          disabled={starting}
+          style={{ alignSelf: "center", paddingVertical: 6, marginTop: -6, marginBottom: 10 }}
+        >
+          <Text style={{ color: theme.mutedForeground, fontSize: 13 }}>
+            Already have an account?{" "}
+            <Text style={{ color: theme.foreground, fontWeight: "700" }}>Sign in</Text>
+          </Text>
+        </TouchableOpacity>
+
         <Text
           style={{
             fontSize: 11,
