@@ -225,6 +225,10 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
   const [requested, setRequested] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const { user, profile } = useAuth();
+  // Onboarding runs on an anonymous session and asks for email last, so most
+  // people reach this picker with no address yet. The confirmation reads from
+  // this same value, so it can only promise an email we actually hold.
+  const requestEmail = user?.email ?? profile?.email ?? null;
 
   const requestAirport = async () => {
     if (requesting) return;
@@ -234,7 +238,7 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
     try {
       await createAirportRequest({
         userId: user?.uid ?? null,
-        email: user?.email ?? profile?.email ?? null,
+        email: requestEmail,
         airportCode: match?.code ?? null,
         query: trimmed,
         nearestCode: nearest?.airport.code ?? null,
@@ -398,7 +402,9 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 14.5, fontWeight: "700", color: theme.foreground }}>
-                  We'll email you when {requested} opens up
+                  {requestEmail
+                    ? `We'll email you when ${requested} opens up`
+                    : `Saved — finish setting up and we'll email you when ${requested} opens`}
                 </Text>
                 <Text style={{ fontSize: 13, color: theme.mutedForeground, marginTop: 3, lineHeight: 18 }}>
                   {nearest

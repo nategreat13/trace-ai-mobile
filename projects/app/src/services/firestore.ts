@@ -256,6 +256,13 @@ export function subscribeToSavedDeals(
  * onboarding, and a request is worth keeping even from someone who bails
  * before their profile is written.
  */
+// Waitlist for airports we don't serve yet. Onboarding runs on an anonymous
+// session and asks for email at the very end, so most entries here have
+// email: null. They aren't lost: the anonymous account is upgraded in place
+// when the person signs up, so userId stays the same. To email a waitlist,
+// join userId → userProfiles (or the Firebase Auth record) for the address,
+// rather than exporting the email field alone. Entries from people who quit
+// before the signup step can't be contacted.
 export async function createAirportRequest(data: {
   userId?: string | null;
   email?: string | null;
