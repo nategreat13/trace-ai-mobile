@@ -10,13 +10,18 @@ export const GIFT_MAX_SHOWS = 3;
 export const GIFT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Show the win-back on every Nth paywall dismissal, counting from the first.
- * At 2 that means the 2nd, 4th, 6th… — the first close is left alone.
+ * Show the win-back on the first paywall dismissal and every Nth one after
+ * it. At 2 that means the 1st, 3rd, 5th… close.
  *
- * Someone closing the paywall for the first time is usually still looking
- * around; answering that with a discount both interrupts them and spends the
- * offer at its weakest moment. A second close is a decision, and that's where
- * the win-back is worth making.
+ * 1.9.0 skipped the first close and fired on the 2nd, 4th, 6th…, on the theory
+ * that a first close is someone still looking around. In its first week only
+ * 10 of the 78 people who closed the paywall ever saw the gift, and it
+ * produced one trial; on 1.8.0, where the first close was answered, the gift
+ * accounted for half of a week's trials and its finished trials paid at 3 of
+ * 6 against 2 of 10 for the regular paywall. Most people don't close twice.
+ *
+ * The spacing stays so that closing the paywall isn't simply how you get the
+ * lower price every time.
  */
 export const GIFT_DISMISSAL_INTERVAL = 2;
 
@@ -38,8 +43,7 @@ export async function recordPaywallDismissal(): Promise<number> {
     await setItemRaw(DISMISSAL_KEY, String(next));
     return next;
   } catch {
-    // Storage failing shouldn't decide whether the gift appears; 0 is not a
-    // multiple of the interval, so the caller simply doesn't show it.
+    // 0 means "couldn't count". The caller treats that as a first close.
     return 0;
   }
 }
@@ -64,11 +68,10 @@ function toMs(d: unknown): number | null {
  *   - `manual` — they tapped "You have an unclaimed offer". They went looking
  *     for it, so only the cap applies.
  *   - `onDismiss` — they just closed the paywall. No cap and no cooldown, but
- *     paced: every `GIFT_DISMISSAL_INTERVAL`th close, so the first one passes
- *     without interruption and the offer lands on a decision rather than on
- *     someone still looking around. `dismissalCount` is the running total
- *     from `recordPaywallDismissal`; without it nothing is shown, since a
- *     missing count can't be distinguished from a first close.
+ *     paced: the first close and every `GIFT_DISMISSAL_INTERVAL`th after it.
+ *     `dismissalCount` is the running total from `recordPaywallDismissal`; a
+ *     missing count is treated as a first close, so a storage failure shows
+ *     the gift rather than hiding it.
  *   - neither — an unprompted re-offer on a later visit. Cap and cooldown.
  */
 export function giftOfferEligible(
@@ -79,8 +82,8 @@ export function giftOfferEligible(
   // Checked before the cap: dismissals are paced by their own rule, not by
   // the unprompted-showing budget.
   if (opts.onDismiss) {
-    const n = opts.dismissalCount ?? 0;
-    return n > 0 && n % GIFT_DISMISSAL_INTERVAL === 0;
+    const n = Math.max(1, opts.dismissalCount ?? 0);
+    return (n - 1) % GIFT_DISMISSAL_INTERVAL === 0;
   }
   // Legacy one-shot flag with no count: treat as one prior showing.
   const count = profile.giftOfferShowCount ?? (profile.giftOfferShown ? 1 : 0);

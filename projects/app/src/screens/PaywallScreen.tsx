@@ -494,8 +494,9 @@ export default function PaywallScreen() {
   const canDismiss = navigation.canGoBack();
 
   const handleDismiss = async () => {
-    // Counted before the check: the gift lands on every second close, so the
-    // running total is what decides this, not the profile's show budget.
+    // Counted before the check: the gift lands on the first close and every
+    // second one after it, so the running total is what decides this, not the
+    // profile's show budget.
     const dismissals = await recordPaywallDismissal();
     logEvent("paywall_dismissed", {
       entry_point: entryPoint,
