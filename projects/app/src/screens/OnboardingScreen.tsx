@@ -107,9 +107,9 @@ export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
-  // When editing preferences, skip the name step (step 0) entirely —
-  // the user already set their name during initial onboarding and
-  // doesn't need to re-enter it just to update travel preferences.
+  // EditPreferences opens on its second question ("How far do you want to
+  // go?"), with Back reaching the airport. Its list has no name step: the
+  // user set their name when they signed up.
   const [step, setStep] = useState(isEditing ? 1 : 0);
   const [showPersonality, setShowPersonality] = useState(false);
   const [generatedPersonality, setGeneratedPersonality] = useState("");
@@ -545,7 +545,6 @@ export default function OnboardingScreen() {
   );
 
   const beats: Beat[] = [
-    nameBeat,
     {
       key: "airport",
       title: "Where do you fly from?",
@@ -670,13 +669,16 @@ export default function OnboardingScreen() {
       content: (
         <BuildingFeed
           ready={dealsReady}
-          // Advance rather than finish: the account step now follows. When it
-          // isn't in the list (a user who already signed in), `goNext` sees
-          // this as the last beat and finishes as before.
+          // Advance rather than finish: the name and account steps follow.
           onDone={() => goNext()}
         />
       ),
     },
+    // The name comes after the feed is built, next to the account ask, rather
+    // than first. As the opening screen it lost 19% of everyone who tapped Get
+    // Started in the first week of 1.9.0: a form field before they'd seen
+    // anything. Here it's one more detail for a feed that already exists.
+    nameBeat,
     {
       // The account ask, last instead of second. See AccountBeat.
       key: "account",
@@ -735,9 +737,8 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (isEditing) return;
     if (!data.homeAirport) return;
-    if (safeStep < 1) return;
     startDealFetch(data.homeAirport);
-  }, [data.homeAirport, safeStep, isEditing, startDealFetch]);
+  }, [data.homeAirport, isEditing, startDealFetch]);
 
   const goNext = async () => {
     if (beat?.submit) {
