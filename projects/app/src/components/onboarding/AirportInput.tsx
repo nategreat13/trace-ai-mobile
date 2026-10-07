@@ -51,6 +51,61 @@ export const HOME_AIRPORTS: Airport[] = [
   { code: "SLC", name: "Salt Lake City International", city: "Salt Lake City", state: "UT" },
 ];
 
+// What people call these airports that isn't in the name, city or state.
+// Every entry is a search that reached the dead end for a city we serve.
+const HOME_AIRPORT_ALIASES: Record<string, string> = {
+  DFW: "ft worth",
+  EWR: "nyc",
+  FLL: "ft lauderdale",
+  JFK: "nyc",
+  MSP: "st paul twin cities",
+  SEA: "seatac",
+  SFO: "sf bay area",
+};
+
+// People type "Florida" and "Newark, New Jersey"; the list only holds "FL".
+const STATE_NAMES: Record<string, string> = {
+  AZ: "arizona", CA: "california", CO: "colorado", FL: "florida",
+  GA: "georgia", IL: "illinois", MA: "massachusetts", MI: "michigan",
+  MN: "minnesota", NC: "north carolina", NJ: "new jersey", NV: "nevada",
+  NY: "new york", PA: "pennsylvania", TX: "texas", UT: "utah",
+  WA: "washington",
+};
+
+/** Lowercase, apostrophes dropped, every other separator turned into a space. */
+const normalizeSearch = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const HOME_AIRPORT_HAYSTACKS = HOME_AIRPORTS.map((a) =>
+  normalizeSearch(
+    `${a.code} ${a.city} ${a.state} ${STATE_NAMES[a.state] ?? ""} ${a.name} ${HOME_AIRPORT_ALIASES[a.code] ?? ""}`,
+  ),
+);
+
+/**
+ * Serviced airports matching a search, word by word: every word typed has to
+ * appear somewhere in the airport's code, city, state, name or aliases.
+ *
+ * This used to be one substring test on the raw query, which failed in two
+ * ways that told people we don't serve a city we do. The iOS keyboard adds a
+ * space after a suggested word, and "boston " is a substring of nothing. And
+ * "seattle wa" spans two fields, so no single field contained it. In the first
+ * week of 1.9.0, 10 of the 24 people who never got past the airport step had
+ * searched for Boston, Chicago, Seattle, Dallas, Orlando, Newark or Fort
+ * Lauderdale.
+ */
+export function searchHomeAirports(query: string): Airport[] {
+  const words = normalizeSearch(query).split(" ").filter(Boolean);
+  if (words.length === 0) return [];
+  return HOME_AIRPORTS.filter((_, i) =>
+    words.every((w) => HOME_AIRPORT_HAYSTACKS[i].includes(w)),
+  ).slice(0, 8);
+}
+
 // Full airport list for destination search in Explore.
 export const AIRPORTS: Airport[] = [
   ...HOME_AIRPORTS,
@@ -186,18 +241,7 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
 
   const selected = HOME_AIRPORTS.find((a) => a.code === value) ?? null;
 
-  const results =
-    query.trim().length > 0
-      ? HOME_AIRPORTS.filter((a) => {
-          const q = query.toLowerCase();
-          return (
-            a.code.toLowerCase().includes(q) ||
-            a.city.toLowerCase().includes(q) ||
-            a.state.toLowerCase().includes(q) ||
-            a.name.toLowerCase().includes(q)
-          );
-        }).slice(0, 8)
-      : [];
+  const results = searchHomeAirports(query);
 
   // Note: dropdown visibility is deliberately decoupled from `focused`.
   // Earlier this read `focused && query.trim().length > 0 && results.length > 0`,
