@@ -20,6 +20,10 @@ import { login, signup, requestPasswordReset } from "../services/auth";
 import { auth } from "../services/firebase";
 import { trackSignup } from "../services/trackingApi";
 import { logEvent } from "../lib/analytics";
+import {
+  identifyForMeta,
+  logMetaCompleteRegistration,
+} from "../lib/metaAppEvents";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -117,6 +121,16 @@ export default function LoginScreen() {
         }
         const currentUser = auth.currentUser;
         if (currentUser) {
+          // Native app event, in addition to the server-side CAPI call
+          // below. The server sends action_source "website" (it has no
+          // device to build `app_data.extinfo` from), and a website event
+          // cannot be the goal of an app campaign — so this is the one
+          // that makes "Maximize number of app events / Complete
+          // registration" selectable in Ads Manager. Identify first so the
+          // event carries a hashed email and a stable user id.
+          identifyForMeta(currentUser.uid, currentUser.email || email.trim());
+          logMetaCompleteRegistration("email");
+
           trackSignup({
             userId: currentUser.uid,
             email: email.trim() || currentUser.email || null,

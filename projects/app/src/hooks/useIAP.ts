@@ -14,6 +14,7 @@ import {
   hasEntitlement,
 } from "../services/iap";
 import { logEvent } from "../lib/analytics";
+import { logMetaStartTrial } from "../lib/metaAppEvents";
 
 /**
  * Optional context the caller can pass to `purchase()` so analytics events
@@ -239,6 +240,15 @@ export function useIAP(): UseIAPResult {
             price: pkg.product.price ?? null,
             currency: pkg.product.currencyCode ?? null,
           });
+          // Same event as an app event, so trial starts accumulate history
+          // in Meta against the iOS app. Not usable as an optimization goal
+          // yet — an ad set needs ~50 conversions a week to leave the
+          // learning phase and trials run far below that — but the history
+          // has to exist before it ever can be.
+          logMetaStartTrial(
+            pkg.product.price ?? null,
+            pkg.product.currencyCode ?? null,
+          );
         }
 
         return info;

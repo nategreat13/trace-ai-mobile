@@ -625,11 +625,6 @@ export default function OnboardingScreen() {
         />
       ),
     },
-    // The name comes after the feed is built, next to the account ask, rather
-    // than first. As the opening screen it lost 19% of everyone who tapped Get
-    // Started in the first week of 1.9.0: a form field before they'd seen
-    // anything. Here it's one more detail for a feed that already exists.
-    nameBeat,
     {
       // The account ask, last instead of second. See AccountBeat.
       key: "account",
