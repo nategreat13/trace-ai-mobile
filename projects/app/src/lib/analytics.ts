@@ -43,6 +43,10 @@ export type AnalyticsEventName =
   // Signup / onboarding
   | "signup_viewed"
   | "signup_completed"
+  // Tried to sign up with an email that already has an account. Was a dead
+  // end until Oct 2026; now offers sign-in / reset. Worth watching — it
+  // measures returning users the funnel was silently losing.
+  | "signup_existing_email"
   // Account creation is the last onboarding step now, so a failure here
   // costs a fully-onboarded user rather than a bounce off the front door.
   | "signup_failed"
@@ -132,6 +136,10 @@ export type AnalyticsEventName =
   // the interesting failure is specific: plenty of people will open the gift
   // and still not claim it, and that gap is what says whether the discount is
   // too small rather than the screen being wrong.
+  // Fires when the gift screen RENDERS, not when the box is opened. Without
+  // it the gift funnel started at "opened" and there was no denominator —
+  // no way to tell a gift nobody reaches from a gift nobody wants.
+  | "gift_offer_shown"
   | "gift_offer_opened"
   | "gift_offer_dismissed"
   | "gift_offer_cta_tapped"

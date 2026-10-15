@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -82,6 +82,16 @@ export default function GiftOfferScreen() {
   } = useIAP();
 
   const [opened, setOpened] = useState(false);
+
+  // Impression, logged once per mount. `percent_off` and `has_discount_sku`
+  // ride along so a weak week can be told apart from a week where the
+  // discounted SKU simply wasn't configured and everyone saw the fallback.
+  const shownLoggedRef = useRef(false);
+  useEffect(() => {
+    if (shownLoggedRef.current) return;
+    shownLoggedRef.current = true;
+    logEvent("gift_offer_shown", { from_entry_point: fromEntryPoint });
+  }, [fromEntryPoint]);
 
   // Idle wobble on the unopened box — small, slow, and stopped the moment it
   // is opened, so it reads as "tap me" rather than as decoration.

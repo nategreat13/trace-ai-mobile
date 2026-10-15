@@ -200,7 +200,7 @@ export default function GatedHomeScreen() {
     );
     updateProfile({ postOnboardingPaywallShown: true }).catch(() => {});
     const t = setTimeout(
-      () => navigation.navigate("Paywall", { entryPoint: "post_onboarding" }),
+      () => openPaywall("post_onboarding"),
       450,
     );
     return () => clearTimeout(t);
@@ -314,9 +314,22 @@ export default function GatedHomeScreen() {
     updateProfile({ gatedHomeSeenDestinations: current }).catch(() => {});
   }, [loading, deals, profile?.gatedHomeSeenDestinations]);
 
+  /**
+   * Always hand the paywall the two facts this screen already knows: how many
+   * destinations we track, and how few of them they can see. Without these it
+   * falls back to generic copy — which is what every paywall view has been
+   * getting, despite the personalised version being built and working.
+   */
   const openPaywall = (entryPoint: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    navigation.navigate("Paywall", { entryPoint });
+    navigation.navigate("Paywall", {
+      entryPoint,
+      destinationCount: selection.totalDestinations || undefined,
+      lockedStat:
+        selection.totalDestinations > selection.unlocked.length
+          ? `You're seeing ${selection.unlocked.length} of ${selection.totalDestinations} destinations from ${airport}.`
+          : undefined,
+    });
   };
 
   /**

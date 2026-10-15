@@ -23,6 +23,31 @@ import { logEvent } from "../lib/analytics";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
+/**
+ * Firebase's own `error.message` reads "Firebase: Error
+ * (auth/email-already-in-use)." — which we were showing to users verbatim in
+ * an OK-only alert. Map the codes we actually hit to plain English.
+ */
+function friendlyAuthError(code: string | undefined, fallback: string): string {
+  switch (code) {
+    case "auth/invalid-email":
+      return "That doesn't look like a valid email address.";
+    case "auth/weak-password":
+      return "Passwords need to be at least 6 characters.";
+    case "auth/wrong-password":
+    case "auth/invalid-credential":
+      return "That email and password don't match. Try again, or reset your password.";
+    case "auth/user-not-found":
+      return "We couldn't find an account with that email.";
+    case "auth/too-many-requests":
+      return "Too many attempts. Wait a minute and try again.";
+    case "auth/network-request-failed":
+      return "Couldn't reach the network. Check your connection and try again.";
+    default:
+      return fallback;
+  }
+}
+
 export default function LoginScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -55,8 +80,10 @@ export default function LoginScreen() {
           [{ text: "OK", onPress: () => setIsForgot(false) }]
         );
       } catch (error: any) {
-        const msg = error?.message || "Could not send reset email.";
-        Alert.alert("Error", msg);
+        Alert.alert(
+          "Error",
+          friendlyAuthError(error?.code, "Could not send reset email."),
+        );
       } finally {
         setLoading(false);
       }
@@ -101,8 +128,43 @@ export default function LoginScreen() {
         logEvent("login", { method: "email" });
       }
     } catch (error: any) {
-      const msg = error?.message || "Authentication failed";
-      Alert.alert("Error", msg);
+      /**
+       * Signing up with an email that already has an account was a dead end:
+       * an OK-only alert containing a raw Firebase string, with no way
+       * forward. Two people hit it in 1.10.0's first week and neither got in.
+       * Both routes out are one tap now, and the email they typed carries
+       * over to whichever they pick.
+       */
+      if (isSignup && error?.code === "auth/email-already-in-use") {
+        logEvent("signup_existing_email", {});
+        Alert.alert(
+          "You already have an account",
+          `${email.trim()} is already registered. Sign in instead, or reset your password if you've forgotten it.`,
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Reset password",
+              onPress: () => {
+                setIsSignup(false);
+                setIsForgot(true);
+                setPassword("");
+              },
+            },
+            {
+              text: "Sign in",
+              onPress: () => {
+                setIsSignup(false);
+                setPassword("");
+              },
+            },
+          ],
+        );
+        return;
+      }
+      Alert.alert(
+        "Error",
+        friendlyAuthError(error?.code, error?.message || "Authentication failed"),
+      );
     } finally {
       setLoading(false);
     }

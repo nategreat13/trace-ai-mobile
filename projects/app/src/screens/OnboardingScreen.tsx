@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View,
   Text,
-  TextInput,
   Alert,
   useColorScheme,
   Platform,
@@ -116,7 +115,6 @@ export default function OnboardingScreen() {
   const [existingProfileId, setExistingProfileId] = useState<string | null>(
     null,
   );
-  const lastNameRef = useRef<TextInput>(null);
   // Guards against a double-tap on the final CTA firing handleContinue twice
   // before `profile` state updates from the first call — without this, both
   // calls see profile?.id as falsy and both create a new profile doc.
@@ -466,69 +464,22 @@ export default function OnboardingScreen() {
     submit?: () => Promise<boolean>;
   };
 
-  const nameBeat: Beat = {
-    key: "name",
-    title: "What's your name?",
-    subtitle: "So your feed feels like yours",
-    canProceed:
-      data.firstName.trim().length > 0 && data.lastName.trim().length > 0,
-    content: (
-      <View style={{ gap: 12 }}>
-        <TextInput
-          placeholder="First name"
-          placeholderTextColor={theme.mutedForeground}
-          value={data.firstName}
-          onChangeText={(v) => {
-            const trimmed = v.trim();
-            const spaceIdx = trimmed.indexOf(" ");
-            if (spaceIdx > 0) {
-              const first = trimmed.slice(0, spaceIdx);
-              const last = trimmed.slice(spaceIdx + 1).trim();
-              setData((d) => ({ ...d, firstName: first, lastName: last }));
-              lastNameRef.current?.focus();
-            } else {
-              setData((d) => ({ ...d, firstName: v }));
-            }
-          }}
-          onSubmitEditing={() => lastNameRef.current?.focus()}
-          returnKeyType="next"
-          textContentType="name"
-          autoComplete="name"
-          autoCapitalize="words"
-          style={{
-            backgroundColor: theme.muted,
-            borderRadius: 14,
-            padding: 16,
-            fontSize: 16,
-            color: theme.foreground,
-            borderWidth: 2,
-            borderColor: theme.border,
-          }}
-        />
-        <TextInput
-          ref={lastNameRef}
-          placeholder="Last name"
-          placeholderTextColor={theme.mutedForeground}
-          value={data.lastName}
-          onChangeText={(v) => setData((d) => ({ ...d, lastName: v }))}
-          returnKeyType="done"
-          textContentType="familyName"
-          autoComplete="name-family"
-          autoCapitalize="words"
-          style={{
-            backgroundColor: theme.muted,
-            borderRadius: 14,
-            padding: 16,
-            fontSize: 16,
-            color: theme.foreground,
-            borderWidth: 2,
-            borderColor: theme.border,
-          }}
-        />
-      </View>
-    ),
-  };
-
+  /**
+   * The name screen is GONE (Oct 2026), not moved.
+   *
+   * It cost a fifth to a quarter of everyone who reached it, wherever it sat.
+   * At the front it was a small ask before anything else; moved to the end in
+   * 1.10.0 it read as the first page of a sign-up form with the account step
+   * immediately after — two asks in a row — and 25% of people who reached it
+   * never got to the account step. 1.10.0's onboarding completion fell 47% →
+   * 37% on that change alone.
+   *
+   * `firstName` / `lastName` stay on `data` because EditPreferences still
+   * prefills them and the save path still writes them; for a new user they
+   * are simply empty, `displayName` falls back to "Travel Explorer", and the
+   * feed page greets them without a name (FeedReveal already handles that).
+   * Profile → Edit is where a name gets set now, if ever.
+   */
   /**
    * The answers so far, handed to every beat that shows deals so the whole
    * funnel ranks on the same thing. Partial by design — the cadence beat runs

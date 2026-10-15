@@ -29,6 +29,12 @@ export type RootStackParamList = {
          * highlighted row above the feature list.
          */
         lockedStat?: string;
+        /**
+         * How many destinations we track from their airport. Lets the paywall
+         * name a real number in its benefit list instead of a generic claim —
+         * "All 115 destinations from SLC" rather than "every destination".
+         */
+        destinationCount?: number;
       }
     | undefined;
   /**

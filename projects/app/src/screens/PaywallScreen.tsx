@@ -14,7 +14,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { X, Mail } from "lucide-react-native";
+import { X, Mail, Check } from "lucide-react-native";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -61,6 +61,7 @@ export default function PaywallScreen() {
   const entryPoint = route.params?.entryPoint ?? "unknown";
   const tierParam = route.params?.tier ?? "premium";
   const personalizedSub = route.params?.personalizedSub ?? null;
+  const destinationCount = route.params?.destinationCount ?? null;
   const lockedStat = route.params?.lockedStat ?? null;
   // The post-onboarding paywall is the one view the user didn't ask for. It
   // gets a de-emphasized (never hidden) close affordance — see the close
@@ -101,7 +102,19 @@ export default function PaywallScreen() {
   // It matters more than a default usually would: at current retention a
   // monthly subscriber churns inside a couple of cycles, so an annual
   // conversion is worth several times a monthly one.
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("annual");
+  // Default MONTHLY (Oct 2026). Third position this has held, so the history
+  // is worth keeping straight:
+  //   monthly → annual: the annual *sticker* was killing purchase sheets, and
+  //     per-month framing fixed the presentation without losing the 12 months.
+  //   annual → monthly: that framing change did NOT move trial starts
+  //     ($79.99→$47.99 moved 3.2%→3.1%, i.e. nothing). Both were annual, so
+  //     neither test ever touched the thing that might actually be the
+  //     barrier — committing to a YEAR. 82% of people who reach this screen
+  //     never tap the button; the bet is that a year-long commitment sitting
+  //     under a free-trial button is why.
+  // Annual stays one tap away and is genuinely cheaper per month, so the
+  // people who already know they want it lose nothing.
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   useEffect(() => {
     logEvent("paywall_viewed", {
@@ -546,6 +559,35 @@ export default function PaywallScreen() {
       : "Every deal from your airport, the moment prices drop.");
 
   /**
+   * Three benefits, each naming something they have just watched get locked.
+   *
+   * An earlier pass deleted a four-row feature list, correctly: rows like
+   * "Every destination on the map, unlocked" could belong to any travel app,
+   * and they crowded out the offer. But deleting them left the opposite
+   * problem — someone who has seen five deals and a column of padlocks does
+   * not know what the padlocks are hiding, and Premium is nineteen different
+   * gates, not one.
+   *
+   * The difference is specificity. "All 115 destinations from SLC" is their
+   * number and their airport; it is an answer to a question they are actually
+   * holding, which a generic feature name never is. Three rows, not four, so
+   * the screen still fits without scrolling.
+   */
+  const benefits: string[] = isBusinessPaywall
+    ? [
+        "Business-class fares at economy prices",
+        "Alerts the moment a premium seat drops",
+        "Every destination and travel guide, unlocked",
+      ]
+    : [
+        destinationCount
+          ? `All ${destinationCount} destinations from ${profile?.homeAirport ?? "your airport"} — not just 5`
+          : `Every destination from ${profile?.homeAirport ?? "your airport"} — not just 5`,
+        "Alerts the moment any of them drops in price",
+        "Travel guides and trip details for every city",
+      ];
+
+  /**
    * One screen, no scroll, in the order a decision actually gets made:
    * what you get -> what it costs -> how the trial runs -> go.
    *
@@ -601,49 +643,60 @@ export default function PaywallScreen() {
             </Text>
           </View>
 
-          {/* 2 — the offer, as one block.
-                 A previous pass had the annual card and a separate
-                 "$0 today / $47.99 after" row, which printed both numbers
-                 twice on one screen. The zero is the most persuasive fact
-                 here, so it leads, and everything else is the sentence
-                 underneath it. */}
-          {!!annualPkg && (
+          {/* 2 — what the padlocks were hiding */}
+          <View style={{ gap: 11 }}>
+            {benefits.map((b) => (
+              <View
+                key={b}
+                style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
+              >
+                <Check
+                  size={17}
+                  color={accent}
+                  strokeWidth={3}
+                  style={{ marginTop: 2 }}
+                />
+                <Text
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    lineHeight: 21,
+                    flex: 1,
+                    fontWeight: "500",
+                  }}
+                >
+                  {b}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* 2 — the offer, as one block. The hero is the PRIMARY plan
+                 (monthly); annual sits underneath as the value option.
+                 A previous pass had the plan card and a separate
+                 "$0 today / $X after" row, which printed both numbers twice
+                 on one screen. The zero is the most persuasive fact here, so
+                 it leads, and everything else is the sentence underneath. */}
+          {!!monthlyPkg && (
             <TouchableOpacity
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
-                setBillingPeriod("annual");
+                setBillingPeriod("monthly");
               }}
               activeOpacity={0.9}
               accessibilityRole="radio"
-              accessibilityState={{ selected: billingPeriod === "annual" }}
+              accessibilityState={{ selected: billingPeriod === "monthly" }}
               style={{
                 borderWidth: 2,
-                borderColor: billingPeriod === "annual" ? accent : theme.border,
-                backgroundColor: billingPeriod === "annual" ? accent + "0F" : theme.card,
+                borderColor: billingPeriod === "monthly" ? accent : theme.border,
+                backgroundColor:
+                  billingPeriod === "monthly" ? accent + "0F" : theme.card,
                 borderRadius: 18,
                 paddingHorizontal: 18,
                 paddingVertical: 20,
               }}
             >
-              {annualSavings != null && billingPeriod === "annual" && (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: -11,
-                    left: 18,
-                    backgroundColor: accent,
-                    borderRadius: 999,
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
-                    SAVE {annualSavings}%
-                  </Text>
-                </View>
-              )}
-
-              {hasFreeTrial ? (
+              {hasFreeTrial && billingPeriod === "monthly" ? (
                 <>
                   <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10 }}>
                     <Text
@@ -677,10 +730,9 @@ export default function PaywallScreen() {
                   >
                     Then{" "}
                     <Text style={{ color: theme.foreground, fontWeight: "700" }}>
-                      {annualPerMonth ?? selectedPkg?.product.priceString}
+                      {monthlyPkg.product.priceString}/month
                     </Text>{" "}
-                    — {priceString} billed {billingPeriod === "annual" ? "annually" : "monthly"} after your{" "}
-                    {trialLengthLabel} trial. Cancel anytime.
+                    after your {trialLengthLabel} trial. Cancel anytime.
                   </Text>
                 </>
               ) : (
@@ -693,40 +745,74 @@ export default function PaywallScreen() {
                       letterSpacing: -1,
                     }}
                   >
-                    {annualPerMonth ?? annualPkg.product.priceString}
+                    {monthlyPkg.product.priceString}
+                    <Text style={{ fontSize: 20, fontWeight: "700" }}>/mo</Text>
                   </Text>
                   <Text style={{ color: theme.mutedForeground, fontSize: 14, marginTop: 4 }}>
-                    {annualPkg.product.priceString} billed annually · cancel anytime
+                    Billed monthly · cancel anytime
                   </Text>
                 </>
               )}
             </TouchableOpacity>
           )}
 
-          {/* Monthly stays available, deliberately quiet. */}
-          {!!monthlyPkg && (
+          {/* Annual: quieter, but it carries its own number because it is
+              genuinely the cheaper plan. A bare "or pay annually" link would
+              hide the one fact that makes it worth choosing. */}
+          {!!annualPkg && (
             <TouchableOpacity
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
-                setBillingPeriod("monthly");
+                setBillingPeriod("annual");
               }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.9}
               accessibilityRole="radio"
-              accessibilityState={{ selected: billingPeriod === "monthly" }}
-              style={{ alignSelf: "center" }}
+              accessibilityState={{ selected: billingPeriod === "annual" }}
+              style={{
+                borderWidth: billingPeriod === "annual" ? 2 : 1,
+                borderColor: billingPeriod === "annual" ? accent : theme.border,
+                backgroundColor:
+                  billingPeriod === "annual" ? accent + "0F" : "transparent",
+                borderRadius: 14,
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+              }}
             >
-              <Text
-                style={{
-                  color: billingPeriod === "monthly" ? theme.foreground : theme.mutedForeground,
-                  fontSize: 14,
-                  fontWeight: billingPeriod === "monthly" ? "800" : "600",
-                  textDecorationLine: billingPeriod === "monthly" ? "none" : "underline",
-                }}
-              >
-                {billingPeriod === "monthly"
-                  ? `Monthly selected — ${monthlyPkg.product.priceString}/mo`
-                  : `or pay monthly — ${monthlyPkg.product.priceString}/mo`}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: billingPeriod === "annual" ? "800" : "700",
+                  }}
+                >
+                  {billingPeriod === "annual" ? "Annual selected" : "Or pay yearly"}
+                  {annualPerMonth ? ` — ${annualPerMonth}` : ""}
+                </Text>
+                <Text
+                  style={{ color: theme.mutedForeground, fontSize: 13, marginTop: 2 }}
+                >
+                  {annualPkg.product.priceString} billed annually
+                </Text>
+              </View>
+              {annualSavings != null && (
+                <View
+                  style={{
+                    backgroundColor: accent,
+                    borderRadius: 999,
+                    paddingHorizontal: 9,
+                    paddingVertical: 3,
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
+                    SAVE {annualSavings}%
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
 
@@ -744,7 +830,7 @@ export default function PaywallScreen() {
             >
               <Mail size={15} color={theme.mutedForeground} />
               <Text style={{ color: theme.mutedForeground, fontSize: 13.5 }}>
-                We'll email you before it renews
+                Cancel anytime · we'll email you before it renews
               </Text>
             </View>
           )}
@@ -802,6 +888,22 @@ export default function PaywallScreen() {
             {hasFreeTrial
               ? "Apple will ask you to confirm. You won't be charged today."
               : `${priceString} per ${periodSuffix}. Cancel anytime.`}
+          </Text>
+
+          {/* Social proof at the decision point. It lived only on an
+              onboarding screen before, which is the one place it could not
+              influence a purchase. The figure is Trace's web member base —
+              the same product, a different front door — so the wording says
+              "travelers", never "app users". */}
+          <Text
+            style={{
+              textAlign: "center",
+              fontSize: 12.5,
+              color: theme.mutedForeground,
+              fontWeight: "600",
+            }}
+          >
+            Join 30,000+ travelers using Trace
           </Text>
 
           <View
