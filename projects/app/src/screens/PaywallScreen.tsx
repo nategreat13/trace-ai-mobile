@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   useColorScheme,
+  useWindowDimensions,
   Linking,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -71,6 +72,20 @@ export default function PaywallScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
+
+  /**
+   * This screen deliberately does not scroll — the whole offer is meant to be
+   * takeable in one look, and a paywall that scrolls asks the user to work
+   * for it. The cost of that choice is that overflow clips the CTA rather
+   * than hiding copy, so the layout has to fit the shortest device we ship to.
+   *
+   * Budgeted against an iPhone SE (667pt tall, ~647 usable): the full layout
+   * needs ~724pt with five benefit rows and ~668 with three. So short screens
+   * get the three strongest rows and tighter type; everything from an iPhone
+   * 13 up gets all five.
+   */
+  const { height: screenH } = useWindowDimensions();
+  const compact = screenH < 740;
 
   const {
     offerings,
@@ -576,15 +591,28 @@ export default function PaywallScreen() {
   const benefits: string[] = isBusinessPaywall
     ? [
         "Business-class fares at economy prices",
-        "Alerts the moment a premium seat drops",
-        "Every destination and travel guide, unlocked",
+        "Price alerts on the routes you save",
+        "Every destination unlocked",
+        "Unlimited swiping",
+        "Travel guides for every city",
       ]
     : [
+        // The airport is deliberately absent — the value line directly above
+        // already names it ("You're seeing 5 of 115 destinations from SLC"),
+        // and repeating it here pushes this to two lines for no new
+        // information.
         destinationCount
-          ? `All ${destinationCount} destinations from ${profile?.homeAirport ?? "your airport"} — not just 5`
-          : `Every destination from ${profile?.homeAirport ?? "your airport"} — not just 5`,
-        "Alerts the moment any of them drops in price",
-        "Travel guides and trip details for every city",
+          ? `All ${destinationCount} destinations, not just 5`
+          : "Every destination, not just 5",
+        // NOT "alerts the moment any of them drops". Technically true and
+        // commercially wrong: to someone who has never used the product it
+        // promises a hundred notifications a day, which reads as a cost
+        // rather than a benefit. Alerts are opt-in per destination, so say
+        // that — the promise is control, not volume.
+        "Price alerts on the trips you save",
+        "Search and filter the whole feed",
+        "Unlimited swiping",
+        "Travel guides for every city",
       ];
 
   /**
@@ -624,16 +652,23 @@ export default function PaywallScreen() {
           <X color={isForcedView ? theme.mutedForeground : theme.foreground} size={22} />
         </TouchableOpacity>
 
-        <View style={{ flex: 1, paddingHorizontal: 24, justifyContent: "center", gap: 20 }}>
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: 24,
+            justifyContent: "center",
+            gap: compact ? 12 : 16,
+          }}
+        >
           {/* 1 — what you get, in their numbers */}
           <View style={{ gap: 8 }}>
             <Text
               style={{
                 color: theme.foreground,
-                fontSize: 32,
+                fontSize: compact ? 27 : 32,
                 fontWeight: "800",
                 letterSpacing: -0.8,
-                lineHeight: 37,
+                lineHeight: compact ? 32 : 37,
               }}
             >
               {heroContent.headline}
@@ -643,15 +678,18 @@ export default function PaywallScreen() {
             </Text>
           </View>
 
-          {/* 2 — what the padlocks were hiding */}
-          <View style={{ gap: 11 }}>
-            {benefits.map((b) => (
+          {/* 2 — what the padlocks were hiding.
+                 Five rows, each deliberately short enough to hold one line:
+                 this screen does not scroll, so every row has to earn its
+                 height and none of them may wrap. */}
+          <View style={{ gap: compact ? 7 : 9 }}>
+            {(compact ? benefits.slice(0, 3) : benefits).map((b) => (
               <View
                 key={b}
                 style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
               >
                 <Check
-                  size={17}
+                  size={16}
                   color={accent}
                   strokeWidth={3}
                   style={{ marginTop: 2 }}
@@ -659,8 +697,8 @@ export default function PaywallScreen() {
                 <Text
                   style={{
                     color: theme.foreground,
-                    fontSize: 15,
-                    lineHeight: 21,
+                    fontSize: compact ? 13.5 : 14.5,
+                    lineHeight: compact ? 18 : 19,
                     flex: 1,
                     fontWeight: "500",
                   }}
