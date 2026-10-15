@@ -43,6 +43,12 @@ interface AccountBeatProps {
    * screen, so the user would be stuck holding an email they can't use.
    */
   onSignInInstead?: () => void;
+  /**
+   * Offered alongside sign-in for an already-registered email. Most people who
+   * hit that error have forgotten the password that goes with it, and the
+   * sign-in screen's reset link is unreachable from inside onboarding.
+   */
+  onResetPassword?: () => void;
 }
 
 const KEEPS = [
@@ -58,6 +64,7 @@ export default function AccountBeat({
   busy,
   firstName,
   onSignInInstead,
+  onResetPassword,
 }: AccountBeatProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
@@ -129,6 +136,17 @@ export default function AccountBeat({
                 </Text>
               </TouchableOpacity>
             ) : null}
+            {onResetPassword ? (
+              <TouchableOpacity
+                onPress={onResetPassword}
+                disabled={busy}
+                style={styles.reset}
+              >
+                <Text style={[styles.resetText, { color: theme.mutedForeground }]}>
+                  Forgot password? Email me a reset link
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : (
           <Text style={[styles.hint, { color: theme.mutedForeground }]}>
@@ -172,6 +190,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   signInText: { fontSize: 14.5, fontWeight: "700" },
+  reset: { alignItems: "center", paddingVertical: 4 },
+  resetText: { fontSize: 13.5, fontWeight: "600", textDecorationLine: "underline" },
   busy: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
   busyText: { fontSize: 14 },
 });

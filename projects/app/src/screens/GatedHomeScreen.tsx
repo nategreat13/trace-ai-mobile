@@ -142,17 +142,21 @@ export default function GatedHomeScreen() {
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
   const { updateProfile } = useProfile();
-  const { offerings, premiumAnnualPackage, isTrialEligibleFor } = useIAP();
+  const { offerings, premiumMonthlyPackage, premiumAnnualPackage, isTrialEligibleFor } =
+    useIAP();
 
-  // Same gate the paywall applies, so this button never promises a trial the
-  // purchase sheet won't honour.
-  const annualIntro = premiumAnnualPackage?.product.introPrice ?? null;
+  // Same gate the paywall applies, against the plan the paywall opens on
+  // (monthly), so this button never promises a trial the purchase sheet won't
+  // honour. It read the annual plan while annual was the default; with the
+  // trial moving to monthly, that would have turned "Try Free" into "Unlock
+  // every deal" on the button a third of viewers tap.
+  const planIntro = premiumMonthlyPackage?.product.introPrice ?? null;
   const hasFreeTrial =
     trialsEnabledByRemote(offerings?.current) &&
-    isTrialEligibleFor(premiumAnnualPackage?.product.identifier) &&
-    !!annualIntro &&
-    annualIntro.price === 0;
-  const trialLabel = annualIntro ? formatTrialDuration(annualIntro) : "";
+    isTrialEligibleFor(premiumMonthlyPackage?.product.identifier) &&
+    !!planIntro &&
+    planIntro.price === 0;
+  const trialLabel = planIntro ? formatTrialDuration(planIntro) : "";
 
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);

@@ -48,7 +48,7 @@ const COMPLETE_REGISTRATION = "fb_mobile_complete_registration";
 const START_TRIAL = "StartTrial";
 
 type Logger = {
-  logEvent: (name: string, a?: unknown, b?: unknown) => void;
+  logEvent: (name: string, ...args: Array<number | Record<string, string | number>>) => void;
   setUserID: (id: string) => void;
   setUserData: (data: Record<string, string | null>) => void;
 };
@@ -111,9 +111,11 @@ export function logMetaStartTrial(
   currency: string | null,
 ): void {
   try {
-    logger()?.logEvent(START_TRIAL, {
+    // The value is the SDK's separate valueToSum argument. Passed inside the
+    // parameters object it arrives as a custom parameter and the event's
+    // value is 0.
+    logger()?.logEvent(START_TRIAL, valueUsd ?? 0, {
       fb_currency: currency ?? "USD",
-      _valueToSum: valueUsd ?? 0,
     });
   } catch {
     /* best-effort */

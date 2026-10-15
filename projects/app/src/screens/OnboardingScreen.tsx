@@ -17,9 +17,10 @@ import {
   getUserProfile,
 } from "../services/firestore";
 import { fetchDeals } from "../services/dealsApi";
-import { linkEmailPassword, login } from "../services/auth";
+import { linkEmailPassword, login, requestPasswordReset } from "../services/auth";
 import { auth } from "../services/firebase";
 import { trackSignup } from "../services/trackingApi";
+import { identifyForMeta, logMetaCompleteRegistration } from "../lib/metaAppEvents";
 import {
   DEAL_TYPES,
   TIMEFRAMES,
@@ -231,11 +232,21 @@ export default function OnboardingScreen() {
       const current = auth.currentUser;
       if (current) {
         trackSignup({ userId: current.uid, email, country });
+        // The Meta app event, alongside the server's website event above.
+        // This is where nearly every account is created now; the old
+        // front-door form in LoginScreen only runs when anonymous sign-in
+        // fails, so logging only there would leave the app campaign's goal
+        // event at close to zero.
+        identifyForMeta(current.uid, email);
+        logMetaCompleteRegistration("email");
       }
       return true;
     } catch (err: any) {
       const code = err?.code || "";
-      if (code === "auth/email-already-in-use") setEmailTaken(true);
+      if (code === "auth/email-already-in-use") {
+        setEmailTaken(true);
+        logEvent("signup_existing_email", { at: "onboarding_end" });
+      }
       setAccountError(
         code === "auth/email-already-in-use"
           ? "That email already has a Trace account."
@@ -271,8 +282,32 @@ export default function OnboardingScreen() {
       logEvent("login", { method: "email", at: "onboarding_end" });
     } catch {
       setAccountError(
-        "That password doesn't match the account for this email. Try again, or reset it from the sign-in screen.",
+        "That password doesn't match the account for this email. Try again, or email yourself a reset link below.",
       );
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  /**
+   * Password reset without leaving onboarding. The sign-in screen has its own
+   * reset link, but an anonymous user mid-onboarding can't reach it, so an
+   * existing customer who'd forgotten their password had no way in: 1.10.0's
+   * first week had two, and neither got in. They come back to this step with
+   * the new password and use Sign in instead.
+   */
+  const resetPassword = async () => {
+    const email = account.email.trim();
+    if (!email) return;
+    setLinking(true);
+    try {
+      await requestPasswordReset(email);
+      logEvent("password_reset_requested", { at: "onboarding_end" });
+      setAccountError(
+        `We've emailed a reset link to ${email}. Set a new password from it, then come back here and tap Sign in instead.`,
+      );
+    } catch {
+      setAccountError("We couldn't send the reset email. Check your connection and try again.");
     } finally {
       setLinking(false);
     }
@@ -288,8 +323,9 @@ export default function OnboardingScreen() {
       generatedPersonality ||
       computePersonality(data.dealTypes);
 
-    // The name step is required (canProceed gates it), so by the time
-    // we reach here both fields are filled.
+    // Onboarding no longer asks for a name, so for a new user these are empty
+    // and displayName falls back to the placeholder. EditPreferences still
+    // carries the existing name through.
     const fullName = [
       data.firstName.trim() ? capitalizeName(data.firstName) : "",
       data.lastName.trim() ? capitalizeName(data.lastName) : "",
@@ -643,6 +679,7 @@ export default function OnboardingScreen() {
           busy={linking}
           firstName={data.firstName.trim() || undefined}
           onSignInInstead={emailTaken ? signInInstead : undefined}
+          onResetPassword={emailTaken ? resetPassword : undefined}
         />
       ),
     },
