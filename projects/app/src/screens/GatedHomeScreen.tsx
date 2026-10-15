@@ -30,7 +30,7 @@ import { useIAP } from "../hooks/useIAP";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
-import type { Deal } from "@trace/shared";
+import { firstNameOf, type Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -158,9 +158,10 @@ export default function GatedHomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const airport = profile?.homeAirport ?? "";
-  const firstName = (profile?.firstName || profile?.displayName || "").split(
-    " ",
-  )[0];
+  // Never greet someone by the placeholder. `firstNameOf` returns null when
+  // there's no real name, and FeedReveal drops the name from the sentence —
+  // "Your feed is ready" rather than "Travel, your feed is ready".
+  const firstName = firstNameOf(profile) ?? "";
 
   useEffect(() => {
     logEvent("gated_home_viewed", { home_airport: airport || null });

@@ -14,7 +14,20 @@ aiRoutes.post("/ai/deal-fit", async (req: Request, res: Response) => {
       return;
     }
 
-    const firstName = (profile.displayName || "Traveler").split(" ")[0];
+    // Guard the placeholder explicitly rather than splitting it: most
+    // accounts have no name since the name screen came out of onboarding,
+    // and splitting "Travel Explorer" yields "Travel" — which is how the
+    // app ended up greeting people as "Travel, your feed is ready".
+    //
+    // Inlined rather than importing `firstNameOf` from @trace/shared: this
+    // project's node_modules holds a stale COPY of that package rather than
+    // a workspace symlink, so it cannot see new exports. Worth fixing, but
+    // not by coupling a one-line guard to it.
+    const rawName = (profile.displayName || "").trim();
+    const firstName =
+      !rawName || rawName === "Travel Explorer"
+        ? "Traveler"
+        : rawName.split(/\s+/)[0];
     const personality = (() => {
       try { return JSON.parse(profile.travelPersonality || "{}"); } catch { return {}; }
     })();

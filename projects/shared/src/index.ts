@@ -15,3 +15,10 @@ export {
   allCollectionsFor,
 } from "./collections";
 export type { TraceEnv, CollectionName } from "./collections";
+
+export {
+  PLACEHOLDER_DISPLAY_NAME,
+  isPlaceholderName,
+  realDisplayName,
+  firstNameOf,
+} from "./displayName";

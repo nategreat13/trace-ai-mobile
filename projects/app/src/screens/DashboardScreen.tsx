@@ -14,6 +14,7 @@ import {
   PanResponder,
   Share,
 } from "react-native";
+import { realDisplayName } from "@trace/shared";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -75,10 +76,10 @@ export default function DashboardScreen() {
 
   // Resolve the sender name for deal sharing. Prefer Firebase Auth
   // displayName (set by Google/Apple sign-in), fall back to Firestore profile
-  // name, but filter out "Travel Explorer" (the onboarding placeholder).
+  // name — firstNameOf drops the placeholder and blank names for us.
   const resolvedUserName = (() => {
     const raw = user?.displayName || profile?.displayName;
-    return raw && raw !== "Travel Explorer" ? raw : null;
+    return realDisplayName({ displayName: raw });
   })();
 
   /**
