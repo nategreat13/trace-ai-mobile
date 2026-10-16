@@ -15,6 +15,7 @@ import {
 } from "../lib/trial";
 import { useAuth } from "./AuthContext";
 import { logEvent } from "../lib/analytics";
+import { PRODUCT_IDS as IAP_PRODUCT_IDS } from "../hooks/useIAP";
 
 /**
  * App-wide "can this user start a free trial right now?" signal.
@@ -54,12 +55,8 @@ interface TrialState extends TierTrial {
 const EMPTY_TIER: TierTrial = { available: false, label: "", labelLong: "" };
 const EMPTY_STATE: TrialState = { ...EMPTY_TIER, business: EMPTY_TIER };
 
-const PRODUCT_IDS = [
-  "trace_premium_annual",
-  "trace_premium_monthly",
-  "trace_business_annual",
-  "trace_business_monthly",
-];
+// Same list as the paywall's, including the 1.11.0 _v2 Premium products.
+const PRODUCT_IDS = [...IAP_PRODUCT_IDS];
 
 const TrialContext = createContext<TrialState>(EMPTY_STATE);
 

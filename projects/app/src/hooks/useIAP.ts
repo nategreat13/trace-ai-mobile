@@ -60,9 +60,22 @@ interface UseIAPResult {
   restore: () => Promise<CustomerInfo | null>;
 }
 
-const PRODUCT_IDS = [
-  "trace_premium_annual",
-  "trace_premium_monthly",
+/**
+ * Premium moved to new App Store products in 1.11.0 ($4.99 monthly, $35.99
+ * annual). Apple applies a price cut to every existing subscriber, so new
+ * products were the only way to keep current subscribers on what they signed
+ * up for. The originals stay in the RevenueCat offering because older app
+ * versions look them up by name; this version prefers the _v2 products and
+ * falls back to the originals, which is also what Android uses (Play keeps
+ * existing subscribers on their old price, so its IDs never changed).
+ */
+export const PREMIUM_MONTHLY_IDS = ["trace_premium_monthly_v2", "trace_premium_monthly"];
+export const PREMIUM_ANNUAL_IDS = ["trace_premium_annual_v2", "trace_premium_annual"];
+
+/** Every product whose intro-offer eligibility the paywall may need. */
+export const PRODUCT_IDS = [
+  ...PREMIUM_ANNUAL_IDS,
+  ...PREMIUM_MONTHLY_IDS,
   "trace_business_annual",
   "trace_business_monthly",
 ] as const;
@@ -177,8 +190,11 @@ export function useIAP(): UseIAPResult {
         p.product.identifier.startsWith(productId + ":")
     ) ?? null;
 
-  const premiumAnnualPackage = findPackage("trace_premium_annual");
-  const premiumMonthlyPackage = findPackage("trace_premium_monthly");
+  const findFirst = (ids: string[]) =>
+    ids.map(findPackage).find((p) => p != null) ?? null;
+
+  const premiumAnnualPackage = findFirst(PREMIUM_ANNUAL_IDS);
+  const premiumMonthlyPackage = findFirst(PREMIUM_MONTHLY_IDS);
   const businessAnnualPackage = findPackage("trace_business_annual");
   const businessMonthlyPackage = findPackage("trace_business_monthly");
 
