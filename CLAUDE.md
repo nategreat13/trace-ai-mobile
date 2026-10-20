@@ -18,7 +18,7 @@ For every action below, propose what you'll do and wait for an explicit go-ahead
 | Firestore rules deploy | **Yes** | `firebase deploy --only firestore:rules` |
 | Firestore indexes deploy | **Yes** | `firebase deploy --only firestore:indexes` |
 | Storage rules deploy | **Yes** | `firebase deploy --only storage` |
-| Web app deploy | **Yes** | `vercel --prod` |
+| Web app deploy | **Yes** | `vercel --prod --yes --archive=tgz --global-config ~/.vercel-trace` |
 | App binary build | **Yes** | `eas build --profile production` |
 | App Store / Play submission | **Yes** | `eas submit`, `eas build --auto-submit` |
 | Secret changes in production | **Yes** | `firebase functions:secrets:set` (live), Vercel env edits |
@@ -28,6 +28,19 @@ For every action below, propose what you'll do and wait for an explicit go-ahead
 | Documentation / planning | **No** | This file, `*.md`, discussion |
 
 When in doubt, ASK. The cost of a confirmation prompt is much lower than the cost of an unwanted production change.
+
+## Vercel (subscribe site)
+
+`subscribe.tracetravel.co` is the Vercel project `trace-travel-ai` in Trevor's **Trace Travel** team (slug `trace-travel`). Nate's default Vercel CLI login is a different team (Giggs Development) that can't see this project; the Trace login is stored separately in `~/.vercel-trace`.
+
+1. **Every `vercel` command gets `--global-config ~/.vercel-trace`**: deploys, `vercel env ls/add/pull`, `vercel logs`, `vercel inspect`, all of it. Deploy (from repo root, approval required): `vercel --prod --yes --archive=tgz --global-config ~/.vercel-trace`.
+2. **If the CLI says it can't find the project, or offers to set up or link a new one, stop and tell Nate.** With `--yes` it would create a stray project in the wrong account.
+3. **Never run `vercel login` or `vercel logout`.** Re-linking needs Nate's OK first; the command is `vercel link --global-config ~/.vercel-trace`, choosing the Trace Travel team and the existing `trace-travel-ai` project.
+4. **Never deploy from `projects/web/`.** Its `.vercel` link points to an old, separate project called `web` on Nate's personal account, not the live site.
+5. **Don't connect the GitHub repo to the Vercel project.** It's on a paid team, and a GitHub-triggered deploy by a commit author who isn't a team member can add a paid seat.
+6. **Leave the `tracetravel.co` domain on Nate's personal Vercel account alone**: `subscribe.tracetravel.co` depends on it. Don't change any DNS records.
+
+`www.tracetravel.co` is moving from Webflow to a separate Vercel project, `trace-web`, in the same Trace Travel team. It isn't deployed from this repo.
 
 ## Native deps require a runtimeVersion bump
 
@@ -60,7 +73,7 @@ Key infrastructure:
   - Prod: `https://api-7l7vojyykq-uc.a.run.app` (function name `api`)
   - Staging: `https://apistaging-7l7vojyykq-uc.a.run.app` (function name `apiStaging`, same code, env-wrapped)
 - **Web admin**: `https://subscribe.tracetravel.co` (URLs at the root — `/login`, `/analytics`, `/users`, etc. The old `/admin/X` URLs 308-redirect for backward compat. Auth via `ANALYTICS_PASSWORD` env.)
-- **Vercel project**: `trace-travel-ai` (org `gyginathan-5364s-projects`). Linked from **repo root** (not `projects/web/`); deploys via `vercel --prod --yes --archive=tgz` from the root.
+- **Vercel project**: `trace-travel-ai` (ID `prj_lKjnymwru0BgxgeCBrWqcbMwBF3p`) in Trevor's **Trace Travel** team (slug `trace-travel`, ID `team_CNky3bLoj7BjnytDeqrOvz9u`). Moved there from Nate's personal account on Oct 20, 2026, with its domain and env vars. Linked from **repo root** (not `projects/web/`). Every `vercel` command needs `--global-config ~/.vercel-trace` — see "Vercel (subscribe site)" above.
 - **EAS project**: `trace-ai-mobile` (owner `nategreat13`)
 - **iOS bundle**: `co.tracetravel.aiapp`
 - **Android package**: `co.tracetravel.aiapp`
@@ -124,7 +137,7 @@ If you're in a session with Trevor:
 - **Firestore writes from clients**: Most collections are deny-all to clients via rules. Server-only collections include `analyticsExclusions`, `adminAuditLog`, `promoCodes`, `promoRedemptions`, `notificationTemplates`, `notificationLog`. The `events` collection has narrow client-write rules (own userId or "guest", no `source` field).
 - **Firestore reads/writes anywhere**: always go through `col(env, name)` (client SDK) or `colRef(name)` (Admin SDK). Never `.collection("literal")`. The CI guard will fail your build if you do. See `STAGING.md`.
 - **Server build**: bundles to a single `projects/server/dist/index.js` via `esbuild` (not raw `tsc` output). `@trace/shared` is inlined; only true externals (`firebase-admin`, `firebase-functions`, `stripe`, `cors`, `express`, `expo-server-sdk`, `@anthropic-ai/sdk`) stay in `package.json`. The build script does `tsc --noEmit && esbuild …` so you still get full typecheck.
-- **Web deploy**: from **repo root**, `vercel --prod --yes --archive=tgz`. NOT from `projects/web/`. The `.vercel/` link lives at repo root and `vercel.json` configures the workspace-aware build.
+- **Web deploy**: from **repo root**, `vercel --prod --yes --archive=tgz --global-config ~/.vercel-trace` (needs approval, like every deploy). NOT from `projects/web/`. The `.vercel/` link lives at repo root and `vercel.json` configures the workspace-aware build. Read "Vercel (subscribe site)" above before running any `vercel` command.
 - **Customer-facing payments**: `lib/stripe.ts` and the `/api/{cancel,preview-switch,subscribe,switch-plan,webhook}` route handlers were deleted. RevenueCat is the only payments path. RC webhook lives at `projects/server/src/routes/revenuecat-webhook.ts` (Cloud Function endpoint, not a web route).
 
 ## Common diagnostic commands (safe to run without asking)

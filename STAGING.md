@@ -196,13 +196,20 @@ Files added to support this:
 - `.vercelignore` (repo root) — excludes `projects/app`, `projects/server`, `node_modules`, `dist`, etc. Without this the upload exceeds Vercel's 15k file limit.
 - `.vercel/` lives at repo root (not `projects/web/`) — that's where the project link is now.
 
-Deploy command:
+Since Oct 20, 2026 the project lives in Trevor's **Trace Travel** Vercel team (slug `trace-travel`, ID `team_CNky3bLoj7BjnytDeqrOvz9u`); it moved from Nate's personal account with the same project ID (`prj_lKjnymwru0BgxgeCBrWqcbMwBF3p`), domain and env vars. Nate's default CLI login is a different team that can't see it, so the Trace login lives in `~/.vercel-trace` and **every `vercel` command needs `--global-config ~/.vercel-trace`** (deploys, `vercel env`, `vercel logs`, `vercel inspect`).
+
+Deploy command (needs Nate's explicit go-ahead):
 ```
-vercel --prod --yes --archive=tgz
+vercel --prod --yes --archive=tgz --global-config ~/.vercel-trace
 ```
 (Run from repo root. The `--archive=tgz` flag is required because of the file-count limit.)
 
-If you ever need to re-link from scratch: `cd /Users/nate/src/trace-ai-mobile && vercel link` and choose the existing `trace-travel-ai` project.
+- If the CLI says it can't find the project, or offers to set up or link a new one, **stop and tell Nate**. With `--yes` it would create a stray project in the wrong account.
+- Don't deploy from `projects/web/`: its `.vercel` link points to an old, separate project called `web` on Nate's personal account, not the live site.
+- Don't run `vercel login` / `vercel logout`, and don't connect the GitHub repo to the Vercel project (a GitHub-triggered deploy by a non-member commit author can add a paid seat on the team).
+- Leave the `tracetravel.co` domain on Nate's personal Vercel account alone; `subscribe.tracetravel.co` depends on it.
+
+If the project ever needs re-linking, ask Nate first. Then, from the repo root: `vercel link --global-config ~/.vercel-trace`, choose the **Trace Travel** team and the existing `trace-travel-ai` project.
 
 ### Firebase Functions URL gotcha
 
