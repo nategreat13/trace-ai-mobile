@@ -8,7 +8,7 @@
  *
  * Categories:
  *   deals        - hot_deal_alert, deal_alert_match
- *   account      - trial_ending_*, billing_issue, subscription_renewal_24h,
+ *   account      - billing_issue, subscription_renewal_24h,
  *                  welcome_to_premium
  *   reengagement - welcome, inactivity_3d/7d/14d
  *   offers       - premium_nudge_*, business_class_nudge_*, discount_on_*
@@ -29,8 +29,6 @@ export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
 
   // Account lifecycle — anything tied to subscription state changes
   // the user needs to act on or be informed about.
-  trial_ending_3d: "account",
-  trial_ending_24h: "account",
   billing_issue: "account",
   subscription_renewal_24h: "account",
   welcome_to_premium: "account",

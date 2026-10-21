@@ -9,7 +9,7 @@ import { colRef } from "../firebase";
  * tweak title/body/deepLink/enabled without a deploy.
  *
  * Schema (collection: notificationTemplates):
- *   key: string               // doc id, e.g. "welcome", "trial_ending"
+ *   key: string               // doc id, e.g. "welcome", "trial_day1"
  *   title: string             // mustache-like {{vars}} interpolation
  *   body: string              // same
  *   deepLink: string | null   // routes via App.tsx handleNotificationDeepLink
@@ -75,26 +75,6 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
     description:
       "Day 3 of a 7-day trial (Oct 2026). Mid-trial reminder of what Premium shows them, using a real deal.",
     variables: ["homeAirport", "destination", "price", "discount", "dealCount"],
-  },
-  trial_ending_3d: {
-    key: "trial_ending_3d",
-    title: "Trace",
-    body: "Keep unlimited swipes and every deal from your home airport. Subscribe before it ends.",
-    deepLink: "/paywall",
-    enabled: false,
-    description:
-      "Sent when the user's trial expires in ~3 days. First warning — gives time to decide before the last-minute 24h push.",
-    variables: [],
-  },
-  trial_ending_24h: {
-    key: "trial_ending_24h",
-    title: "Trace",
-    body: "Subscribe to keep unlimited swipes, saves, and deal alerts.",
-    deepLink: "/paywall",
-    enabled: false,
-    description:
-      "Sent when the user's trial expires within the next 24 hours. Highest-leverage trial-to-paid moment.",
-    variables: [],
   },
   billing_issue: {
     key: "billing_issue",
@@ -342,8 +322,6 @@ export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
   cancel_survey: "account",
   trial_day1: "deals",
   trial_day3: "deals",
-  trial_ending_3d: "account",
-  trial_ending_24h: "account",
   billing_issue: "account",
   subscription_renewal_24h: "account",
   welcome_to_premium: "account",

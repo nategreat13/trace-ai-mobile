@@ -10,13 +10,13 @@ You now have full control over push notifications without writing any code. Here
 
 1. **The app** asks each user for permission to send notifications (after they finish onboarding). If they say yes, the app remembers their device.
 2. **The admin portal** (the same dashboard at `subscribe.tracetravel.co/admin` you already use) has a new **Notifications** tab. From there you can:
-    - Edit the wording of any "auto-fire" notification (e.g., the welcome push, the trial-ending warning).
+    - Edit the wording of any "auto-fire" notification (e.g., the welcome push, the billing-issue warning).
     - Turn each one on or off without involving Nate.
     - Send a one-off announcement to all users (or just Premium users, or just iOS users, etc.).
     - See what was sent and how many people got it.
 3. **Five auto-fire notifications** are wired up and ready for you to enable:
     - **Welcome** — a day after a user signs up.
-    - **Trial ending in 24 hours** — to remind people to subscribe.
+    - ~~**Trial ending in 24 hours**~~ — removed Oct 2026: store trials renew on their own, so it told subscribers to subscribe.
     - **Billing issue** — when someone's payment fails.
     - **Inactivity 3 days** — to pull people back into the app.
     - **Inactivity 7 days** — second-chance reactivation.
@@ -31,7 +31,7 @@ Two kinds of notifications exist:
 
 | Type | Example | How it works |
 |------|---------|--------------|
-| **Triggered** (auto) | "Your trial ends tomorrow" | Fires automatically when something happens (signup, trial nearly done, etc). You set the wording once and it sends itself forever. |
+| **Triggered** (auto) | "Welcome to Trace" | Fires automatically when something happens (signup, payment failed, etc). You set the wording once and it sends itself forever. |
 | **Broadcast** (one-off) | "We just launched business class deals!" | You pick the audience and write the message right now. Sends to everyone matching, immediately. |
 
 Both kinds let you choose where the user lands when they tap the notification — Swipe deck, Dashboard, Paywall, etc.
@@ -42,15 +42,15 @@ Both kinds let you choose where the user lands when they tap the notification �
 
 Open `https://subscribe.tracetravel.co/admin/notifications`. You'll see something like this (in plain English):
 
-- A **list of triggered notifications** (welcome, trial ending, etc.) with each one's status (enabled / disabled) and last edit time.
+- A **list of triggered notifications** (welcome, trial day 1, etc.) with each one's status (enabled / disabled) and last edit time.
 - A **"Compose broadcast"** button (top right) — for one-off announcements.
 - A **"History"** button (top right) — to see what was sent recently.
 
 ### Editing a triggered notification
 
-1. Click any row in the list (e.g., **trial_ending_24h**).
+1. Click any row in the list (e.g., **welcome**).
 2. Edit the **Title** and **Body**. These are what shows up on the lock screen.
-3. Optionally pick a **Deep link** — where the app opens when the user taps the notification. (Most useful: the trial-ending one should deep-link to **Paywall**.)
+3. Optionally pick a **Deep link** — where the app opens when the user taps the notification.
 4. Check or uncheck **Enabled** at the bottom.
 5. Click **Save**.
 
@@ -300,13 +300,6 @@ Effort labels mean roughly:
 - *Suggested body:* "Lie-flat deals, 48-hour early access, and everything in Premium."
 - *Deep link:* Explore (with business filter)
 - *Why:* Same as above, tier-specific.
-
-**trial_ending_3d** — Trial users — *easy* (clone of existing 24h)
-- *When:* 3 days before trial ends (earlier reminder before the 24h one).
-- *Suggested title:* "{{daysLeft}} days left in your trial"
-- *Suggested body:* "Subscribe now to keep unlimited swipes."
-- *Deep link:* Paywall
-- *Why:* Two-stage trial-end reminders convert better than one. Catches people before "ending tomorrow" feels rushed.
 
 **annual_upgrade_nudge** — Monthly subscribers, 60+ days in — *easy*
 - *When:* User has been on monthly for 60+ days, hasn't yet switched to annual.

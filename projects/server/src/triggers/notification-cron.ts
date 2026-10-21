@@ -219,24 +219,23 @@ async function runDailyNotifications() {
     }
 
     // ─── Trial week (Oct 2026) ───────────────────────────────────
-    // Day 1 and day 3 of a 7-day trial, then the two "ending" reminders.
+    // Day 1 and day 3 of a 7-day trial.
     // The Oct 21 report had 5 of 8 new monthly trials turning off
     // auto-renew within days, with nothing from us during the week.
     //
     // Windows are a full 24h wide because this runs once a day: each user
-    // falls in each window exactly once. (The ending reminders used 2-hour
-    // windows here, which only caught trials ending within an hour of the
-    // 14:00 UTC run — fixed with this change.) Each window is centred on its
-    // label: for a 7-day trial, "day 1" arrives 12-36h after the start and
-    // "24h" arrives 12-36h before the end, never minutes before the charge.
+    // falls in each window exactly once. Each window is centred on its
+    // label: for a 7-day trial, "day 1" arrives 12-36h after the start.
     //
     // `trialEndDate` is the current period's end for EVERY store subscriber
     // (the webhook writes it on renewals too), so only profiles the webhook
     // marked `inTrial` are trial users. Without that check every paying
-    // monthly subscriber would get all four of these before each renewal.
-    // People who already turned off auto-renew skip the two "ending" pushes,
-    // which ask them to subscribe through a paywall they can't use while
-    // their trial is still active.
+    // monthly subscriber would get these before each renewal.
+    //
+    // There are deliberately no "your trial is ending" pushes. They were
+    // written for trials that lapsed unless the user subscribed; a store
+    // trial converts on its own, so they told subscribers to subscribe and
+    // mostly served as a reminder to cancel. Removed Oct 2026, never sent.
     {
       const DAY = 24 * 60 * 60 * 1000;
       const steps: {
@@ -244,12 +243,9 @@ async function runDailyNotifications() {
         fromDays: number;
         toDays: number;
         withDeal: boolean;
-        skipIfCancelled: boolean;
       }[] = [
-        { key: "trial_day1", fromDays: 5.5, toDays: 6.5, withDeal: true, skipIfCancelled: false },
-        { key: "trial_day3", fromDays: 3.5, toDays: 4.5, withDeal: true, skipIfCancelled: false },
-        { key: "trial_ending_3d", fromDays: 2.5, toDays: 3.5, withDeal: false, skipIfCancelled: true },
-        { key: "trial_ending_24h", fromDays: 0.5, toDays: 1.5, withDeal: false, skipIfCancelled: true },
+        { key: "trial_day1", fromDays: 5.5, toDays: 6.5, withDeal: true },
+        { key: "trial_day3", fromDays: 3.5, toDays: 4.5, withDeal: true },
       ];
       for (const step of steps) {
         // Skip the scan (and the deal fetches) while the template is off.
@@ -268,7 +264,6 @@ async function runDailyNotifications() {
             "notificationsEnabled",
             "notificationPreferences",
             "inTrial",
-            "autoRenewOff",
           )
           .get();
         let sent = 0;
@@ -279,11 +274,9 @@ async function runDailyNotifications() {
             notificationsEnabled?: boolean;
             notificationPreferences?: NotificationPrefs;
             inTrial?: boolean;
-            autoRenewOff?: boolean;
           };
           if (!data.userId || !data.notificationsEnabled) continue;
           if (data.inTrial !== true) continue;
-          if (step.skipIfCancelled && data.autoRenewOff === true) continue;
           if (step.withDeal && !data.homeAirport) continue;
           const vars: Record<string, string | number> = {
             homeAirport: data.homeAirport ?? "your airport",

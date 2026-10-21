@@ -163,7 +163,7 @@ export interface UserProfile {
   notificationPreferences?: {
     /** Deal-driven pushes — hot_deal_alert, deal_alert_match */
     deals?: boolean;
-    /** Account lifecycle — trial_ending_*, billing_issue, subscription_renewal_24h, welcome_to_premium */
+    /** Account lifecycle — billing_issue, subscription_renewal_24h, welcome_to_premium */
     account?: boolean;
     /** Re-engagement when inactive — welcome, inactivity_3d/7d/14d */
     reengagement?: boolean;

@@ -40,8 +40,6 @@ export const KNOWN_TEMPLATE_KEYS = [
   // Trial lifecycle
   "trial_day1",
   "trial_day3",
-  "trial_ending_3d",
-  "trial_ending_24h",
   // Free → Premium upsell sequence
   "premium_nudge",
   "premium_nudge_10d",
@@ -131,22 +129,6 @@ const TEMPLATE_DEFAULTS: Record<
     description:
       "Daily, to free users from before the Sept 2026 paywall gate (the only ones with free deals) who opened the app in the last 2 days and whose 24h free-swipe window has reset (5 deals a day). Stops once they stop opening the app. Turn on only after the 5-a-day app version is out: older versions allow 20.",
     variables: ["freeCount", "homeAirport", "destination", "price", "discount"],
-  },
-  trial_ending_3d: {
-    title: "Your trial ends in 3 days",
-    body: "Keep unlimited swipes and every deal from your home airport. Subscribe before it ends.",
-    deepLink: "/paywall",
-    description:
-      "Sent when the user's trial expires in ~3 days. First warning — gives time to decide before the last-minute 24h push.",
-    variables: [],
-  },
-  trial_ending_24h: {
-    title: "Your trial ends tomorrow",
-    body: "Subscribe to keep unlimited swipes, saves, and deal alerts.",
-    deepLink: "/paywall",
-    description:
-      "Sent when the user's trial expires within the next 24 hours. Highest-leverage trial-to-paid moment.",
-    variables: [],
   },
   billing_issue: {
     title: "There was a problem with your payment",
