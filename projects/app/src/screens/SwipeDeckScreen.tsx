@@ -59,6 +59,7 @@ import type { RootStackParamList } from "../navigation/types";
 import { realDisplayName } from "@trace/shared";
 import type { Deal } from "@trace/shared";
 import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
+import { GOOD_DEAL_MIN_DISCOUNT } from "../lib/goodDeals";
 import { createShare } from "../services/shareApi";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -185,6 +186,14 @@ export default function SwipeDeckScreen() {
   // unchanged) so a fresh day always correctly unblocks this without any
   // extra logic here.
   const dailyLimitReached = !isPremium && (profile?.dailySwipesToday || 0) >= MAX_DAILY_SWIPES;
+  // "in 6 hours" / "in 40 minutes" — when the rolling 24h window resets.
+  const nextFreeSwipesLabel = (() => {
+    if (!dailyLimitReached || !profile?.dailySwipeWindowStart) return null;
+    const resetAt = new Date(profile.dailySwipeWindowStart).getTime() + 24 * 60 * 60 * 1000;
+    const mins = Math.round((resetAt - Date.now()) / 60000);
+    if (!(mins > 0)) return null;
+    return mins >= 90 ? `in ${Math.round(mins / 60)} hours` : `in ${mins} minutes`;
+  })();
   // Guards the "welcome back" copy variant to the first upsell card of a
   // session only — later milestones in the same session fall back to the
   // standard premium pitch rather than repeating the away-time framing.
@@ -237,9 +246,21 @@ export default function SwipeDeckScreen() {
   // at all for those users.
   const deckRenderedFiredRef = useRef(false);
 
-  const activeDeals = useMemo(
-    () => (deckMode === "business" ? premiumDeals : deals),
-    [deckMode, premiumDeals, deals]
+  const activeDeals = useMemo(() => {
+    if (deckMode === "business") return premiumDeals;
+    if (isPremium) return deals;
+    // Free users get 5 swipes a day; make them count. Good deals (40%+ off)
+    // lead, in the deck's existing order, and everything else follows.
+    const good = deals.filter((d) => (d.discount_pct || 0) >= GOOD_DEAL_MIN_DISCOUNT);
+    const rest = deals.filter((d) => (d.discount_pct || 0) < GOOD_DEAL_MIN_DISCOUNT);
+    return [...good, ...rest];
+  }, [deckMode, premiumDeals, deals, isPremium]);
+
+  // How many good deals are still ahead of them — the number the daily limit
+  // screen holds up ("24 more great deals from SLC are waiting").
+  const goodDealsAhead = useMemo(
+    () => activeDeals.filter((d) => (d.discount_pct || 0) >= GOOD_DEAL_MIN_DISCOUNT).length,
+    [activeDeals],
   );
 
   // Classify a deal as domestic or international using the same logic as useDealFetch.
@@ -1009,10 +1030,15 @@ export default function SwipeDeckScreen() {
               >
                 <Text style={{ fontSize: 40, marginBottom: 16 }}>✋</Text>
                 <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground, textAlign: "center", marginBottom: 8 }}>
-                  You've hit today's {MAX_DAILY_SWIPES} swipes
+                  That's today's {MAX_DAILY_SWIPES} free deals
                 </Text>
                 <Text style={{ fontSize: 14, color: theme.mutedForeground, textAlign: "center", marginBottom: 24, lineHeight: 20 }}>
-                  Come back tomorrow, or upgrade for unlimited swipes.
+                  {Math.max(goodDealsAhead - currentIndex, 0) > 0
+                    ? `${Math.max(goodDealsAhead - currentIndex, 0)} more great deals from ${profile?.homeAirport ?? "your airport"} are waiting. `
+                    : ""}
+                  {nextFreeSwipesLabel
+                    ? `Your next ${MAX_DAILY_SWIPES} free deals arrive ${nextFreeSwipesLabel}.`
+                    : "More free deals tomorrow."}
                 </Text>
                 <TouchableOpacity
                   onPress={() => {
@@ -1021,7 +1047,7 @@ export default function SwipeDeckScreen() {
                   }}
                   style={{ backgroundColor: colors.brand.traceRed, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 28 }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>Upgrade for unlimited</Text>
+                  <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>See every deal — try free</Text>
                 </TouchableOpacity>
               </Animated.View>
             ) : /* Empty-filter state: the full deck has deals but none match the filter */

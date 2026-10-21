@@ -96,7 +96,13 @@ export const ASSISTANT_CARD_AT = 17;
  * live as an engagement signal the whole time the cap was gone, so this only
  * needed a gate + a screen, not new tracking.
  */
-export const MAX_DAILY_SWIPES = 20;
+//
+// Oct 2026: 5, with the swipe-first free tier. New users now get a first
+// session of 8 real deals during onboarding (not counted here), then 5 a day
+// — every one a good deal (40%+ off), since the free deck leads with those.
+// The limit is the main reason to pay, so it has to be felt; Trevor's call
+// over 20, which almost nobody reached.
+export const MAX_DAILY_SWIPES = 5;
 
 /**
  * Cloud Function URLs.

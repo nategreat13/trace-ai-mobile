@@ -597,21 +597,19 @@ export default function PaywallScreen() {
         "Travel guides for every city",
       ]
     : [
-        // The airport is deliberately absent — the value line directly above
-        // already names it ("You're seeing 5 of 115 destinations from SLC"),
-        // and repeating it here pushes this to two lines for no new
-        // information.
+        // Ordered by what people pay for (Oct 2026, Trevor): every great
+        // deal first — the daily limit is the free tier's real ceiling —
+        // then instant alerts, then search/explore. Guides are a nice extra,
+        // not a reason to subscribe, so they're last and drop off on short
+        // screens (compact shows three).
         destinationCount
-          ? `All ${destinationCount} destinations, not just 5`
-          : "Every destination, not just 5",
-        // NOT "alerts the moment any of them drops". Technically true and
-        // commercially wrong: to someone who has never used the product it
-        // promises a hundred notifications a day, which reads as a cost
-        // rather than a benefit. Alerts are opt-in per destination, so say
-        // that — the promise is control, not volume.
-        "Price alerts on the trips you save",
-        "Search and filter the whole feed",
-        "Unlimited swiping",
+          ? `All ${destinationCount} deals, not just 5 a day`
+          : "Every great deal, not just 5 a day",
+        // NOT "alerts the moment any of them drops" — to someone who has
+        // never used the product that promises a hundred notifications a
+        // day. Alerts are opt-in per trip; the promise is control.
+        "Instant alerts when your saved trips drop",
+        "Search and explore every destination",
         "Travel guides for every city",
       ];
 
