@@ -35,6 +35,8 @@ import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { roundedCount } from "../lib/roundedCount";
+import { goodDeals } from "../lib/goodDeals";
+import { requestSignInAfterSignOut } from "../lib/pendingSignIn";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import { firstNameOf, type Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
@@ -177,7 +179,10 @@ export default function GatedHomeScreen() {
 
   useEffect(() => {
     logEvent("gated_home_viewed", { home_airport: airport || null });
-    logMetaFeedReady();
+    // Only for people who came through the swipe-first onboarding. Accounts
+    // from 1.6-1.11 also land here; firing for them would add a burst of
+    // "tutorial completions" from existing installs to the new Meta goal.
+    if (profile?.feedReadyPending) logMetaFeedReady();
   }, []);
 
   useEffect(() => {
@@ -245,6 +250,22 @@ export default function GatedHomeScreen() {
    * out lands on Landing, whose "Sign in" opens the login screen.
    */
   const signInInstead = () => {
+    // Accounts with an email (everyone who signed up before the swipe-first
+    // flow) are already signed in; for them this is a plain sign-out, and
+    // their saves are safe on the account.
+    if (!user?.isAnonymous) {
+      Alert.alert("Sign out?", undefined, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign out",
+          style: "destructive",
+          onPress: () => {
+            logout().catch(() => {});
+          },
+        },
+      ]);
+      return;
+    }
     Alert.alert(
       "Sign in to your account?",
       "The trips you saved just now are only on this session and won't carry over.",
@@ -254,6 +275,7 @@ export default function GatedHomeScreen() {
           text: "Continue",
           onPress: () => {
             logEvent("feed_ready_sign_in", {});
+            requestSignInAfterSignOut();
             logout().catch(() => {});
           },
         },
@@ -268,7 +290,11 @@ export default function GatedHomeScreen() {
    * Phoenix they saved there has to read the same here. Past the paywall
    * nothing is repriced.
    */
-  const pricedDeals = useMemo(() => deals.map(repriceDeal), [deals]);
+  // "Great deals" (40%+ off) is decided on the REAL fares, then repriced for
+  // display. Repricing first made the filter a no-op, since funnel prices are
+  // always 45-72% off: every destination counted as great, and a row reading
+  // 60% off could open a paywall showing the deal's real 15%.
+  const pricedDeals = useMemo(() => goodDeals(deals).map(repriceDeal), [deals]);
   const pricedSaves = useMemo(() => savedDeals.map(repriceDeal), [savedDeals]);
 
   // Everything the page says about "the deals below" is computed from the
@@ -666,7 +692,7 @@ export default function GatedHomeScreen() {
             onPress={signInInstead}
           >
             <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-              Sign in
+              {user?.isAnonymous ? "Sign in" : "Sign out"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -693,6 +719,7 @@ export default function GatedHomeScreen() {
             ctaLabel: unlockLabel,
             similar: similarLocked(openDeal),
             countLabel: selection.totalDestinations >= 20 ? roundedCount(selection.totalDestinations) : undefined,
+            hasFreeTrial,
           }}
         />
       )}

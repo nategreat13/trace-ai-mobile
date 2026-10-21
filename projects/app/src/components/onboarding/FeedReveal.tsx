@@ -359,7 +359,10 @@ export default function FeedReveal({
           entering={FadeIn.duration(400).delay(900)}
           style={[styles.lockedStat, { color: theme.mutedForeground }]}
         >
-          Your saves are yours to keep.{" "}
+          {/* Only when they actually saved something. Older accounts and
+              anyone who skipped every card get two stand-in deals instead,
+              which they never picked. */}
+          {(savedDeals?.length ?? 0) > 0 ? "Your saves are yours to keep. " : ""}
           <Text style={{ color: theme.foreground, fontWeight: "700" }}>
             {roundedCount(totalDestinations - rows.filter((r) => !r.locked).length)} more great deals
           </Text>{" "}
