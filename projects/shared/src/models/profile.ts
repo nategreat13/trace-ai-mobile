@@ -62,6 +62,16 @@ export interface UserProfile {
    */
   accessGate?: "subscription_required";
   /**
+   * True from the end of onboarding until the user leaves "Your feed is
+   * ready" for the free app (Oct 2026 swipe-first flow). While set,
+   * RootNavigator roots them at that page — their first-session saves plus
+   * today's locked deals — instead of MainTabs. Replaces the hard gate above
+   * for new users: the page still sells, but "Keep swiping" now leads into a
+   * free tier rather than nowhere. `accessGate` is no longer stamped, and
+   * accounts that carry it are routed into the free tier like everyone else.
+   */
+  feedReadyPending?: boolean;
+  /**
    * Destinations this user was shown the last time they opened the gated
    * home screen. Diffed on the next visit to count what's genuinely new.
    *

@@ -236,7 +236,7 @@ export default function LandingScreen() {
           lineHeight: 36,
         }}
       >
-        Swipe right on{"\n"}your next trip.
+        The dating app{"\n"}for flight deals.
       </Text>
 
       {/* Card — centered in remaining space */}
@@ -285,8 +285,8 @@ export default function LandingScreen() {
             lineHeight: 22,
           }}
         >
-          Find the cheapest flights from your airport{" "}
-          <Text style={{ color: colors.brand.traceRed }}>right when they drop.</Text>
+          Swipe real deals from your airport.{" "}
+          <Text style={{ color: colors.brand.traceRed }}>Save the ones you'd take.</Text>
         </Text>
 
         <TouchableOpacity
@@ -305,7 +305,7 @@ export default function LandingScreen() {
           {starting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Get Started</Text>
+          <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Start swiping</Text>
           )}
         </TouchableOpacity>
 

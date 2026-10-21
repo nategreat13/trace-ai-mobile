@@ -42,10 +42,13 @@
  * showing an ATT prompt, not a bug here.
  */
 
+import { getItemRaw, setItemRaw } from "./storage";
+
 /** Meta's canonical event names. Strings, not SDK constants, so that a
  *  missing native module can't break the import. */
 const COMPLETE_REGISTRATION = "fb_mobile_complete_registration";
 const START_TRIAL = "StartTrial";
+const ADD_TO_WISHLIST = "fb_mobile_add_to_wishlist";
 
 type Logger = {
   logEvent: (name: string, ...args: Array<number | Record<string, string | number>>) => void;
@@ -116,6 +119,38 @@ export function logMetaStartTrial(
     // value is 0.
     logger()?.logEvent(START_TRIAL, valueUsd ?? 0, {
       fb_currency: currency ?? "USD",
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
+const FIRST_SAVE_KEY = "meta.firstSaveLogged";
+let firstSaveLogged = false;
+
+/**
+ * A user's first saved deal, as Meta's standard "Add to wishlist" event —
+ * which is exactly what a save is.
+ *
+ * This is the goal for the app campaign once sign-up stops being a wall
+ * (Oct 2026 swipe-first flow): the first save happens in the first minute,
+ * from someone who has seen real fares and wanted one, and at the volume of
+ * new users it clears the ~50/week an ad set needs to leave learning. Logged
+ * once per install — repeat saves are engagement, not acquisition.
+ */
+export async function logMetaFirstSave(deal: {
+  destination?: string;
+  price?: number;
+}): Promise<void> {
+  try {
+    if (firstSaveLogged) return;
+    firstSaveLogged = true;
+    if (await getItemRaw(FIRST_SAVE_KEY)) return;
+    await setItemRaw(FIRST_SAVE_KEY, "1");
+    logger()?.logEvent(ADD_TO_WISHLIST, deal.price ?? 0, {
+      fb_content_type: "flight",
+      fb_content_id: deal.destination ?? "",
+      fb_currency: "USD",
     });
   } catch {
     /* best-effort */

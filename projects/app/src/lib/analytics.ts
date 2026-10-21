@@ -56,6 +56,12 @@ export type AnalyticsEventName =
   // so per-beat drop-off is the only way to read whether a fall in
   // completion is the price of the bet or a specific screen being bad.
   | "onboarding_step_viewed"
+  // Swipe-first onboarding (Oct 2026): each card in the first session, and
+  // the session ending — saved_count is the first read on whether real fares
+  // land.
+  | "first_session_swipe"
+  | "first_session_done"
+  | "feed_ready_keep_swiping"
   // The airport picker's dead end — a search that matched none of the 23
   // serviced origins. `_shown` sizes the wall directly (13% of accounts in
   // the 1.8.0 cohort, 58% of all onboarding drop-off); `_submitted` is the

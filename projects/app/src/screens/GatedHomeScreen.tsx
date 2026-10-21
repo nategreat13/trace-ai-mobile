@@ -18,13 +18,12 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { fetchDeals } from "../services/dealsApi";
-import { repriceDeal } from "../lib/funnelDeals";
-import { logout } from "../services/auth";
+import { getSavedDeals } from "../services/firestore";
 import { logEvent } from "../lib/analytics";
 import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
 import { Gift } from "lucide-react-native";
 import FeedReveal, {
-  selectRevealDeals,
+  selectSavesReveal,
 } from "../components/onboarding/FeedReveal";
 import { useIAP } from "../hooks/useIAP";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
@@ -57,7 +56,7 @@ function barrierAnswer(
     case "no_time_to_search":
       return "You said you don't have time to search. You won't have to again — these update on their own.";
     case "dates_never_work":
-      return "You said dates never line up. Everything below already matches the months you picked.";
+      return "You said dates never line up. Every deal shows its travel window, so you only save the ones that fit.";
     case "cant_decide":
       return ctx.total > 0
         ? `You said you can't decide where to go — here are ${ctx.total} options from ${ctx.airport}, cheapest first.`
@@ -140,7 +139,7 @@ export default function GatedHomeScreen() {
   const navigation = useNavigation<Nav>();
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
-  const { profile, setProfile } = useAuth();
+  const { user, profile, setProfile } = useAuth();
   const { updateProfile } = useProfile();
   const { offerings, premiumMonthlyPackage, premiumAnnualPackage, isTrialEligibleFor } =
     useIAP();
@@ -159,6 +158,7 @@ export default function GatedHomeScreen() {
   const trialLabel = planIntro ? formatTrialDuration(planIntro) : "";
 
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [savedDeals, setSavedDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const airport = profile?.homeAirport ?? "";
@@ -177,12 +177,39 @@ export default function GatedHomeScreen() {
       setLoading(false);
       return;
     }
-    fetchDeals(airport)
-      .then((res) => {
-        if (!cancelled) setDeals(res ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setDeals([]);
+    // One retry before giving up: this page is the funnel's centerpiece, and
+    // a single dropped request used to render it as "0 destinations".
+    const load = () => fetchDeals(airport);
+    Promise.all([
+      load().catch(() => load()).catch(() => [] as Deal[]),
+      user ? getSavedDeals(user.uid).catch(() => []) : Promise.resolve([]),
+    ])
+      .then(([res, saves]) => {
+        if (cancelled) return;
+        const live = res ?? [];
+        setDeals(live);
+        // Show saves at today's live fare when the route is still in the
+        // feed; otherwise as saved.
+        const liveById = new Map(live.map((d) => [d.id, d]));
+        setSavedDeals(
+          saves.map(
+            (r: any) =>
+              liveById.get(r.originalDealId) ??
+              ({
+                id: r.originalDealId || r.id,
+                destination: r.destination,
+                destination_code: r.destinationCode,
+                origin: r.origin,
+                price: r.price,
+                original_price: r.originalPrice,
+                discount_pct: r.discountPct,
+                travel_window: r.travelWindow,
+                image_url: r.imageUrl,
+                continent: r.continent,
+                domestic_or_international: r.continent === "North America" ? "domestic" : "international",
+              } as Deal),
+          ),
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -190,26 +217,22 @@ export default function GatedHomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [airport]);
+  }, [airport, user?.uid]);
 
-  // One-shot paywall push, moved here from TabNavigator: gated users never
-  // reach MainTabs, so the hook that used to do this can't fire for them.
-  const firedRef = useRef(false);
-  useEffect(() => {
-    if (firedRef.current) return;
-    if (!profile) return;
-    if (profile.postOnboardingPaywallShown) return;
-    firedRef.current = true;
-    setProfile((prev) =>
-      prev ? { ...prev, postOnboardingPaywallShown: true } : prev,
-    );
-    updateProfile({ postOnboardingPaywallShown: true }).catch(() => {});
-    const t = setTimeout(
-      () => openPaywall("post_onboarding"),
-      450,
-    );
-    return () => clearTimeout(t);
-  }, [profile?.id, profile?.postOnboardingPaywallShown]);
+  /**
+   * Leave for the free app. The page doesn't push the paywall at anyone
+   * (Oct 2026: this page is the pitch, and a modal over it hid the pitch),
+   * and neither should MainTabs on arrival — so `postOnboardingPaywallShown`
+   * is set here too, which keeps TabNavigator's one-shot push from firing on
+   * someone who just chose to keep swiping for free.
+   */
+  const keepSwiping = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    logEvent("feed_ready_keep_swiping", { saves: savedDeals.length });
+    const updates = { feedReadyPending: false, postOnboardingPaywallShown: true };
+    setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
+    updateProfile(updates).catch(() => {});
+  };
 
   // Return-visit re-offer. If they've seen the gift before, it's been 24h+,
   // and they're under the cap, push it again shortly after landing. Skipped
@@ -230,12 +253,11 @@ export default function GatedHomeScreen() {
   const showGiftPill = giftOfferSeen(profile) && giftOfferEligible(profile, { manual: true });
 
   /**
-   * The gated feed advertises at funnel prices, like every other screen
-   * before the paywall. Repriced here rather than inside the selection so
-   * the savings strip, the "cheapest right now" line and the rows below it
-   * are all reading the same numbers. Past the paywall nothing is repriced.
+   * Real fares only (Oct 2026). This page used to advertise at invented
+   * funnel prices; it now shows what the API returns, filtered to deals that
+   * are genuinely good (see lib/goodDeals).
    */
-  const pricedDeals = useMemo(() => deals.map(repriceDeal), [deals]);
+  const pricedDeals = deals;
 
   // Everything the page says about "the deals below" is computed from the
   // SAME selection FeedReveal renders — see selectRevealDeals.
@@ -249,13 +271,8 @@ export default function GatedHomeScreen() {
   );
 
   const selection = useMemo(
-    () =>
-      selectRevealDeals(
-        pricedDeals,
-        profile?.destinationPreference ?? "both",
-        rankPrefs,
-      ),
-    [pricedDeals, profile?.destinationPreference, rankPrefs],
+    () => selectSavesReveal(pricedDeals, savedDeals),
+    [pricedDeals, savedDeals],
   );
 
   /**
@@ -331,8 +348,8 @@ export default function GatedHomeScreen() {
       entryPoint,
       destinationCount: selection.totalDestinations || undefined,
       lockedStat:
-        selection.totalDestinations > selection.unlocked.length
-          ? `You're seeing ${selection.unlocked.length} of ${selection.totalDestinations} destinations from ${airport}.`
+        selection.lockedCount > 0
+          ? `${selection.lockedCount} more great deals from ${airport} are waiting.`
           : undefined,
     });
   };
@@ -495,14 +512,15 @@ export default function GatedHomeScreen() {
             firstName={firstName}
             destinationPreference={profile?.destinationPreference ?? "both"}
             prefs={rankPrefs}
+            savedDeals={savedDeals}
             headerExtra={matchingBlock}
             footerExtra={savingsBlock}
             // Straight to the paywall. The peek sheet was a good sales page
             // but it was a stop on the way to the only action that matters
             // here — a gated user can't open a deal, so the tap should move
             // them forward rather than describe what they can't have.
-            onPressDeal={() => openPaywall("gated_deal_tapped")}
-            onPressLocked={() => openPaywall("gated_deal_locked")}
+            onPressDeal={() => openPaywall("feed_ready_saved_tapped")}
+            onPressLocked={() => openPaywall("feed_ready_locked_tapped")}
           />
         </View>
 
@@ -518,7 +536,7 @@ export default function GatedHomeScreen() {
         }}
       >
         <TouchableOpacity
-          onPress={() => openPaywall("gated_home_cta")}
+          onPress={() => openPaywall("feed_ready_cta")}
           activeOpacity={0.9}
           accessibilityRole="button"
         >
@@ -539,52 +557,27 @@ export default function GatedHomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Always leave a way out of the app itself. A gated user who has
-            already paid on another device needs Restore, and one who simply
-            wants to leave shouldn't have to delete the app to do it. */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: 20,
-            // marginTop is small because each link below carries its own
-            // paddingVertical — 12pt text alone gave a ~15pt tall tap target,
-            // well under the 44pt minimum, and taps that looked like they were
-            // on "Sign out" landed just under it and did nothing.
-            marginTop: 4,
-          }}
+        {/* The free tier. The page sells, but it never traps: "Keep
+            swiping" leads into the app with today's free swipes. */}
+        <TouchableOpacity
+          onPress={keepSwiping}
+          accessibilityRole="button"
+          hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+          style={{ paddingVertical: 14, alignItems: "center" }}
         >
-          <TouchableOpacity
-            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-            style={{ paddingVertical: 10 }}
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              navigation.navigate("EditPreferences");
-            }}
-          >
-            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-              Edit my answers
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-            style={{ paddingVertical: 10 }}
-            onPress={() => openPaywall("gated_home_restore")}
-          >
-            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-              Restore purchase
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-            style={{ paddingVertical: 10 }}
-            onPress={() => logout().catch(() => {})}
-          >
-            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-              Sign out
-            </Text>
-          </TouchableOpacity>
-        </View>
+          <Text style={{ color: theme.foreground, fontSize: 15, fontWeight: "700" }}>
+            Keep swiping free
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+          style={{ paddingVertical: 4, alignItems: "center" }}
+          onPress={() => openPaywall("feed_ready_restore")}
+        >
+          <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+            Restore purchase
+          </Text>
+        </TouchableOpacity>
       </View>
 
     </SafeAreaView>

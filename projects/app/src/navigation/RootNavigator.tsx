@@ -26,28 +26,27 @@ export default function RootNavigator() {
   const { user, profile, loading, isPremium } = useAuth();
 
   /**
-   * Subscription gate (Sept 2026).
+   * "Your feed is ready" (Oct 2026 swipe-first flow).
    *
-   * Users stamped `accessGate: "subscription_required"` at signup cannot
-   * reach MainTabs without a paid entitlement — the paywall *is* their root
-   * screen. The point is that finishing onboarding shouldn't deposit someone
-   * into the free tier they were just shown the limits of.
+   * New users land here once, after their first swipe session: their saves,
+   * unlocked, and today's other good deals, locked, with Try Free and "Keep
+   * swiping free". Leaving clears `feedReadyPending` and routes to MainTabs —
+   * the free tier, with its daily swipe limit — for good.
    *
-   * Scoped by the per-user flag rather than applied to every free account:
-   * accounts created before this change have no flag and keep their access.
-   * To widen it to everyone, drop the `accessGate` check here.
+   * This replaces the Sept 2026 hard gate (`accessGate:
+   * "subscription_required"`), which rooted new users at this page with no
+   * way into the app without paying. Every ad promises "download it free and
+   * start swiping"; the gate broke that promise. Accounts still carrying the
+   * old flag are deliberately not special-cased: they get the free tier too.
    *
-   * The gated stack is rooted at GatedHome — their onboarding feed, locked —
-   * rather than at the paywall itself. That ordering is what makes the
-   * win-back reachable: Paywall and GiftOffer are pushed on top, so both keep
-   * a working close affordance, and dismissing the gift lands back on a
-   * screen that is still selling rather than on a dead end.
+   * Paywall and GiftOffer are pushed on top rather than being roots, so both
+   * keep a working close affordance:
    *
-   *     GatedHome → Paywall → (dismiss) → GiftOffer → (dismiss) → GatedHome
+   *     FeedReady → Paywall → (dismiss) → GiftOffer → (dismiss) → FeedReady
    */
   const isGated =
     !!profile?.onboardingComplete &&
-    profile?.accessGate === "subscription_required" &&
+    profile?.feedReadyPending === true &&
     !isPremium;
 
   // Re-sync this device's push token to the userProfile if OS permission

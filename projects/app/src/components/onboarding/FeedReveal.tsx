@@ -14,6 +14,7 @@ import { Lock, Plane } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import { fadeTo } from "../../lib/fade";
 import { rankDeals, type RankPrefs } from "../../lib/dealRanker";
+import { goodDeals } from "../../lib/goodDeals";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -61,6 +62,12 @@ interface FeedRevealProps {
   onPressDeal?: (deal: Deal) => void;
   /** Tapping a locked row — the upsell moment. */
   onPressLocked?: (deal: Deal) => void;
+  /**
+   * The swipe-first flow's feed (Oct 2026): what they saved in their first
+   * session leads, unlocked, and the rest of today's *good* deals follow,
+   * locked. When present this replaces the preference-driven sample.
+   */
+  savedDeals?: Deal[];
 }
 
 function isDomestic(d: Deal): boolean {
@@ -145,6 +152,38 @@ export function selectRevealDeals(
   };
 }
 
+/**
+ * The feed built from a first swipe session: their saves first, unlocked,
+ * then the rest of today's good deals (40%+ off), locked, biggest discount
+ * first. Counts and the cheapest fare describe good deals only — "29 great
+ * deals from SLC today" is the claim, not "107 destinations".
+ *
+ * Someone who skipped every card still gets a feed: the two best deals stand
+ * in for saves, so the page never opens on nothing but padlocks.
+ */
+export function selectSavesReveal(deals: Deal[], saved: Deal[]) {
+  const good = goodDeals(deals);
+  const savedByDest = new Map<string, Deal>();
+  for (const d of saved) if (d.destination) savedByDest.set(d.destination, d);
+  const unlocked = savedByDest.size > 0 ? [...savedByDest.values()] : good.slice(0, 2);
+  const unlockedSet = new Set(unlocked.map((d) => d.destination));
+  const locked = good.filter((d) => !unlockedSet.has(d.destination));
+  const all = [...unlocked, ...locked];
+  const intl = all.filter((d) => !isDomestic(d));
+  return {
+    unlocked,
+    rows: [...unlocked, ...locked].slice(0, 14).map((deal) => ({
+      deal,
+      locked: !unlockedSet.has(deal.destination),
+    })),
+    totalDestinations: new Set(all.map((d) => d.destination)).size,
+    cheapest: all.length ? Math.min(...all.map((d) => d.price || Infinity)) : null,
+    lockedIntl: intl.filter((d) => !unlockedSet.has(d.destination)).length,
+    unlockedIntl: intl.filter((d) => unlockedSet.has(d.destination)).length,
+    lockedCount: locked.length,
+  };
+}
+
 export default function FeedReveal({
   deals,
   homeAirport,
@@ -155,15 +194,21 @@ export default function FeedReveal({
   footerExtra,
   onPressDeal,
   onPressLocked,
+  savedDeals,
 }: FeedRevealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
 
+  const savesMode = !!savedDeals;
   const { rows, totalDestinations, cheapest, lockedIntl, unlockedIntl } =
     useMemo(
-      () => selectRevealDeals(deals, destinationPreference),
-      [deals, destinationPreference],
+      () =>
+        savedDeals
+          ? selectSavesReveal(deals, savedDeals)
+          : selectRevealDeals(deals, destinationPreference),
+      [deals, destinationPreference, savedDeals],
     );
+  const lockedRows = rows.filter((r) => r.locked).length;
 
   return (
     <View style={styles.wrap}>
@@ -189,7 +234,9 @@ export default function FeedReveal({
             {totalDestinations}
           </Text>
           <Text style={[styles.statLabel, { color: theme.mutedForeground }]}>
-            destinations we're{"\n"}tracking from {homeAirport}
+            {savesMode
+              ? `great deals from${"\n"}${homeAirport} today`
+              : `destinations we're${"\n"}tracking from ${homeAirport}`}
           </Text>
         </View>
         {cheapest != null && (
@@ -306,7 +353,20 @@ export default function FeedReveal({
         />
       </View>
 
-      {totalDestinations > FREE_UNLOCKED && (
+      {savesMode && lockedRows > 0 && (
+        <Animated.Text
+          entering={FadeIn.duration(400).delay(900)}
+          style={[styles.lockedStat, { color: theme.mutedForeground }]}
+        >
+          Your saves are yours to keep.{" "}
+          <Text style={{ color: theme.foreground, fontWeight: "700" }}>
+            {totalDestinations - rows.filter((r) => !r.locked).length} more great deals
+          </Text>{" "}
+          from {homeAirport} are waiting behind Premium.
+        </Animated.Text>
+      )}
+
+      {!savesMode && totalDestinations > FREE_UNLOCKED && (
         <Animated.Text
           entering={FadeIn.duration(400).delay(900)}
           style={[styles.lockedStat, { color: theme.mutedForeground }]}

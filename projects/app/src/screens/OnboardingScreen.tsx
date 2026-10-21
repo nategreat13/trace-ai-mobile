@@ -15,12 +15,13 @@ import {
   createUserProfile,
   updateUserProfile,
   getUserProfile,
+  saveDeal,
+  createSwipeAction,
 } from "../services/firestore";
 import { fetchDeals } from "../services/dealsApi";
-import { linkEmailPassword, login, requestPasswordReset } from "../services/auth";
 import { auth } from "../services/firebase";
-import { trackSignup } from "../services/trackingApi";
-import { identifyForMeta, logMetaCompleteRegistration } from "../lib/metaAppEvents";
+import { logMetaFirstSave } from "../lib/metaAppEvents";
+import { firstSessionDeck } from "../lib/goodDeals";
 import {
   DEAL_TYPES,
   TIMEFRAMES,
@@ -32,18 +33,16 @@ import { logEvent } from "../lib/analytics";
 import AirportInput from "../components/onboarding/AirportInput";
 import OptionGrid from "../components/onboarding/OptionGrid";
 import OptionList from "../components/onboarding/OptionList";
-import AccountBeat, {
-  AccountDraft,
-} from "../components/onboarding/AccountBeat";
-import CadenceBeat from "../components/onboarding/CadenceBeat";
-import SocialProofBeat from "../components/onboarding/SocialProofBeat";
 import BuildingFeed from "../components/onboarding/BuildingFeed";
-import ProductDemoBeat from "../components/onboarding/ProductDemoBeat";
+import FirstSwipeDeck from "../components/onboarding/FirstSwipeDeck";
 import PersonalityReveal from "../components/PersonalityReveal";
 import type { Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/** Cards in the first swipe session, before "Your feed is ready". */
+const FIRST_SESSION_SIZE = 8;
 
 /** "john  smith" → "John Smith" — capitalize each word, collapse spaces. */
 function capitalizeName(name: string): string {
@@ -129,19 +128,15 @@ export default function OnboardingScreen() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [dealsReady, setDealsReady] = useState(false);
 
-  // The account step's draft. Held here rather than inside AccountBeat so the
-  // beat's `canProceed` and `submit` can both see it.
-  const [account, setAccount] = useState<AccountDraft>({
-    email: "",
-    password: "",
-  });
-  const [accountError, setAccountError] = useState<string | null>(null);
-  const [linking, setLinking] = useState(false);
-  const [emailTaken, setEmailTaken] = useState(false);
+  // The first swipe session. Saves are held here and written once the
+  // profile exists (handleContinue), so a user who backs out mid-deck leaves
+  // nothing half-saved behind.
+  const [firstSaves, setFirstSaves] = useState<Deal[]>([]);
+  const [deckDone, setDeckDone] = useState(false);
   const dealFetchRef = useRef<string | null>(null);
 
-  const startDealFetch = useCallback((airport: string) => {
-    if (!airport || dealFetchRef.current === airport) return;
+  const startDealFetch = useCallback((airport: string, force = false) => {
+    if (!airport || (!force && dealFetchRef.current === airport)) return;
     dealFetchRef.current = airport;
     setDealsReady(false);
     fetchDeals(airport)
@@ -197,120 +192,54 @@ export default function OnboardingScreen() {
   };
 
   /**
-   * Turn the anonymous session into a real account. Returns false to keep the
-   * user on this step — the beat's `submit` gate then blocks advancing, so a
-   * failure never writes a profile or moves them on.
+   * Persist the first swipe session as real saves and swipe history, so the
+   * deals someone picked in their first minute are waiting in Saved and the
+   * deck doesn't show them again. Best-effort per deal: one failed write
+   * shouldn't cost the others, and none of it may block finishing.
    */
-  const linkAccount = async (): Promise<boolean> => {
-    const email = account.email.trim();
-    if (!email || account.password.length < 6) {
-      setAccountError("Enter an email and a password of at least 6 characters.");
-      return false;
-    }
-    setLinking(true);
-    setAccountError(null);
-    setEmailTaken(false);
-    try {
-      const fullName = [
-        data.firstName.trim() ? capitalizeName(data.firstName) : "",
-        data.lastName.trim() ? capitalizeName(data.lastName) : "",
-      ]
-        .filter(Boolean)
-        .join(" ");
-      await linkEmailPassword(email, account.password, fullName || undefined);
-      logEvent("signup_completed", { method: "email", at: "onboarding_end" });
-
-      // Meta CAPI CompleteRegistration, same as the old front-door signup
-      // fired. Fire-and-forget — it must never hold up the feed.
-      let country: string | null = null;
-      try {
-        const locale = Intl.DateTimeFormat().resolvedOptions().locale;
-        if (locale && locale.includes("-")) country = locale.split("-")[1];
-      } catch {
-        /* best-effort */
-      }
-      const current = auth.currentUser;
-      if (current) {
-        trackSignup({ userId: current.uid, email, country });
-        // The Meta app event, alongside the server's website event above.
-        // This is where nearly every account is created now; the old
-        // front-door form in LoginScreen only runs when anonymous sign-in
-        // fails, so logging only there would leave the app campaign's goal
-        // event at close to zero.
-        identifyForMeta(current.uid, email);
-        logMetaCompleteRegistration("email");
-      }
-      return true;
-    } catch (err: any) {
-      const code = err?.code || "";
-      if (code === "auth/email-already-in-use") {
-        setEmailTaken(true);
-        logEvent("signup_existing_email", { at: "onboarding_end" });
-      }
-      setAccountError(
-        code === "auth/email-already-in-use"
-          ? "That email already has a Trace account."
-          : code === "auth/invalid-email"
-            ? "That doesn't look like a valid email address."
-            : code === "auth/weak-password"
-              ? "Pick a password with at least 6 characters."
-              : err?.message || "Could not create your account. Try again.",
-      );
-      logEvent("signup_failed", { method: "email", code });
-      return false;
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  /**
-   * Recovery for an email that already has an account. Most people retyping
-   * their usual email type their usual password with it, so try signing them
-   * in with exactly what's in the form — on success RootNavigator routes to
-   * whatever their existing profile says, which for a finished account is
-   * their feed.
-   *
-   * The answers they just gave are lost in that case. That's the right trade:
-   * the account they already have has its own preferences, and the
-   * alternative is leaving them holding an email they can't use.
-   */
-  const signInInstead = async () => {
-    setLinking(true);
-    setAccountError(null);
-    try {
-      await login(account.email.trim(), account.password);
-      logEvent("login", { method: "email", at: "onboarding_end" });
-    } catch {
-      setAccountError(
-        "That password doesn't match the account for this email. Try again, or email yourself a reset link below.",
-      );
-    } finally {
-      setLinking(false);
-    }
-  };
-
-  /**
-   * Password reset without leaving onboarding. The sign-in screen has its own
-   * reset link, but an anonymous user mid-onboarding can't reach it, so an
-   * existing customer who'd forgotten their password had no way in: 1.10.0's
-   * first week had two, and neither got in. They come back to this step with
-   * the new password and use Sign in instead.
-   */
-  const resetPassword = async () => {
-    const email = account.email.trim();
-    if (!email) return;
-    setLinking(true);
-    try {
-      await requestPasswordReset(email);
-      logEvent("password_reset_requested", { at: "onboarding_end" });
-      setAccountError(
-        `We've emailed a reset link to ${email}. Set a new password from it, then come back here and tap Sign in instead.`,
-      );
-    } catch {
-      setAccountError("We couldn't send the reset email. Check your connection and try again.");
-    } finally {
-      setLinking(false);
-    }
+  const saveFirstSessionDeals = async (userId: string) => {
+    await Promise.all(
+      firstSaves.map(async (deal) => {
+        try {
+          await saveDeal({
+            userId,
+            originalDealId: deal.id,
+            destination: deal.destination,
+            destinationCode: deal.destination_code,
+            origin: deal.origin,
+            price: deal.price,
+            originalPrice: deal.original_price,
+            discountPct: deal.discount_pct,
+            travelWindow: deal.travel_window,
+            dealType: deal.deal_type,
+            imageUrl: deal.image_url,
+            aiInsight: deal.ai_insight,
+            vibeDescription: deal.vibe_description,
+            weatherPreview: deal.weather_preview,
+            continent: deal.continent,
+            urgency: deal.urgency,
+            priceTrend: deal.price_trend,
+            url: deal.url,
+            airlines: deal.airlines,
+            duration: deal.duration,
+            layoverInfo: deal.layover_info,
+            isBusinessClass: deal.is_business_class || false,
+          });
+          await createSwipeAction({
+            userId,
+            dealId: deal.id,
+            action: "right",
+            dealType: deal.deal_type,
+            destination: deal.destination,
+            continent: deal.continent || null,
+            price: deal.price,
+            domesticOrInternational: deal.domestic_or_international || null,
+          });
+        } catch (err) {
+          console.warn("[onboarding] saving first-session deal failed:", err);
+        }
+      }),
+    );
   };
 
   const handleContinue = async (personalityOverride?: string) => {
@@ -369,6 +298,13 @@ export default function OnboardingScreen() {
           locale && locale.includes("-") ? locale.split("-")[1] : undefined;
         const now = new Date();
 
+        // Saves first. The profile doc's creation is what routes to the
+        // feed page (AuthContext picks it up the moment it's written), and
+        // that page loads saves on mount — written after, they arrived too
+        // late and the page fell back to "no saves". Saved deals only need
+        // the uid, which the anonymous session already has.
+        await saveFirstSessionDeals(user.uid);
+
         await createUserProfile({
           userId: user.uid,
           email: auth.currentUser?.email || user.email || "",
@@ -385,10 +321,10 @@ export default function OnboardingScreen() {
             ? capitalizeName(data.lastName)
             : undefined,
           homeAirport: data.homeAirport,
-          // Non-empty by here — the destination step's `canProceed` gate
-          // blocks finishing onboarding until a choice is made.
-          destinationPreference:
-            data.destinationPreference as "domestic" | "international" | "both",
+          // New users aren't asked any more — their swipes say more than a
+          // radio button did. "both" keeps every deck and feed unfiltered;
+          // Edit preferences still sets it.
+          destinationPreference: data.destinationPreference || "both",
           dealTypes: data.dealTypes,
           travelTimeframe: data.travelTimeframe,
           travelBarriers: data.travelBarriers.length
@@ -396,11 +332,9 @@ export default function OnboardingScreen() {
             : undefined,
           travelPersonality: personality,
           onboardingComplete: true,
-          // Everyone who completes the rebuilt flow lands behind the
-          // subscription gate (see RootNavigator). Stamped per-user rather
-          // than inferred app-wide so the ~450 accounts that predate this
-          // change keep their free access.
-          accessGate: "subscription_required",
+          // No more hard gate (Oct 2026): new users land on "Your feed is
+          // ready" once, then the free tier. See RootNavigator.
+          feedReadyPending: true,
           subscriptionStatus: "free",
           trialEndDate: null,
           inTrial: false,
@@ -410,7 +344,9 @@ export default function OnboardingScreen() {
           badges: [],
           dailySwipesToday: 0,
           dailySwipeWindowStart: new Date().toISOString(),
-          howToSwipeShown: false,
+          // They learned to swipe in the first session; the deck's "How it
+          // works" sheet would teach them what they just did eight times.
+          howToSwipeShown: true,
           exploreTutorialShown: false,
           dashboardTutorialShown: false,
           aiLearningShown: false,
@@ -444,6 +380,7 @@ export default function OnboardingScreen() {
         // Reveal quality — if conversion diverges by this, the reveal is
         // doing the persuading and thin feeds need their own treatment.
         reveal_deal_count: deals.length,
+        first_session_saves: firstSaves.length,
       });
 
       // NOTE — push ordering is still wrong for this flow, deliberately left
@@ -490,12 +427,13 @@ export default function OnboardingScreen() {
     fullBleed?: boolean;
     /** Excluded from the EditPreferences flow. */
     newUserOnly?: boolean;
+    /** Only in EditPreferences — new users aren't asked (their swipes are). */
+    editOnly?: boolean;
     /** Keep the CTA disabled this long after the beat appears. */
     holdMs?: number;
     /**
      * Runs when the CTA is pressed; advancing waits on it and is cancelled
-     * if it resolves false. Used by the account beat, which has to actually
-     * create the account before onboarding can be written against it.
+     * if it resolves false.
      */
     submit?: () => Promise<boolean>;
   };
@@ -516,26 +454,14 @@ export default function OnboardingScreen() {
    * feed page greets them without a name (FeedReveal already handles that).
    * Profile → Edit is where a name gets set now, if ever.
    */
-  /**
-   * The answers so far, handed to every beat that shows deals so the whole
-   * funnel ranks on the same thing. Partial by design — the cadence beat runs
-   * before the preference questions, and an empty prefs object simply means
-   * "no signal yet" to the ranker.
-   */
-  const beatPrefs = useMemo(
-    () => ({
-      dealTypes: data.dealTypes,
-      travelTimeframe: data.travelTimeframe,
-      travelBarriers: data.travelBarriers,
-    }),
-    [data.dealTypes, data.travelTimeframe, data.travelBarriers],
-  );
+  // The first session's cards: the airport's best real fares, best first.
+  const firstDeck = useMemo(() => firstSessionDeck(deals, FIRST_SESSION_SIZE), [deals]);
 
   const beats: Beat[] = [
     {
       key: "airport",
-      title: "Where do you fly from?",
-      subtitle: "Every deal we show you starts here",
+      title: "Which airport do you fly out of?",
+      subtitle: "Every deal starts here. A city, airport code or zip works.",
       canProceed: !!data.homeAirport,
       content: (
         <AirportInput
@@ -545,18 +471,61 @@ export default function OnboardingScreen() {
       ),
     },
     {
-      key: "cadence",
-      title: "Deals don't wait for you",
-      subtitle: "So we watch them for you instead",
-      canProceed: true,
+      // The product, straight away (Oct 2026). Every ad ends on "download it
+      // free and start swiping"; the old flow put ten screens of questions
+      // between the download and the first swipe, then a demo deck with
+      // showcase prices. This is the real deck on real fares, and what they
+      // save here is saved for real.
+      key: "swipe",
+      title: "Swipe right on your next trip",
+      subtitle: data.homeAirport
+        ? `Today's best deals from ${data.homeAirport}`
+        : "Today's best deals from your airport",
+      canProceed: deckDone,
+      ctaLabel: "See my feed",
       newUserOnly: true,
-      content: <CadenceBeat deals={deals} prefs={beatPrefs} />,
+      content: deckDone ? (
+        <View style={{ alignItems: "center", paddingTop: 40, gap: 8 }}>
+          <Text style={{ fontSize: 40 }}>✈️</Text>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: theme.foreground }}>
+            {firstSaves.length > 0
+              ? `${firstSaves.length} trip${firstSaves.length === 1 ? "" : "s"} saved`
+              : "Your feed is learning what you like"}
+          </Text>
+        </View>
+      ) : (
+        <FirstSwipeDeck
+          deals={firstDeck}
+          loading={!dealsReady}
+          onRetry={() => startDealFetch(data.homeAirport, true)}
+          onSwipe={(deal, saved, index) => {
+            logEvent("first_session_swipe", {
+              saved,
+              index,
+              destination: deal.destination,
+              discount_pct: Math.round(deal.discount_pct || 0),
+              price: Math.round(deal.price || 0),
+            });
+            if (saved) logMetaFirstSave(deal);
+          }}
+          onDone={(saved) => {
+            setFirstSaves(saved);
+            setDeckDone(true);
+            logEvent("first_session_done", {
+              saved_count: saved.length,
+              deck_size: firstDeck.length,
+            });
+            setStep((n) => n + 1);
+          }}
+        />
+      ),
     },
     {
       key: "destination",
       title: "How far do you want to go?",
       subtitle: "Domestic, international, or both",
       canProceed: !!data.destinationPreference,
+      editOnly: true,
       content: (
         <OptionList
           options={DEST_OPTIONS}
@@ -578,6 +547,7 @@ export default function OnboardingScreen() {
       title: "What kind of trip?",
       subtitle: "Pick all that excite you",
       canProceed: data.dealTypes.length > 0,
+      editOnly: true,
       content: (
         <OptionGrid
           options={[...DEAL_TYPES]}
@@ -593,6 +563,7 @@ export default function OnboardingScreen() {
       title: "When do you want to travel?",
       subtitle: "Pick all that work for you",
       canProceed: data.travelTimeframe.length > 0,
+      editOnly: true,
       content: (
         <OptionGrid
           options={[...TIMEFRAMES]}
@@ -606,10 +577,14 @@ export default function OnboardingScreen() {
       ),
     },
     {
+      // Optional now. It powers the personal line on the feed page ("You
+      // said flights cost too much — these average 61% off"), which is worth
+      // one tap, but not worth losing anyone over.
       key: "barrier",
-      title: "What's stopping you from going?",
-      subtitle: "Pick everything that rings true",
-      canProceed: data.travelBarriers.length > 0,
+      title: "One quick question",
+      subtitle: "What's stopping you from going? Pick any that ring true.",
+      canProceed: true,
+      ctaLabel: data.travelBarriers.length > 0 ? "Continue" : "Skip",
       newUserOnly: true,
       content: (
         <OptionList
@@ -623,78 +598,20 @@ export default function OnboardingScreen() {
       ),
     },
     {
-      key: "demo",
-      title: "Swipe right on your next trip",
-      subtitle: "Go on, try it.",
-      canProceed: true,
-      newUserOnly: true,
-      content: <ProductDemoBeat deals={deals} prefs={beatPrefs} />,
-    },
-    {
-      key: "proof",
-      title: "Join 30,000+ travelers",
-      subtitle: "They stopped hunting for fares. You're one step away.",
-      canProceed: true,
-      newUserOnly: true,
-      ctaLabel: "Build my feed",
-      content: (
-        <SocialProofBeat
-          destinationCount={
-            dealsReady && deals.length
-              ? new Set(deals.map((d) => d.destination).filter(Boolean)).size
-              : null
-          }
-          homeAirport={data.homeAirport}
-        />
-      ),
-    },
-    {
       key: "building",
       canProceed: true,
       newUserOnly: true,
       fullBleed: true,
-      content: (
-        <BuildingFeed
-          ready={dealsReady}
-          // Advance rather than finish: the name and account steps follow.
-          onDone={() => goNext()}
-        />
-      ),
-    },
-    {
-      // The account ask, last instead of second. See AccountBeat.
-      key: "account",
-      title: "Save your feed",
-      subtitle: "So it's here the next time you open Trace",
-      canProceed:
-        account.email.trim().length > 3 && account.password.length >= 6 && !linking,
-      newUserOnly: true,
-      ctaLabel: "Create my account",
-      submit: linkAccount,
-      content: (
-        <AccountBeat
-          value={account}
-          onChange={setAccount}
-          error={accountError}
-          busy={linking}
-          firstName={data.firstName.trim() || undefined}
-          onSignInInstead={emailTaken ? signInInstead : undefined}
-          onResetPassword={emailTaken ? resetPassword : undefined}
-        />
-      ),
+      content: <BuildingFeed ready={dealsReady} onDone={() => goNext()} />,
     },
   ];
 
   // EditPreferences reuses this screen to change travel prefs — it should be
   // the questions and nothing else. No name step, no interstitials, no
   // reveal: someone tweaking their timeframe doesn't need to be re-sold.
-  const activeBeats = (
-    isEditing ? beats.filter((b) => !b.newUserOnly && b.key !== "name") : beats
-  ).filter(
-    // Only anonymous sessions need an account created. Someone who signed in
-    // and then abandoned onboarding already has one.
-    (b) => b.key !== "account" || user?.isAnonymous === true,
-  );
+  const activeBeats = isEditing
+    ? beats.filter((b) => !b.newUserOnly)
+    : beats.filter((b) => !b.editOnly);
 
   const safeStep = Math.min(step, activeBeats.length - 1);
   const beat = activeBeats[safeStep];
@@ -766,7 +683,7 @@ export default function OnboardingScreen() {
           ctaLabel={beat.ctaLabel ?? (isLast && isEditing ? "Save" : "Continue")}
           onNext={goNext}
           onBack={safeStep > 0 || isEditing ? goBack : undefined}
-          scrollable={beat.key !== "airport"}
+          scrollable={beat.key !== "airport" && beat.key !== "swipe"}
         >
           {beat.content}
         </OnboardingChrome>
