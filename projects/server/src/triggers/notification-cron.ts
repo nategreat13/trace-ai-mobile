@@ -116,19 +116,20 @@ async function sendForTemplate(
   templateKey: string,
   vars: Record<string, string | number>,
   prefs?: NotificationPrefs
-): Promise<void> {
+): Promise<boolean> {
   if (prefs) {
     const category = TEMPLATE_CATEGORY[templateKey];
-    if (category && prefs[category] === false) return;
+    if (category && prefs[category] === false) return false;
   }
   const template = await getTemplate(templateKey);
-  if (!template || !template.enabled) return;
+  if (!template || !template.enabled) return false;
   const title = renderString(template.title, vars);
   const body = renderString(template.body, vars);
   const data = template.deepLink
     ? { deepLink: template.deepLink, templateKey }
     : { templateKey };
   await sendToUser(userId, { title, body, data }, { templateKey });
+  return true;
 }
 
 /**
@@ -225,21 +226,50 @@ async function runDailyNotifications() {
     // Windows are a full 24h wide because this runs once a day: each user
     // falls in each window exactly once. (The ending reminders used 2-hour
     // windows here, which only caught trials ending within an hour of the
-    // 14:00 UTC run — fixed with this change.)
+    // 14:00 UTC run — fixed with this change.) Each window is centred on its
+    // label: for a 7-day trial, "day 1" arrives 12-36h after the start and
+    // "24h" arrives 12-36h before the end, never minutes before the charge.
+    //
+    // `trialEndDate` is the current period's end for EVERY store subscriber
+    // (the webhook writes it on renewals too), so only profiles the webhook
+    // marked `inTrial` are trial users. Without that check every paying
+    // monthly subscriber would get all four of these before each renewal.
+    // People who already turned off auto-renew skip the two "ending" pushes,
+    // which ask them to subscribe through a paywall they can't use while
+    // their trial is still active.
     {
       const DAY = 24 * 60 * 60 * 1000;
-      const steps: { key: string; fromDays: number; toDays: number; withDeal: boolean }[] = [
-        { key: "trial_day1", fromDays: 5, toDays: 6, withDeal: true },
-        { key: "trial_day3", fromDays: 3, toDays: 4, withDeal: true },
-        { key: "trial_ending_3d", fromDays: 2, toDays: 3, withDeal: false },
-        { key: "trial_ending_24h", fromDays: 0, toDays: 1, withDeal: false },
+      const steps: {
+        key: string;
+        fromDays: number;
+        toDays: number;
+        withDeal: boolean;
+        skipIfCancelled: boolean;
+      }[] = [
+        { key: "trial_day1", fromDays: 5.5, toDays: 6.5, withDeal: true, skipIfCancelled: false },
+        { key: "trial_day3", fromDays: 3.5, toDays: 4.5, withDeal: true, skipIfCancelled: false },
+        { key: "trial_ending_3d", fromDays: 2.5, toDays: 3.5, withDeal: false, skipIfCancelled: true },
+        { key: "trial_ending_24h", fromDays: 0.5, toDays: 1.5, withDeal: false, skipIfCancelled: true },
       ];
       for (const step of steps) {
+        // Skip the scan (and the deal fetches) while the template is off.
+        const stepTemplate = await getTemplate(step.key);
+        if (!stepTemplate?.enabled) {
+          console.log(`[cron] ${step.key}: template disabled, skipped`);
+          continue;
+        }
         const snap = await colRef("userProfiles")
           .where("trialEndDate", ">=", new Date(now.getTime() + step.fromDays * DAY))
           .where("trialEndDate", "<", new Date(now.getTime() + step.toDays * DAY))
           .where("subscriptionSource", "==", "store")
-          .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
+          .select(
+            "userId",
+            "homeAirport",
+            "notificationsEnabled",
+            "notificationPreferences",
+            "inTrial",
+            "autoRenewOff",
+          )
           .get();
         let sent = 0;
         for (const doc of snap.docs) {
@@ -248,8 +278,13 @@ async function runDailyNotifications() {
             homeAirport?: string;
             notificationsEnabled?: boolean;
             notificationPreferences?: NotificationPrefs;
+            inTrial?: boolean;
+            autoRenewOff?: boolean;
           };
           if (!data.userId || !data.notificationsEnabled) continue;
+          if (data.inTrial !== true) continue;
+          if (step.skipIfCancelled && data.autoRenewOff === true) continue;
+          if (step.withDeal && !data.homeAirport) continue;
           const vars: Record<string, string | number> = {
             homeAirport: data.homeAirport ?? "your airport",
           };
@@ -265,8 +300,9 @@ async function runDailyNotifications() {
             vars.discount = Math.round(best.percentOff ?? best.discount_pct ?? 0);
             vars.dealCount = deals.length;
           }
-          await sendForTemplate(data.userId, step.key, vars, data.notificationPreferences);
-          sent += 1;
+          if (await sendForTemplate(data.userId, step.key, vars, data.notificationPreferences)) {
+            sent += 1;
+          }
         }
         console.log(`[cron] ${step.key}: scanned ${snap.size}, sent ${sent}`);
       }
@@ -349,28 +385,39 @@ async function runDailyNotifications() {
     // ─── Free swipes ready (Oct 2026 free tier) ────────────────────
     // Free users get 5 deals a day on a rolling 24h window. Alerts are
     // Premium, so this daily nudge is what brings a free user back — and
-    // every visit ends at the limit, which is the upgrade moment. Sent to
-    // free users seen in the last 14 days whose window has reset, with the
-    // airport's best good deal (40%+ off) as the hook. Users past 14 days
-    // are left to the inactivity sequence instead.
+    // every visit ends at the limit, which is the upgrade moment. The
+    // airport's best good deal (40%+ off) is the hook.
+    //
+    // Only people who still HAVE free deals: accounts from before the
+    // September paywall gate. New-flow users (`feedReadyPending`) and gated
+    // users (`accessGate`) are subscription-only, so the push would land them
+    // on a locked page. And only while they're still opening the app (seen in
+    // the last 2 days): someone who ignores it a couple of times stops getting
+    // it, instead of a daily push for two weeks on top of the inactivity
+    // sequence, which takes over from day 3.
     {
-      const seenSince = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const freeTemplate = await getTemplate("free_swipes_ready");
+      const seenSince = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
       const windowReset = now.getTime() - 24 * 60 * 60 * 1000;
       // lastSeenAt range only (single-field index); subscription filtered
       // here so no composite index is needed.
-      const snap = await colRef("userProfiles")
-        .where("lastSeenAt", ">=", seenSince)
-        .select(
-          "userId",
-          "homeAirport",
-          "notificationsEnabled",
-          "notificationPreferences",
-          "subscriptionStatus",
-          "dailySwipeWindowStart",
-        )
-        .get();
+      const snap = !freeTemplate?.enabled
+        ? null
+        : await colRef("userProfiles")
+            .where("lastSeenAt", ">=", seenSince)
+            .select(
+              "userId",
+              "homeAirport",
+              "notificationsEnabled",
+              "notificationPreferences",
+              "subscriptionStatus",
+              "dailySwipeWindowStart",
+              "accessGate",
+              "feedReadyPending",
+            )
+            .get();
       let sent = 0;
-      for (const doc of snap.docs) {
+      for (const doc of snap?.docs ?? []) {
         const data = doc.data() as {
           userId?: string;
           homeAirport?: string;
@@ -378,9 +425,12 @@ async function runDailyNotifications() {
           notificationPreferences?: NotificationPrefs;
           subscriptionStatus?: string;
           dailySwipeWindowStart?: string;
+          accessGate?: string;
+          feedReadyPending?: boolean;
         };
         if (!data.userId || !data.notificationsEnabled || !data.homeAirport) continue;
         if (data.subscriptionStatus && data.subscriptionStatus !== "free") continue;
+        if (data.accessGate || data.feedReadyPending) continue;
         const windowStart = data.dailySwipeWindowStart
           ? new Date(data.dailySwipeWindowStart).getTime()
           : 0;
@@ -391,16 +441,20 @@ async function runDailyNotifications() {
           .sort((a, b) => (b.percentOff ?? b.discount_pct ?? 0) - (a.percentOff ?? a.discount_pct ?? 0))[0];
         const price = best?.dealPriceUSD ?? best?.price ?? 0;
         if (!best?.destination || !price) continue;
-        await sendForTemplate(data.userId, "free_swipes_ready", {
+        const didSend = await sendForTemplate(data.userId, "free_swipes_ready", {
           freeCount: FREE_TIER_DAILY_SWIPES,
           homeAirport: data.homeAirport,
           destination: best.destination,
           price: Math.round(price),
           discount: Math.round(best.percentOff ?? best.discount_pct ?? 0),
         }, data.notificationPreferences);
-        sent += 1;
+        if (didSend) sent += 1;
       }
-      console.log(`[cron] free_swipes_ready: scanned ${snap.size}, sent ${sent}`);
+      console.log(
+        snap
+          ? `[cron] free_swipes_ready: scanned ${snap.size}, sent ${sent}`
+          : "[cron] free_swipes_ready: template disabled, skipped",
+      );
     }
 
     // ─── 14-day inactivity ────────────────────────────────────────

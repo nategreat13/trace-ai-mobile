@@ -71,6 +71,72 @@ async function logAnalyticsEvent(
  * Business wins over Premium if both are present.
  * Returns null if no known entitlements are active.
  */
+/**
+ * Re-derive each profile's subscription from RevenueCat after a TRANSFER.
+ *
+ * The receiving profile gets the highest active tier (store-sourced, since
+ * transfers come from restoring a store purchase); a profile left with no
+ * entitlement drops to free. Trial and renewal flags travel with the
+ * subscription when it moves between exactly one pair of profiles, so a
+ * restored trial user still gets the trial pushes. Failures are logged and
+ * leave that profile untouched, as in EXPIRATION: the app's live RevenueCat
+ * check keeps access right meanwhile.
+ */
+async function syncTransfer(from: string[], to: string[]): Promise<void> {
+  const TIER_RANK: Record<string, number> = { premium: 2, business: 3 };
+  const findProfile = async (userId: string) => {
+    const snap = await colRef("userProfiles").where("userId", "==", userId).limit(1).get();
+    return snap.empty ? null : snap.docs[0];
+  };
+
+  let carried: { inTrial?: boolean; autoRenewOff?: boolean } | null = null;
+  if (from.length === 1 && to.length === 1) {
+    const src = await findProfile(from[0]);
+    const d = src?.data() as { inTrial?: boolean; autoRenewOff?: boolean } | undefined;
+    if (d) carried = { inTrial: d.inTrial, autoRenewOff: d.autoRenewOff };
+  }
+
+  for (const userId of [...to, ...from]) {
+    const doc = await findProfile(userId);
+    if (!doc) {
+      console.warn("[RC Webhook] TRANSFER: no profile for", userId);
+      continue;
+    }
+    let active: Awaited<ReturnType<typeof listActiveEntitlements>>;
+    try {
+      active = await listActiveEntitlements(userId);
+    } catch (err) {
+      console.warn("[RC Webhook] TRANSFER: entitlement fetch failed for", userId, err);
+      continue;
+    }
+    const tiered = active
+      .filter((e) => typeof TIER_RANK[e.entitlement_id] === "number")
+      .sort((a, b) => TIER_RANK[b.entitlement_id] - TIER_RANK[a.entitlement_id]);
+    if (tiered.length === 0) {
+      await doc.ref.update({
+        subscriptionStatus: "free",
+        subscriptionSource: null,
+        trialEndDate: null,
+        inTrial: false,
+      });
+      console.log("[RC Webhook] TRANSFER: no entitlements remain for", userId);
+      continue;
+    }
+    const winner = tiered[0];
+    const updates: Record<string, unknown> = {
+      subscriptionStatus: winner.entitlement_id,
+      subscriptionSource: "store",
+    };
+    if (winner.expires_at) updates.trialEndDate = new Date(winner.expires_at);
+    if (carried && to.includes(userId)) {
+      if (typeof carried.inTrial === "boolean") updates.inTrial = carried.inTrial;
+      if (typeof carried.autoRenewOff === "boolean") updates.autoRenewOff = carried.autoRenewOff;
+    }
+    await doc.ref.update(updates);
+    console.log(`[RC Webhook] TRANSFER: ${userId} set to ${winner.entitlement_id}`);
+  }
+}
+
 function tierFromEntitlements(entitlementIds: unknown): Tier | null {
   if (!Array.isArray(entitlementIds)) return null;
   if (entitlementIds.includes("business")) return "business";
@@ -317,6 +383,24 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
       entitlement_ids
     );
 
+    // TRANSFER: a restore moved a subscription from one app user id to
+    // another. With onboarding on anonymous accounts this is routine — a
+    // reinstall or a sign-in, then Restore — and without handling it the
+    // receiving profile stayed "free" in Firestore (free-tier pushes, missed
+    // premium ones) while the old profile stayed premium. Both sides are
+    // re-read from RevenueCat, which is the source of truth, so a retry of
+    // this event is harmless. It carries no single app_user_id, so it's
+    // handled before the per-profile flow below.
+    if (type === "TRANSFER") {
+      const ids = (field: unknown): string[] =>
+        Array.isArray(field)
+          ? field.filter((x): x is string => typeof x === "string" && !x.startsWith("$RCAnonymousID:"))
+          : [];
+      await syncTransfer(ids(ev.transferred_from), ids(ev.transferred_to));
+      res.status(200).json({ ok: true });
+      return;
+    }
+
     if (!app_user_id) {
       console.warn("[RC Webhook] No app_user_id in event");
       res.status(200).json({ ok: true });
@@ -395,6 +479,9 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           // is the winning tier; this overwrites it correctly when a
           // real purchase later supersedes a promo.
           subscriptionSource: "store",
+          // A purchase, renewal or uncancellation means renewal is on. Set on
+          // CANCELLATION; read by the trial-ending pushes.
+          autoRenewOff: false,
         };
         if (expiration_at_ms) {
           updates.trialEndDate = new Date(expiration_at_ms);
@@ -615,13 +702,25 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           app_user_id
         );
         await logAnalyticsEvent("subscription_canceled", app_user_id, baseEventProps);
+        // Remembered so the trial-ending pushes don't ask someone who already
+        // turned renewal off to "subscribe before it ends".
+        await profileRef.update({
+          autoRenewOff: true,
+          canceledAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
         // Ask why (Oct 2026): Apple runs cancellation in Settings, so a push
-        // that opens a one-question survey is the only place we can. Template
-        // `cancel_survey` ships disabled; best-effort, never fails the hook.
-        try {
-          await sendCancelSurveyPush(app_user_id);
-        } catch (err) {
-          console.warn("[RC Webhook] cancel survey push failed:", err);
+        // that opens a one-question survey is the only place we can. Only for
+        // people who turned renewal off themselves: RevenueCat also sends
+        // CANCELLATION for refunds (CUSTOMER_SUPPORT) and failed billing
+        // (BILLING_ERROR), and "You turned off renewal" would be wrong for
+        // them. Template `cancel_survey` ships disabled; best-effort, never
+        // fails the hook.
+        if (ev.cancel_reason === "UNSUBSCRIBE") {
+          try {
+            await sendCancelSurveyPush(app_user_id);
+          } catch (err) {
+            console.warn("[RC Webhook] cancel survey push failed:", err);
+          }
         }
         break;
       }

@@ -53,7 +53,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
     deepLink: "/cancel-survey",
     enabled: false,
     description:
-      "Sent when RevenueCat reports a CANCELLATION (auto-renew turned off). Opens a one-question in-app survey. Oct 2026.",
+      "Sent when RevenueCat reports a CANCELLATION the user made themselves (auto-renew turned off; not refunds or billing failures). Opens a one-question in-app survey. Oct 2026. Turn on only after the app version with the survey is out: older versions ignore the link.",
     variables: [],
   },
   trial_day1: {
@@ -143,7 +143,7 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
     deepLink: "/swipe",
     enabled: false,
     description:
-      "Daily, to free users seen in the last 14 days whose 24h free-swipe window has reset (Oct 2026 free tier: 5 deals a day). A reminder that today's free deals are there — not a price alert, which stays Premium.",
+      "Daily, to free users from before the Sept 2026 paywall gate (the only ones with free deals) who opened the app in the last 2 days and whose 24h free-swipe window has reset (5 deals a day). Stops once they stop opening the app. Turn on only after the 5-a-day app version is out: older versions allow 20.",
     variables: ["freeCount", "homeAirport", "destination", "price", "discount"],
   },
   hot_deal_alert: {

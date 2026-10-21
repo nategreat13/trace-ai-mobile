@@ -38,6 +38,8 @@ export const KNOWN_TEMPLATE_KEYS = [
   // First open
   "welcome",
   // Trial lifecycle
+  "trial_day1",
+  "trial_day3",
   "trial_ending_3d",
   "trial_ending_24h",
   // Free → Premium upsell sequence
@@ -46,6 +48,7 @@ export const KNOWN_TEMPLATE_KEYS = [
   "premium_nudge_20d",
   "discount_on_premium",
   // Re-engagement (inactivity)
+  "free_swipes_ready",
   "inactivity_3d",
   "inactivity_7d",
   "inactivity_14d",
@@ -57,6 +60,7 @@ export const KNOWN_TEMPLATE_KEYS = [
   // Subscription lifecycle
   "subscription_renewal_24h",
   "billing_issue",
+  "cancel_survey",
   // Deal-driven (run from cron / matching engine)
   "hot_deal_alert",
   "deal_alert_match",
@@ -95,6 +99,38 @@ const TEMPLATE_DEFAULTS: Record<
     description:
       "Sent ~24 hours after signup. Reinforces the home airport feed and gives the user a reason to come back.",
     variables: ["dealCount", "homeAirport"],
+  },
+  trial_day1: {
+    title: "Your Premium week has started",
+    body: "Today's best from {{homeAirport}}: {{destination}} for ${{price}}, {{discount}}% off.",
+    deepLink: "/swipe",
+    description:
+      "Day 1 of a 7-day trial (Oct 2026), to users the webhook marked as in a trial. Gets them back into the app with the airport's best deal right now.",
+    variables: ["homeAirport", "destination", "price", "discount", "dealCount"],
+  },
+  trial_day3: {
+    title: "{{destination}} just hit ${{price}}",
+    body: "{{discount}}% off from {{homeAirport}}. You're seeing every deal this week — swipe today's.",
+    deepLink: "/swipe",
+    description:
+      "Day 3 of a 7-day trial (Oct 2026), to users in a trial. Mid-trial reminder of what Premium shows them, using a real deal.",
+    variables: ["homeAirport", "destination", "price", "discount", "dealCount"],
+  },
+  cancel_survey: {
+    title: "Got 5 seconds?",
+    body: "You turned off renewal — no problem. Tap to tell us why; it goes straight to the people who build Trace.",
+    deepLink: "/cancel-survey",
+    description:
+      "Sent when RevenueCat reports a CANCELLATION the user made themselves (auto-renew turned off; not refunds or billing failures). Opens a one-question in-app survey. Oct 2026. Turn on only after the app version with the survey is out: older versions ignore the link.",
+    variables: [],
+  },
+  free_swipes_ready: {
+    title: "Your {{freeCount}} free deals are ready",
+    body: "Today's best from {{homeAirport}}: {{destination}} for ${{price}}, {{discount}}% off.",
+    deepLink: "/swipe",
+    description:
+      "Daily, to free users from before the Sept 2026 paywall gate (the only ones with free deals) who opened the app in the last 2 days and whose 24h free-swipe window has reset (5 deals a day). Stops once they stop opening the app. Turn on only after the 5-a-day app version is out: older versions allow 20.",
+    variables: ["freeCount", "homeAirport", "destination", "price", "discount"],
   },
   trial_ending_3d: {
     title: "Your trial ends in 3 days",

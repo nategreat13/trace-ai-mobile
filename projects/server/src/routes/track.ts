@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { fanOutConversion } from "../lib/ad-conversions";
+import { subscribeKlaviyoProfile, trackKlaviyoEvent } from "../lib/klaviyo";
 import { authenticate, AuthenticatedRequest } from "../middleware/authenticate";
 
 export const trackRoutes = Router();
@@ -44,7 +45,7 @@ trackRoutes.post(
   "/track-signup",
   authenticate,
   async (req: AuthenticatedRequest, res: Response) => {
-    const { userId, email, firstName, lastName, country } = req.body ?? {};
+    const { userId, email, firstName, lastName, country, source } = req.body ?? {};
 
     if (!userId || typeof userId !== "string") {
       res.status(400).json({ error: "userId required" });
@@ -80,6 +81,20 @@ trackRoutes.post(
       clientIp,
       clientUserAgent,
     });
+
+    // Accounts saved after a trial started: the profile was created
+    // anonymously with no email, so the profile-created trigger never
+    // subscribed them to Klaviyo (it only acts on create). Do it now, so the
+    // welcome series and any later trial-reminder email can reach them.
+    // Other callers already went through that trigger with an email.
+    if (source === "post_trial" && typeof email === "string" && email.trim()) {
+      await subscribeKlaviyoProfile(email.trim(), userId);
+      await trackKlaviyoEvent(
+        "Signed Up",
+        { externalId: userId, email: email.trim() },
+        { source: "post_trial", country: typeof country === "string" ? country : null },
+      );
+    }
 
     res.json({ ok: true });
   }
