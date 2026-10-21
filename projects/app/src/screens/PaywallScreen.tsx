@@ -9,6 +9,7 @@ import {
   useColorScheme,
   useWindowDimensions,
   Linking,
+  Platform,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { logMetaFirstPaywallView } from "../lib/metaAppEvents";
@@ -17,7 +18,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { X, Check, ShieldCheck, MapPin, Lock } from "lucide-react-native";
+import { X, Check, MapPin, Lock } from "lucide-react-native";
 import { Image } from "expo-image";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
@@ -97,7 +98,8 @@ export default function PaywallScreen() {
    */
   const { height: screenH } = useWindowDimensions();
   // A tapped-deal hero adds ~150pt, so the rest of the screen runs compact
-  // whenever one is shown — otherwise the guarantee and close button clip.
+  // whenever one is shown — otherwise the bottom of the offer and the close
+  // button clip.
   const compact = screenH < 740 || !!route.params?.deal;
 
   const {
@@ -144,8 +146,21 @@ export default function PaywallScreen() {
   // people who already know they want it lose nothing.
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
+  // Monthly is the default, but if the store didn't return a monthly product
+  // the screen would have no plan and a dead button while annual was still
+  // buyable. Fall back to annual in that case.
+  const monthlyAvailable = isBusinessPaywall ? businessMonthlyPackage : premiumMonthlyPackage;
+  const annualAvailable = isBusinessPaywall ? businessAnnualPackage : premiumAnnualPackage;
   useEffect(() => {
-    logMetaFirstPaywallView(entryPoint ?? "unknown");
+    if (billingPeriod === "monthly" && !monthlyAvailable && annualAvailable) {
+      setBillingPeriod("annual");
+    }
+  }, [billingPeriod, monthlyAvailable, annualAvailable]);
+
+  useEffect(() => {
+    // Same reason as the feed page's Meta event: count new-flow users only,
+    // or every existing install fires "initiated checkout" once on update.
+    if (profile?.feedReadyPending) logMetaFirstPaywallView(entryPoint ?? "unknown");
     logEvent("paywall_viewed", {
       current_tier: currentTier ?? "free",
       entry_point: entryPoint,
@@ -922,38 +937,20 @@ export default function PaywallScreen() {
               <Text style={{ color: theme.mutedForeground, fontSize: 13.5, fontWeight: "600" }}>
                 {billingPeriod === "annual"
                   ? "Switch back to monthly"
-                  : `Or pay yearly${annualPerMonth ? ` — ${annualPerMonth}` : ""}${
-                      annualSavings != null ? ` (save ${annualSavings}%)` : ""
+                  : // Billed amount first: the stores want the price actually
+                    // charged to be the prominent one, not the per-month figure.
+                    `Or pay yearly — ${annualPkg.product.priceString}/yr${
+                      annualPerMonth || annualSavings != null
+                        ? ` (${[
+                            annualPerMonth,
+                            annualSavings != null ? `save ${annualSavings}%` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(", ")})`
+                        : ""
                     }`}
               </Text>
             </TouchableOpacity>
-          )}
-
-          {/* The guarantee (Oct 2026). Answers "are these deals real?" and
-              "I'm not traveling right now" in one line: if we don't find
-              them a genuinely great fare, the next month is on us.
-              NOTE: a real promise — fulfillment (a free month via RevenueCat
-              promotional entitlement, on request) must exist before this
-              ships. */}
-          {!isBusinessPaywall && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                backgroundColor: theme.muted,
-                borderRadius: 12,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-              }}
-            >
-              <ShieldCheck size={20} color={colors.brand.traceGreen} />
-              <Text style={{ color: theme.foreground, fontSize: 13, lineHeight: 18, flex: 1 }}>
-                <Text style={{ fontWeight: "800" }}>Guarantee: </Text>
-                a flight $100+ under its usual price within 30 days, or your
-                next month is free.
-              </Text>
-            </View>
           )}
 
           {!!error && (
@@ -1007,7 +1004,7 @@ export default function PaywallScreen() {
             }}
           >
             {hasFreeTrial
-              ? "$0 today. Apple will ask you to confirm."
+              ? `$0 today. ${Platform.OS === "android" ? "Google Play" : "Apple"} will ask you to confirm.`
               : `${priceString} per ${periodSuffix}. Cancel anytime.`}
           </Text>
 

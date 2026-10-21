@@ -309,9 +309,13 @@ export function useIAP(): UseIAPResult {
 
   // Fail closed on unknown/missing ids: an id we have no answer for must not
   // be advertised as trial-eligible.
+  // Android product identifiers carry the base plan ("trace_premium_monthly:
+  // premium-monthly") while the eligibility map is keyed by bare product IDs,
+  // so the lookup strips the suffix. Without it every Android paywall reported
+  // "not eligible" and never showed the free trial.
   const isTrialEligibleFor = useCallback(
     (productId: string | null | undefined) =>
-      !!productId && trialEligibility[productId] === true,
+      !!productId && trialEligibility[productId.split(":")[0]] === true,
     [trialEligibility]
   );
   const trialEligible = Object.values(trialEligibility).some(Boolean);

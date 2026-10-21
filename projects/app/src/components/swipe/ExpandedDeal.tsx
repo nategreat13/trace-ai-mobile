@@ -109,6 +109,12 @@ interface ExpandedDealProps {
     similar?: { count: number; imageUrls: string[] };
     /** Rounded count for copy, e.g. "100+". */
     countLabel?: string;
+    /**
+     * Whether this user can actually get a free trial. Someone who already
+     * used one in the subscription group can't, and promising one here only
+     * for the paywall to say "$4.99/mo · Continue" reads as bait.
+     */
+    hasFreeTrial?: boolean;
   };
   /**
    * iOS: fires once the sheet has fully animated away. Navigate to another
@@ -883,7 +889,7 @@ export default function ExpandedDeal({
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
                       <Lock size={13} color={colors.brand.traceRed} strokeWidth={2.6} />
                       <Text style={[styles.metaValue, { color: colors.brand.traceRed, fontWeight: "700" }]}>
-                        Unlock with free trial
+                        {unlockedPreview.hasFreeTrial ? "Unlock with free trial" : "Unlock with Premium"}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -1077,7 +1083,8 @@ export default function ExpandedDeal({
               >
                 <Sparkles size={16} color={colors.brand.traceRed} />
                 <Text style={{ flex: 1, color: theme.foreground, fontSize: 13.5, fontWeight: "700", lineHeight: 18 }}>
-                  Want deals like {deal.destination} the moment they drop? Start your free week.
+                  Want deals like {deal.destination} the moment they drop?{" "}
+                  {unlockedPreview?.hasFreeTrial ? "Start your free week." : "Unlock Premium."}
                 </Text>
                 <ChevronRight size={16} color={colors.brand.traceRed} />
               </TouchableOpacity>
