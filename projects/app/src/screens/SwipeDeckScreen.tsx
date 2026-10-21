@@ -60,6 +60,7 @@ import { realDisplayName } from "@trace/shared";
 import type { Deal } from "@trace/shared";
 import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
 import { GOOD_DEAL_MIN_DISCOUNT } from "../lib/goodDeals";
+import { invalidateSwipeTaste } from "../lib/swipeTaste";
 import { createShare } from "../services/shareApi";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -607,6 +608,8 @@ export default function SwipeDeckScreen() {
         price: deal.price,
         domesticOrInternational: deal.domestic_or_international ?? null,
       });
+      // The next deal page opened should reflect this swipe's taste.
+      if (normalizedAction !== "left") invalidateSwipeTaste(user.uid);
 
       // Update profile stats (newSwipeCount/newDailySwipes computed earlier, above)
       const updates: Record<string, any> = {

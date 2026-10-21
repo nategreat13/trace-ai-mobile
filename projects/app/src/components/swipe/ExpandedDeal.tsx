@@ -46,6 +46,7 @@ import { colors } from "../../theme/colors";
 import { fadeTo } from "../../lib/fade";
 import { logEvent } from "../../lib/analytics";
 import { roundedCount } from "../../lib/roundedCount";
+import { loadSwipeTaste, swipeFit, type SwipeTaste } from "../../lib/swipeTaste";
 import { useAuth } from "../../context/AuthContext";
 import type { RootStackParamList } from "../../navigation/types";
 import WeatherPreview from "./WeatherPreview";
@@ -262,7 +263,7 @@ export default function ExpandedDeal({
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isPremium: isPremiumUser, profile } = useAuth();
+  const { isPremium: isPremiumUser, profile, user } = useAuth();
   // A free deal on the feed page reads as a premium one in every gate on
   // this screen; only the bottom button differs.
   const isPremium = isPremiumUser || !!unlockedPreview;
@@ -480,13 +481,30 @@ export default function ExpandedDeal({
     return () => clearTimeout(t);
   }, [!!unlockedPreview, visible, deal.id]);
 
-  const fitData = useMemo(
-    () =>
-      userProfile && deal
-        ? { segments: generateFitSummary(deal, userProfile), level: getDealFitLevel(deal, userProfile) }
-        : null,
-    [deal?.id, userProfile]
-  );
+  // Users who answered the trip-style questions keep the answer-based fit.
+  // Everyone else (swipe-first onboarding) gets fit learned from their saves,
+  // and no badge at all until there are enough of them to mean something.
+  const answered = (userProfile?.dealTypes?.length ?? 0) > 0;
+  const [taste, setTaste] = React.useState<SwipeTaste | null>(null);
+  React.useEffect(() => {
+    if (answered || !visible || !user?.uid) return;
+    let live = true;
+    loadSwipeTaste(user.uid)
+      .then((t) => live && setTaste(t))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [answered, visible, user?.uid]);
+
+  const fitData = useMemo(() => {
+    if (!userProfile || !deal) return null;
+    if (answered) {
+      return { segments: generateFitSummary(deal, userProfile), level: getDealFitLevel(deal, userProfile) };
+    }
+    const fit = swipeFit(deal, taste);
+    return fit ? { segments: fit.segments, level: { color: fit.color } } : null;
+  }, [deal?.id, userProfile, answered, taste]);
 
   if (!deal) return null;
 
@@ -1095,8 +1113,7 @@ export default function ExpandedDeal({
                 numberOfLines={1}
                 style={{ flex: 1, color: theme.foreground, fontSize: 13.5, fontWeight: "700" }}
               >
-                {roundedCount(unlockedPreview.similar.count)} more trip
-                {unlockedPreview.similar.count === 1 ? "" : "s"} like {deal.destination} locked
+                {roundedCount(unlockedPreview.similar.count)} more like {deal.destination}, locked
               </Text>
               <ChevronRight size={16} color={theme.mutedForeground} />
             </TouchableOpacity>
