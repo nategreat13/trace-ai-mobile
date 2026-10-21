@@ -133,6 +133,7 @@ export default function OnboardingScreen() {
   // nothing half-saved behind.
   const [firstSaves, setFirstSaves] = useState<Deal[]>([]);
   const [deckDone, setDeckDone] = useState(false);
+  const [swipedCount, setSwipedCount] = useState(0);
   const dealFetchRef = useRef<string | null>(null);
 
   const startDealFetch = useCallback((airport: string, force = false) => {
@@ -487,9 +488,24 @@ export default function OnboardingScreen() {
       subtitle: data.homeAirport
         ? `Today's best deals from ${data.homeAirport}`
         : "Today's best deals from your airport",
-      canProceed: deckDone,
+      // Never required to finish the deck (Trevor, Oct 21): "See my feed" is
+      // live from the first card, and whatever they've saved so far comes
+      // with them. Finishing all 8 still advances on its own.
+      canProceed: dealsReady,
       ctaLabel: "See my feed",
       newUserOnly: true,
+      submit: async () => {
+        if (!deckDone) {
+          setDeckDone(true);
+          logEvent("first_session_done", {
+            saved_count: firstSaves.length,
+            swiped_count: swipedCount,
+            deck_size: firstDeck.length,
+            finished: false,
+          });
+        }
+        return true;
+      },
       content: deckDone ? (
         <View style={{ alignItems: "center", paddingTop: 40, gap: 8 }}>
           <Text style={{ fontSize: 40 }}>✈️</Text>
@@ -512,14 +528,21 @@ export default function OnboardingScreen() {
               shown_discount_pct: Math.round(deal.discount_pct || 0),
               shown_price: Math.round(deal.price || 0),
             });
-            if (saved) logMetaFirstSave(deal);
+            // Kept as they go, not only at the end, so leaving early keeps
+            // every save made so far.
+            setSwipedCount((n) => n + 1);
+            if (saved) {
+              setFirstSaves((prev) => [...prev, deal]);
+              logMetaFirstSave(deal);
+            }
           }}
           onDone={(saved) => {
-            setFirstSaves(saved);
             setDeckDone(true);
             logEvent("first_session_done", {
               saved_count: saved.length,
+              swiped_count: firstDeck.length,
               deck_size: firstDeck.length,
+              finished: true,
             });
             setStep((n) => n + 1);
           }}
