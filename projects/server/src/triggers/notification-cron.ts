@@ -16,6 +16,10 @@ type NotificationPrefs = {
 const DEALS_API_BASE = "https://us-central1-embarckstravel.cloudfunctions.net/api";
 const DEALS_API_KEY = process.env.DEALS_API_KEY || "web-api-key";
 
+/** Mirrors the app's free tier (MAX_DAILY_SWIPES, GOOD_DEAL_MIN_DISCOUNT). */
+const FREE_TIER_DAILY_SWIPES = 5;
+const FREE_TIER_GOOD_DEAL_MIN = 40;
+
 type RawDeal = {
   discount_pct?: number;
   percentOff?: number;
@@ -329,6 +333,63 @@ async function runDailyNotifications() {
         }, data.notificationPreferences);
       }
       console.log(`[cron] inactivity_7d: scanned ${snap.size} candidates`);
+    }
+
+    // ─── Free swipes ready (Oct 2026 free tier) ────────────────────
+    // Free users get 5 deals a day on a rolling 24h window. Alerts are
+    // Premium, so this daily nudge is what brings a free user back — and
+    // every visit ends at the limit, which is the upgrade moment. Sent to
+    // free users seen in the last 14 days whose window has reset, with the
+    // airport's best good deal (40%+ off) as the hook. Users past 14 days
+    // are left to the inactivity sequence instead.
+    {
+      const seenSince = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const windowReset = now.getTime() - 24 * 60 * 60 * 1000;
+      // lastSeenAt range only (single-field index); subscription filtered
+      // here so no composite index is needed.
+      const snap = await colRef("userProfiles")
+        .where("lastSeenAt", ">=", seenSince)
+        .select(
+          "userId",
+          "homeAirport",
+          "notificationsEnabled",
+          "notificationPreferences",
+          "subscriptionStatus",
+          "dailySwipeWindowStart",
+        )
+        .get();
+      let sent = 0;
+      for (const doc of snap.docs) {
+        const data = doc.data() as {
+          userId?: string;
+          homeAirport?: string;
+          notificationsEnabled?: boolean;
+          notificationPreferences?: NotificationPrefs;
+          subscriptionStatus?: string;
+          dailySwipeWindowStart?: string;
+        };
+        if (!data.userId || !data.notificationsEnabled || !data.homeAirport) continue;
+        if (data.subscriptionStatus && data.subscriptionStatus !== "free") continue;
+        const windowStart = data.dailySwipeWindowStart
+          ? new Date(data.dailySwipeWindowStart).getTime()
+          : 0;
+        if (windowStart > windowReset) continue; // today's 5 not reset yet
+        const deals = await fetchDealsForAirport(data.homeAirport);
+        const best = deals
+          .filter((d) => (d.percentOff ?? d.discount_pct ?? 0) >= FREE_TIER_GOOD_DEAL_MIN)
+          .sort((a, b) => (b.percentOff ?? b.discount_pct ?? 0) - (a.percentOff ?? a.discount_pct ?? 0))[0];
+        const price = best?.dealPriceUSD ?? best?.price ?? 0;
+        if (!best?.destination || !price) continue;
+        await sendForTemplate(data.userId, "free_swipes_ready", {
+          freeCount: FREE_TIER_DAILY_SWIPES,
+          homeAirport: data.homeAirport,
+          destination: best.destination,
+          price: Math.round(price),
+          discount: Math.round(best.percentOff ?? best.discount_pct ?? 0),
+        }, data.notificationPreferences);
+        sent += 1;
+      }
+      console.log(`[cron] free_swipes_ready: scanned ${snap.size}, sent ${sent}`);
     }
 
     // ─── 14-day inactivity ────────────────────────────────────────

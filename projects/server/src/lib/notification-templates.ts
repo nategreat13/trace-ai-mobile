@@ -106,6 +106,16 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
       "Sent to users who haven't opened the app in ~14 days. Final re-engagement attempt.",
     variables: ["destination", "price", "dealCount", "homeAirport"],
   },
+  free_swipes_ready: {
+    key: "free_swipes_ready",
+    title: "Your {{freeCount}} free deals are ready",
+    body: "Today's best from {{homeAirport}}: {{destination}} for ${{price}}, {{discount}}% off.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Daily, to free users seen in the last 14 days whose 24h free-swipe window has reset (Oct 2026 free tier: 5 deals a day). A reminder that today's free deals are there — not a price alert, which stays Premium.",
+    variables: ["freeCount", "homeAirport", "destination", "price", "discount"],
+  },
   hot_deal_alert: {
     key: "hot_deal_alert",
     title: "{{destination}} just dropped {{discount}}% off",
@@ -307,6 +317,7 @@ export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
   inactivity_3d: "reengagement",
   inactivity_7d: "reengagement",
   inactivity_14d: "reengagement",
+  free_swipes_ready: "reengagement",
   hot_deal_alert: "deals",
   deal_alert_match: "deals",
   premium_nudge: "offers",
