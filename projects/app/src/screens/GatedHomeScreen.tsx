@@ -350,10 +350,24 @@ export default function GatedHomeScreen() {
    * falls back to generic copy — which is what every paywall view has been
    * getting, despite the personalised version being built and working.
    */
-  const openPaywall = (entryPoint: string) => {
+  const openPaywall = (entryPoint: string, tapped?: Deal) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    // The paywall leads with a tapped locked deal — at its REAL discount and
+    // fare (the rows here show funnel prices; locked rows hide them), since
+    // that's what the trial unlocks.
+    const real = tapped ? deals.find((d) => d.id === tapped.id) ?? null : null;
     navigation.navigate("Paywall", {
       entryPoint,
+      deal: real
+        ? {
+            destination: real.destination,
+            imageUrl: real.image_url,
+            discountPct: real.discount_pct,
+            price: real.price,
+            originalPrice: real.original_price,
+            origin: real.origin,
+          }
+        : undefined,
       destinationCount: selection.totalDestinations || undefined,
       lockedStat:
         selection.lockedCount > 0
@@ -528,7 +542,7 @@ export default function GatedHomeScreen() {
             // here — a gated user can't open a deal, so the tap should move
             // them forward rather than describe what they can't have.
             onPressDeal={() => openPaywall("feed_ready_saved_tapped")}
-            onPressLocked={() => openPaywall("feed_ready_locked_tapped")}
+            onPressLocked={(d) => openPaywall("feed_ready_locked_tapped", d)}
           />
         </View>
 
@@ -559,11 +573,27 @@ export default function GatedHomeScreen() {
               justifyContent: "center",
             }}
           >
+            {/* Sells what they get, not the trial mechanics (Trevor, Oct 21);
+                the trial terms sit right under it. */}
             <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-              {hasFreeTrial ? `Try Free for ${trialLabel}` : "Unlock every deal"}
+              {selection.totalDestinations > 0
+                ? `Unlock all ${selection.totalDestinations} deals`
+                : "Unlock every deal"}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
+        {hasFreeTrial && (
+          <Text
+            style={{
+              color: theme.mutedForeground,
+              fontSize: 12.5,
+              textAlign: "center",
+              marginTop: 8,
+            }}
+          >
+            Free for {trialLabel} · cancel anytime
+          </Text>
+        )}
 
         {/* Ways out for people who already have Trace: restore a
             subscription on this Apple ID, or sign in to an existing account.

@@ -35,6 +35,21 @@ export type RootStackParamList = {
          * "All 115 destinations from SLC" rather than "every destination".
          */
         destinationCount?: number;
+        /**
+         * The locked deal they tapped to get here (Oct 2026). The paywall
+         * leads with it — photo, real discount, price withheld — instead of
+         * a generic pitch. Real fare data only: this is the deal the trial
+         * unlocks, so it has to match what they see once they're in.
+         */
+        deal?: {
+          destination: string;
+          imageUrl?: string;
+          discountPct?: number;
+          /** Real fare and usual fare, for the savings line. */
+          price?: number;
+          originalPrice?: number;
+          origin?: string;
+        };
       }
     | undefined;
   /**

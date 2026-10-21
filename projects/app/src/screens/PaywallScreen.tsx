@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { logMetaFirstPaywallView } from "../lib/metaAppEvents";
 import {
   View,
+  StyleSheet,
   Text,
   TouchableOpacity,
   ScrollView,
@@ -11,12 +11,14 @@ import {
   Linking,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { logMetaFirstPaywallView } from "../lib/metaAppEvents";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
-import { X, Mail, Check } from "lucide-react-native";
+import { X, Check, ShieldCheck, MapPin, Lock } from "lucide-react-native";
+import { Image } from "expo-image";
 import type { PurchasesPackage } from "react-native-purchases";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
@@ -65,6 +67,7 @@ export default function PaywallScreen() {
   const personalizedSub = route.params?.personalizedSub ?? null;
   const destinationCount = route.params?.destinationCount ?? null;
   const lockedStat = route.params?.lockedStat ?? null;
+  const tappedDeal = route.params?.deal ?? null;
   // The post-onboarding paywall is the one view the user didn't ask for. It
   // gets a de-emphasized (never hidden) close affordance — see the close
   // button below.
@@ -73,6 +76,10 @@ export default function PaywallScreen() {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const { profile, setProfile } = useAuth();
+  // Only users who reach the free app have a daily swipe limit to escape.
+  const hasDailyLimit =
+    !profile?.feedReadyPending &&
+    profile?.accessGate !== "subscription_required";
 
   /**
    * This screen deliberately does not scroll — the whole offer is meant to be
@@ -86,7 +93,9 @@ export default function PaywallScreen() {
    * 13 up gets all five.
    */
   const { height: screenH } = useWindowDimensions();
-  const compact = screenH < 740;
+  // A tapped-deal hero adds ~150pt, so the rest of the screen runs compact
+  // whenever one is shown — otherwise the guarantee and close button clip.
+  const compact = screenH < 740 || !!route.params?.deal;
 
   const {
     offerings,
@@ -552,10 +561,35 @@ export default function PaywallScreen() {
     : premiumMonthlyPackage;
   const annualPerMonth = getPerMonthFromAnnual(annualPkg);
 
+  /**
+   * "That one trip pays for N months of Trace" — the money math, done for
+   * them, from the tapped deal's real fare against its usual fare. Only when
+   * the numbers are sane and the claim is worth making (2+ months).
+   */
+  const tripPaysFor = (() => {
+    const monthly = premiumMonthlyPackage?.product.price ?? 0;
+    const was = tappedDeal?.originalPrice ?? 0;
+    const now = tappedDeal?.price ?? 0;
+    if (!tappedDeal || monthly <= 0 || now <= 0 || was <= now) return null;
+    const saved = was - now;
+    if (saved / was > 0.95) return null;
+    const months = Math.floor(saved / monthly);
+    if (months < 2) return null;
+    const span =
+      months >= 24
+        ? `${Math.floor(months / 12)} years`
+        : months >= 12
+          ? "a year"
+          : `${months} months`;
+    return { saved: Math.round(saved), span };
+  })();
+
   const ctaLabel = subscribeDisabled
     ? "You're subscribed"
     : hasFreeTrial
-      ? `Try Free for ${trialDurationLabel}`
+      ? tappedDeal
+        ? `Unlock it free for ${trialDurationLabel}`
+        : `Try Free for ${trialDurationLabel}`
       : "Continue";
 
   /**
@@ -569,6 +603,9 @@ export default function PaywallScreen() {
    * frees the space the offer actually needs.
    */
   const valueLine =
+    (tripPaysFor
+      ? `This trip alone saves $${tripPaysFor.saved} — that's ${tripPaysFor.span} of Trace.`
+      : null) ??
     lockedStat ??
     personalizedSub ??
     (profile?.homeAirport
@@ -604,9 +641,13 @@ export default function PaywallScreen() {
         // then instant alerts, then search/explore. Guides are a nice extra,
         // not a reason to subscribe, so they're last and drop off on short
         // screens (compact shows three).
+        // "not just 5 a day" only for the pre-Sept free users who have that
+        // limit; new users (no freemium) never saw one.
         destinationCount
-          ? `All ${destinationCount} deals, not just 5 a day`
-          : "Every great deal, not just 5 a day",
+          ? `All ${destinationCount} deals${hasDailyLimit ? ", not just 5 a day" : ` from ${profile?.homeAirport ?? "your airport"}`}`
+          : hasDailyLimit
+            ? "Every great deal, not just 5 a day"
+            : "Every great deal from your airport",
         // NOT "alerts the moment any of them drops" — to someone who has
         // never used the product that promises a hundred notifications a
         // day. Alerts are opt-in per trip; the promise is control.
@@ -660,6 +701,76 @@ export default function PaywallScreen() {
             gap: compact ? 12 : 16,
           }}
         >
+          {/* 0 — the deal they tapped (Oct 2026). Photo, place, real
+                 discount; the price is the one thing withheld, because it's
+                 the thing the trial unlocks. */}
+          {!!tappedDeal && !isBusinessPaywall && (
+            <View
+              style={{
+                height: screenH < 740 ? 96 : 120,
+                borderRadius: 18,
+                overflow: "hidden",
+                backgroundColor: theme.muted,
+              }}
+            >
+              {!!tappedDeal.imageUrl && (
+                <Image
+                  source={{ uri: tappedDeal.imageUrl }}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                />
+              )}
+              <LinearGradient
+                colors={["rgba(0,0,0,0.05)", "rgba(0,0,0,0.75)"]}
+                style={StyleSheet.absoluteFill}
+              />
+              <View
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  flexDirection: "row",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  gap: 10,
+                }}
+              >
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <MapPin size={14} color="#fff" />
+                    <Text
+                      numberOfLines={1}
+                      style={{ color: "#fff", fontSize: 22, fontWeight: "800", flexShrink: 1 }}
+                    >
+                      {tappedDeal.destination}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Lock size={14} color="rgba(255,255,255,0.9)" strokeWidth={2.5} />
+                    <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 18, fontWeight: "800", letterSpacing: 2 }}>
+                      $•••
+                    </Text>
+                  </View>
+                </View>
+                {!!tappedDeal.discountPct && tappedDeal.discountPct > 0 && (
+                  <View
+                    style={{
+                      backgroundColor: colors.brand.traceGreen,
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontSize: 13, fontWeight: "800" }}>
+                      {Math.round(tappedDeal.discountPct)}% off
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* 1 — what you get, in their numbers */}
           <View style={{ gap: 8 }}>
             <Text
@@ -671,7 +782,9 @@ export default function PaywallScreen() {
                 lineHeight: compact ? 32 : 37,
               }}
             >
-              {heroContent.headline}
+              {tappedDeal && !isBusinessPaywall
+                ? `See the price.\nUnlock every deal.`
+                : heroContent.headline}
             </Text>
             <Text style={{ color: theme.mutedForeground, fontSize: 16, lineHeight: 22 }}>
               {valueLine}
@@ -683,7 +796,7 @@ export default function PaywallScreen() {
                  this screen does not scroll, so every row has to earn its
                  height and none of them may wrap. */}
           <View style={{ gap: compact ? 7 : 9 }}>
-            {(compact ? benefits.slice(0, 3) : benefits).map((b) => (
+            {(tappedDeal ? benefits.slice(0, 2) : compact ? benefits.slice(0, 3) : benefits).map((b) => (
               <View
                 key={b}
                 style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
@@ -715,26 +828,23 @@ export default function PaywallScreen() {
                  "$0 today / $X after" row, which printed both numbers twice
                  on one screen. The zero is the most persuasive fact here, so
                  it leads, and everything else is the sentence underneath. */}
-          {!!monthlyPkg && (
-            <TouchableOpacity
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                setBillingPeriod("monthly");
-              }}
-              activeOpacity={0.9}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: billingPeriod === "monthly" }}
+          {/* 2 — the offer, as one block, for the ONE plan shown (Oct 2026:
+                 one plan up front). Monthly by default; the yearly option is
+                 a quiet text link under it that swaps what this card says.
+                 Two plan cards made the first screen a comparison instead of
+                 a decision. */}
+          {!!selectedPkg && (
+            <View
               style={{
                 borderWidth: 2,
-                borderColor: billingPeriod === "monthly" ? accent : theme.border,
-                backgroundColor:
-                  billingPeriod === "monthly" ? accent + "0F" : theme.card,
+                borderColor: accent,
+                backgroundColor: accent + "0F",
                 borderRadius: 18,
                 paddingHorizontal: 18,
-                paddingVertical: 20,
+                paddingVertical: compact ? 14 : 18,
               }}
             >
-              {hasFreeTrial && billingPeriod === "monthly" ? (
+              {hasFreeTrial ? (
                 <>
                   <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10 }}>
                     <Text
@@ -768,9 +878,10 @@ export default function PaywallScreen() {
                   >
                     Then{" "}
                     <Text style={{ color: theme.foreground, fontWeight: "700" }}>
-                      {monthlyPkg.product.priceString}/month
+                      {priceString}/{periodSuffix}
                     </Text>{" "}
-                    after your {trialLengthLabel} trial. Cancel anytime.
+                    after your {trialLengthLabel} trial. Cancel before then and
+                    pay nothing.
                   </Text>
                 </>
               ) : (
@@ -783,92 +894,61 @@ export default function PaywallScreen() {
                       letterSpacing: -1,
                     }}
                   >
-                    {monthlyPkg.product.priceString}
-                    <Text style={{ fontSize: 20, fontWeight: "700" }}>/mo</Text>
+                    {priceString}
+                    <Text style={{ fontSize: 20, fontWeight: "700" }}>
+                      /{billingPeriod === "annual" ? "yr" : "mo"}
+                    </Text>
                   </Text>
                   <Text style={{ color: theme.mutedForeground, fontSize: 14, marginTop: 4 }}>
-                    Billed monthly · cancel anytime
+                    Billed {billingPeriod === "annual" ? "yearly" : "monthly"} · cancel anytime
                   </Text>
                 </>
               )}
-            </TouchableOpacity>
+            </View>
           )}
 
-          {/* Annual: quieter, but it carries its own number because it is
-              genuinely the cheaper plan. A bare "or pay annually" link would
-              hide the one fact that makes it worth choosing. */}
-          {!!annualPkg && (
+          {!!annualPkg && !!monthlyPkg && (
             <TouchableOpacity
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
-                setBillingPeriod("annual");
+                setBillingPeriod(billingPeriod === "annual" ? "monthly" : "annual");
               }}
-              activeOpacity={0.9}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: billingPeriod === "annual" }}
-              style={{
-                borderWidth: billingPeriod === "annual" ? 2 : 1,
-                borderColor: billingPeriod === "annual" ? accent : theme.border,
-                backgroundColor:
-                  billingPeriod === "annual" ? accent + "0F" : "transparent",
-                borderRadius: 14,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ alignSelf: "center", paddingVertical: 2 }}
             >
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: theme.foreground,
-                    fontSize: 15,
-                    fontWeight: billingPeriod === "annual" ? "800" : "700",
-                  }}
-                >
-                  {billingPeriod === "annual" ? "Annual selected" : "Or pay yearly"}
-                  {annualPerMonth ? ` — ${annualPerMonth}` : ""}
-                </Text>
-                <Text
-                  style={{ color: theme.mutedForeground, fontSize: 13, marginTop: 2 }}
-                >
-                  {annualPkg.product.priceString} billed annually
-                </Text>
-              </View>
-              {annualSavings != null && (
-                <View
-                  style={{
-                    backgroundColor: accent,
-                    borderRadius: 999,
-                    paddingHorizontal: 9,
-                    paddingVertical: 3,
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 11, fontWeight: "800" }}>
-                    SAVE {annualSavings}%
-                  </Text>
-                </View>
-              )}
+              <Text style={{ color: theme.mutedForeground, fontSize: 13.5, fontWeight: "600" }}>
+                {billingPeriod === "annual"
+                  ? "Switch back to monthly"
+                  : `Or pay yearly${annualPerMonth ? ` — ${annualPerMonth}` : ""}${
+                      annualSavings != null ? ` (save ${annualSavings}%)` : ""
+                    }`}
+              </Text>
             </TouchableOpacity>
           )}
 
-          {/* The whole three-step timeline compressed to the one line that
-              carries its weight: the reminder is what removes the fear of
-              being charged unawares. */}
-          {hasFreeTrial && (
+          {/* The guarantee (Oct 2026). Answers "are these deals real?" and
+              "I'm not traveling right now" in one line: if we don't find
+              them a genuinely great fare, the next month is on us.
+              NOTE: a real promise — fulfillment (a free month via RevenueCat
+              promotional entitlement, on request) must exist before this
+              ships. */}
+          {!isBusinessPaywall && (
             <View
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 9,
-                alignSelf: "center",
+                gap: 10,
+                backgroundColor: theme.muted,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
               }}
             >
-              <Mail size={15} color={theme.mutedForeground} />
-              <Text style={{ color: theme.mutedForeground, fontSize: 13.5 }}>
-                Cancel anytime · we'll email you before it renews
+              <ShieldCheck size={20} color={colors.brand.traceGreen} />
+              <Text style={{ color: theme.foreground, fontSize: 13, lineHeight: 18, flex: 1 }}>
+                <Text style={{ fontWeight: "800" }}>Guarantee: </Text>
+                a flight $100+ under its usual price within 30 days, or your
+                next month is free.
               </Text>
             </View>
           )}
@@ -924,7 +1004,7 @@ export default function PaywallScreen() {
             }}
           >
             {hasFreeTrial
-              ? "Apple will ask you to confirm. You won't be charged today."
+              ? "$0 today. Apple will ask you to confirm."
               : `${priceString} per ${periodSuffix}. Cancel anytime.`}
           </Text>
 
@@ -932,17 +1012,20 @@ export default function PaywallScreen() {
               onboarding screen before, which is the one place it could not
               influence a purchase. The figure is Trace's web member base —
               the same product, a different front door — so the wording says
-              "travelers", never "app users". */}
-          <Text
-            style={{
-              textAlign: "center",
-              fontSize: 12.5,
-              color: theme.mutedForeground,
-              fontWeight: "600",
-            }}
-          >
-            Join 30,000+ travelers using Trace
-          </Text>
+              "travelers", never "app users". Dropped under a deal hero,
+              which needs the room. */}
+          {!tappedDeal && (
+            <Text
+              style={{
+                textAlign: "center",
+                fontSize: 12.5,
+                color: theme.mutedForeground,
+                fontWeight: "600",
+              }}
+            >
+              Join 30,000+ travelers using Trace
+            </Text>
+          )}
 
           <View
             style={{
