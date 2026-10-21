@@ -36,6 +36,15 @@ export const GIFT_DISMISSAL_INTERVAL = 2;
 const DISMISSAL_KEY = "trace.paywall_dismissals";
 
 /** Increment and return the new total. Returns 0 if storage is unavailable. */
+/** How many times this device has closed the paywall. 0 if unknown. */
+export async function getPaywallDismissals(): Promise<number> {
+  try {
+    return Number.parseInt((await getItemRaw(DISMISSAL_KEY)) ?? "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function recordPaywallDismissal(): Promise<number> {
   try {
     const raw = await getItemRaw(DISMISSAL_KEY);

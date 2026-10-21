@@ -8,7 +8,7 @@ import {
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -21,7 +21,7 @@ import { fetchDeals } from "../services/dealsApi";
 import { getSavedDeals } from "../services/firestore";
 import { repriceDeal } from "../lib/funnelDeals";
 import { logEvent } from "../lib/analytics";
-import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
+import { giftOfferEligible, giftOfferSeen, getPaywallDismissals } from "../lib/giftOffer";
 import { Gift } from "lucide-react-native";
 import FeedReveal, {
   selectSavesReveal,
@@ -227,6 +227,26 @@ export default function GatedHomeScreen() {
    * is set here too, which keeps TabNavigator's one-shot push from firing on
    * someone who just chose to keep swiping for free.
    */
+  /**
+   * "Keep swiping free" appears only once they've closed the paywall at
+   * least once (Trevor, Oct 21). Offered up front, nearly everyone would take
+   * it before knowing what Premium is; after a "no" to the paywall it's the
+   * way into the free tier rather than the default choice. Re-read on focus,
+   * since the paywall and gift are pushed over this screen.
+   */
+  const [paywallClosed, setPaywallClosed] = useState(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      let live = true;
+      getPaywallDismissals().then((n) => {
+        if (live) setPaywallClosed(n > 0);
+      });
+      return () => {
+        live = false;
+      };
+    }, []),
+  );
+
   const keepSwiping = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     logEvent("feed_ready_keep_swiping", { saves: savedDeals.length });
@@ -559,8 +579,9 @@ export default function GatedHomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* The free tier. The page sells, but it never traps: "Keep
-            swiping" leads into the app with today's free swipes. */}
+        {/* The free tier, once they've said no to the paywall. The page
+            sells first; it never traps. */}
+        {paywallClosed && (
         <TouchableOpacity
           onPress={keepSwiping}
           accessibilityRole="button"
@@ -571,6 +592,7 @@ export default function GatedHomeScreen() {
             Keep swiping free
           </Text>
         </TouchableOpacity>
+        )}
         <TouchableOpacity
           hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
           style={{ paddingVertical: 4, alignItems: "center" }}

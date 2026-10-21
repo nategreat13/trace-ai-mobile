@@ -285,7 +285,7 @@ export default function LandingScreen() {
             lineHeight: 22,
           }}
         >
-          Swipe real deals from your airport.{" "}
+          Swipe deals from your airport.{" "}
           <Text style={{ color: colors.brand.traceRed }}>Save the ones you'd take.</Text>
         </Text>
 
