@@ -1007,6 +1007,9 @@ export default function ExpandedDeal({
               </TouchableOpacity>
             )}
 
+            {/* No save on a free feed-page deal (Trevor): the one action
+                here is Unlock. */}
+            {!unlockedPreview && (
             <Animated.View style={{ width: 50, height: 50, transform: [{ scale: saveScale }] }}>
               <TouchableOpacity
                 onPress={handleSave}
@@ -1026,6 +1029,7 @@ export default function ExpandedDeal({
                 }
               </TouchableOpacity>
             </Animated.View>
+            )}
 
             <TouchableOpacity
               onPress={() => {
