@@ -34,6 +34,8 @@ import {
   ExternalLink,
   Sparkles,
   Share2,
+  Lock,
+  ChevronRight,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -43,6 +45,7 @@ import { Deal } from "@trace/shared";
 import { colors } from "../../theme/colors";
 import { fadeTo } from "../../lib/fade";
 import { logEvent } from "../../lib/analytics";
+import { roundedCount } from "../../lib/roundedCount";
 import { useAuth } from "../../context/AuthContext";
 import type { RootStackParamList } from "../../navigation/types";
 import WeatherPreview from "./WeatherPreview";
@@ -95,7 +98,15 @@ interface ExpandedDealProps {
    * isn't premium. The bottom button becomes this label and calls onBook,
    * which the caller wires to the paywall, instead of booking.
    */
-  unlockedPreview?: { ctaLabel: string };
+  unlockedPreview?: {
+    ctaLabel: string;
+    /**
+     * Locked deals like this one, shown as a strip pinned above the button:
+     * "4 more trips like Lisbon are locked". Wanting this deal is the
+     * moment to show there are more like it behind the same unlock.
+     */
+    similar?: { count: number; imageUrls: string[] };
+  };
   /**
    * iOS: fires once the sheet has fully animated away. Navigate to another
    * full-screen modal (the paywall) from here, not from onClose — pushed
@@ -479,7 +490,7 @@ export default function ExpandedDeal({
       >
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + insets.bottom }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: (unlockedPreview?.similar?.count ? 180 : 120) + insets.bottom }]}
           showsVerticalScrollIndicator={false}
           bounces
         >
@@ -996,6 +1007,42 @@ export default function ExpandedDeal({
             },
           ]}
         >
+          {!!unlockedPreview?.similar && unlockedPreview.similar.count > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                logEvent("free_deal_similar_tapped", { destination: deal.destination });
+                onBook();
+              }}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              style={[styles.similarStrip, { backgroundColor: theme.muted }]}
+            >
+              <View style={styles.similarThumbs}>
+                {unlockedPreview.similar.imageUrls.slice(0, 3).map((uri, i) => (
+                  <View
+                    key={uri + i}
+                    style={[
+                      styles.similarThumb,
+                      { marginLeft: i === 0 ? 0 : -10, borderColor: theme.muted },
+                    ]}
+                  >
+                    <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    <View style={styles.similarVeil}>
+                      <Lock size={10} color="#fff" strokeWidth={2.8} />
+                    </View>
+                  </View>
+                ))}
+              </View>
+              <Text
+                numberOfLines={1}
+                style={{ flex: 1, color: theme.foreground, fontSize: 13.5, fontWeight: "700" }}
+              >
+                {roundedCount(unlockedPreview.similar.count)} more trip
+                {unlockedPreview.similar.count === 1 ? "" : "s"} like {deal.destination} locked
+              </Text>
+              <ChevronRight size={16} color={theme.mutedForeground} />
+            </TouchableOpacity>
+          )}
           <View style={styles.buttonRow}>
             {!!onShare && (
               <TouchableOpacity
@@ -1571,6 +1618,29 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   buttonRow: { flexDirection: "row", gap: 12 },
+  similarStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 12,
+  },
+  similarThumbs: { flexDirection: "row" },
+  similarThumb: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 2,
+  },
+  similarVeil: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   saveButton: {
     width: 50,
     height: 50,

@@ -64,6 +64,7 @@ export type AnalyticsEventName =
   | "feed_ready_keep_swiping"
   | "feed_ready_sign_in"
   | "feed_ready_free_deal_opened"
+  | "free_deal_similar_tapped"
   | "signup_skipped"
   // The airport picker's dead end — a search that matched none of the 23
   // serviced origins. `_shown` sizes the wall directly (13% of accounts in

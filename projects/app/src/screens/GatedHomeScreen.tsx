@@ -366,6 +366,29 @@ export default function GatedHomeScreen() {
   // Set when "Unlock" is tapped inside the deal page; the paywall opens once
   // the page has finished closing (see ExpandedDeal's onDismissed).
   const unlockAfterCloseRef = useRef(false);
+  /**
+   * Locked deals like the one they opened — same domestic/international
+   * side first, biggest discount first — for the "N more trips like X are
+   * locked" strip on its page. Falls back to any locked deal.
+   */
+  const similarLocked = (d: Deal) => {
+    const intl = (x: Deal) =>
+      !(x.domestic_or_international || "").toLowerCase().includes("domestic");
+    const locked = selection.rows.filter((r) => r.locked).map((r) => r.deal);
+    const same = locked.filter((x) => intl(x) === intl(d));
+    const pool = same.length >= 2 ? same : locked;
+    // The page lists only the first ~14 rows, so scale the same-side share
+    // of those up to every locked deal for the count.
+    const sameCount =
+      same.length >= 2
+        ? Math.max(same.length, Math.round(selection.lockedCount * (same.length / locked.length)))
+        : selection.lockedCount;
+    return {
+      count: sameCount,
+      imageUrls: pool.map((x) => x.image_url).filter(Boolean).slice(0, 3),
+    };
+  };
+
   const afterDealClosed = () => {
     setOpenDeal(null);
     if (unlockAfterCloseRef.current) {
@@ -666,7 +689,7 @@ export default function GatedHomeScreen() {
             if (Platform.OS !== "ios") setTimeout(afterDealClosed, 450);
           }}
           onDismissed={afterDealClosed}
-          unlockedPreview={{ ctaLabel: unlockLabel }}
+          unlockedPreview={{ ctaLabel: unlockLabel, similar: similarLocked(openDeal) }}
         />
       )}
     </SafeAreaView>
