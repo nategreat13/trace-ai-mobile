@@ -9,6 +9,10 @@ export function fuzzyIncludes(tokens: string[], word: string): boolean {
   const allowed = word.length >= 7 ? 2 : 1;
   return tokens.some((t) => {
     if (t.includes(word)) return true;
+    // Typos keep the first letter ("Mismi", "Bodton", "Chicgo"). Swapping it
+    // is how a different real city reads as one of ours: Wichita as
+    // "Michigan", Waco as "Tacoma", Garland as "Orlando".
+    if (t[0] !== word[0]) return false;
     for (let len = word.length - 1; len <= word.length + 1; len++) {
       if (len < 3 || len > t.length) continue;
       if (editDistance(word, t.slice(0, len)) <= allowed) return true;

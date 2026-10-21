@@ -13,6 +13,7 @@ import { MapPin, BellRing, Check } from "lucide-react-native";
 import { colors } from "../../theme/colors";
 import {
   findUnserved,
+  namesUnservedAirport,
   nearestServed,
   distanceMiles,
   HOME_AIRPORT_COORDS,
@@ -114,6 +115,8 @@ export function searchHomeAirports(query: string): Airport[] {
     words.every((w) => HOME_AIRPORT_HAYSTACKS[i].includes(w)),
   ).slice(0, 8);
   if (exact.length > 0) return exact;
+  // A city we don't serve, typed correctly, is not a typo of one we do.
+  if (namesUnservedAirport(query)) return [];
   // Nothing matched as typed — try again forgiving typos. 1.11.0's dead ends
   // included "MISMI", "BODTON" and "CLORAD": cities we serve, one slipped key
   // away from a match.

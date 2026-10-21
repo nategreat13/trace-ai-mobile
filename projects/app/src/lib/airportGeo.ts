@@ -169,6 +169,22 @@ export function nearestServed(point: { lat: number; lng: number }): NearestResul
  * Find an unserved airport matching a free-text query, so the picker can name
  * what the user typed instead of showing an empty list.
  */
+/**
+ * True when every word of the query appears, as typed, in some airport we
+ * don't serve (code, city, state or name). The serviced search checks this
+ * before falling back to typo-tolerant matching, so a real city we don't
+ * cover ("Oakland") gets the "not yet, nearest is SFO" answer instead of a
+ * fuzzy guess at a city we do ("Orlando").
+ */
+export function namesUnservedAirport(query: string): boolean {
+  const words = query.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean);
+  if (words.length === 0) return false;
+  return UNSERVED_AIRPORTS.some((a) => {
+    const hay = `${a.code} ${a.city} ${a.state} ${a.name}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+}
+
 export function findUnserved(query: string): GeoAirport[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
