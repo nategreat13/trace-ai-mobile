@@ -8,6 +8,31 @@ import { listActiveEntitlements } from "../lib/revenuecat-rest";
 import { sendToUser } from "../lib/push";
 import { getTemplate, renderString, TEMPLATE_CATEGORY } from "../lib/notification-templates";
 
+/**
+ * Push the one-question cancel survey to someone who just turned off
+ * auto-renew. Template-driven (admin can edit or disable it) and respects
+ * the user's category opt-out, like every other push.
+ */
+async function sendCancelSurveyPush(appUserId: string): Promise<void> {
+  const template = await getTemplate("cancel_survey");
+  if (!template?.enabled) return;
+  const snap = await colRef("userProfiles").where("userId", "==", appUserId).limit(1).get();
+  const prefs = (snap.docs[0]?.data() as any)?.notificationPreferences as
+    | Record<string, boolean>
+    | undefined;
+  if (prefs?.[TEMPLATE_CATEGORY["cancel_survey"]] === false) return;
+  await sendToUser(
+    appUserId,
+    {
+      title: renderString(template.title, {}),
+      body: renderString(template.body, {}),
+      data: { deepLink: template.deepLink ?? "/cancel-survey", templateKey: "cancel_survey" },
+    },
+    { templateKey: "cancel_survey" },
+  );
+}
+
+
 export const revenuecatWebhookRoutes = Router();
 
 type Tier = "premium" | "business";
@@ -590,6 +615,14 @@ revenuecatWebhookRoutes.post("/revenuecat-webhook", async (req, res) => {
           app_user_id
         );
         await logAnalyticsEvent("subscription_canceled", app_user_id, baseEventProps);
+        // Ask why (Oct 2026): Apple runs cancellation in Settings, so a push
+        // that opens a one-question survey is the only place we can. Template
+        // `cancel_survey` ships disabled; best-effort, never fails the hook.
+        try {
+          await sendCancelSurveyPush(app_user_id);
+        } catch (err) {
+          console.warn("[RC Webhook] cancel survey push failed:", err);
+        }
         break;
       }
 

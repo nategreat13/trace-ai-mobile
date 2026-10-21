@@ -68,6 +68,11 @@ export type AnalyticsEventName =
   | "free_deal_booking_row_tapped"
   | "free_deal_dwell_hint_shown"
   | "free_deal_dwell_hint_tapped"
+  | "trial_alerts_viewed"
+  | "trial_alerts_enabled"
+  | "trial_alerts_skipped"
+  | "cancel_survey_viewed"
+  | "cancel_survey_answered"
   | "signup_skipped"
   // The airport picker's dead end — a search that matched none of the 23
   // serviced origins. `_shown` sizes the wall directly (13% of accounts in

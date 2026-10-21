@@ -208,6 +208,8 @@ function handleNotificationDeepLink(
     nav.navigate("MainTabs", { screen: "Explore" });
   } else if (link === "/profile") {
     nav.navigate("MainTabs", { screen: "Profile" });
+  } else if (link === "/cancel-survey") {
+    nav.navigate("CancelSurvey");
   }
   // Unknown deep links: silently no-op rather than crash on a typo.
 }

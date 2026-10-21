@@ -217,48 +217,59 @@ async function runDailyNotifications() {
       console.log(`[cron] welcome: scanned ${snap.size} candidates`);
     }
 
-    // ─── Trial ending in 3 days ───────────────────────────────────
+    // ─── Trial week (Oct 2026) ───────────────────────────────────
+    // Day 1 and day 3 of a 7-day trial, then the two "ending" reminders.
+    // The Oct 21 report had 5 of 8 new monthly trials turning off
+    // auto-renew within days, with nothing from us during the week.
+    //
+    // Windows are a full 24h wide because this runs once a day: each user
+    // falls in each window exactly once. (The ending reminders used 2-hour
+    // windows here, which only caught trials ending within an hour of the
+    // 14:00 UTC run — fixed with this change.)
     {
-      const cutoffEnd = new Date(now.getTime() + 73 * 60 * 60 * 1000);
-      const cutoffStart = new Date(now.getTime() + 71 * 60 * 60 * 1000);
-      const snap = await colRef("userProfiles")
-        .where("trialEndDate", ">=", cutoffStart)
-        .where("trialEndDate", "<", cutoffEnd)
-        .where("subscriptionSource", "==", "store")
-        .select("userId", "notificationsEnabled", "notificationPreferences")
-        .get();
-      for (const doc of snap.docs) {
-        const data = doc.data() as {
-          userId?: string;
-          notificationsEnabled?: boolean;
-          notificationPreferences?: NotificationPrefs;
-        };
-        if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "trial_ending_3d", {}, data.notificationPreferences);
+      const DAY = 24 * 60 * 60 * 1000;
+      const steps: { key: string; fromDays: number; toDays: number; withDeal: boolean }[] = [
+        { key: "trial_day1", fromDays: 5, toDays: 6, withDeal: true },
+        { key: "trial_day3", fromDays: 3, toDays: 4, withDeal: true },
+        { key: "trial_ending_3d", fromDays: 2, toDays: 3, withDeal: false },
+        { key: "trial_ending_24h", fromDays: 0, toDays: 1, withDeal: false },
+      ];
+      for (const step of steps) {
+        const snap = await colRef("userProfiles")
+          .where("trialEndDate", ">=", new Date(now.getTime() + step.fromDays * DAY))
+          .where("trialEndDate", "<", new Date(now.getTime() + step.toDays * DAY))
+          .where("subscriptionSource", "==", "store")
+          .select("userId", "homeAirport", "notificationsEnabled", "notificationPreferences")
+          .get();
+        let sent = 0;
+        for (const doc of snap.docs) {
+          const data = doc.data() as {
+            userId?: string;
+            homeAirport?: string;
+            notificationsEnabled?: boolean;
+            notificationPreferences?: NotificationPrefs;
+          };
+          if (!data.userId || !data.notificationsEnabled) continue;
+          const vars: Record<string, string | number> = {
+            homeAirport: data.homeAirport ?? "your airport",
+          };
+          if (step.withDeal) {
+            const deals = await fetchDealsForAirport(data.homeAirport ?? "");
+            const best = [...deals].sort(
+              (a, b) => (b.percentOff ?? b.discount_pct ?? 0) - (a.percentOff ?? a.discount_pct ?? 0),
+            )[0];
+            const price = best?.dealPriceUSD ?? best?.price ?? 0;
+            if (!best?.destination || !price) continue;
+            vars.destination = best.destination;
+            vars.price = Math.round(price);
+            vars.discount = Math.round(best.percentOff ?? best.discount_pct ?? 0);
+            vars.dealCount = deals.length;
+          }
+          await sendForTemplate(data.userId, step.key, vars, data.notificationPreferences);
+          sent += 1;
+        }
+        console.log(`[cron] ${step.key}: scanned ${snap.size}, sent ${sent}`);
       }
-      console.log(`[cron] trial_ending_3d: scanned ${snap.size} candidates`);
-    }
-
-    // ─── Trial ending in 24h ──────────────────────────────────────
-    {
-      const cutoffEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
-      const cutoffStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
-      const snap = await colRef("userProfiles")
-        .where("trialEndDate", ">=", cutoffStart)
-        .where("trialEndDate", "<", cutoffEnd)
-        .where("subscriptionSource", "==", "store")
-        .select("userId", "notificationsEnabled", "notificationPreferences")
-        .get();
-      for (const doc of snap.docs) {
-        const data = doc.data() as {
-          userId?: string;
-          notificationsEnabled?: boolean;
-          notificationPreferences?: NotificationPrefs;
-        };
-        if (!data.userId || !data.notificationsEnabled) continue;
-        await sendForTemplate(data.userId, "trial_ending_24h", {}, data.notificationPreferences);
-      }
-      console.log(`[cron] trial_ending_24h: scanned ${snap.size} candidates`);
     }
 
     // ─── 3-day inactivity ─────────────────────────────────────────

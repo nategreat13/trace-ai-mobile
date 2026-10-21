@@ -67,6 +67,8 @@ export type RootStackParamList = {
   GiftOffer: { fromEntryPoint?: string } | undefined;
   PremiumWelcome: undefined;
   SaveAccount: undefined;
+  TrialAlerts: undefined;
+  CancelSurvey: undefined;
   BusinessWelcome: undefined;
   UpgradeWelcome: undefined;
   EditPreferences: undefined;

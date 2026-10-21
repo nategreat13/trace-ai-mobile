@@ -46,6 +46,36 @@ export const TEMPLATE_DEFAULTS: Record<string, NotificationTemplate> = {
       "Sent ~24 hours after signup. Reinforces the home airport feed and gives the user a reason to come back.",
     variables: ["dealCount", "homeAirport"],
   },
+  cancel_survey: {
+    key: "cancel_survey",
+    title: "Got 5 seconds?",
+    body: "You turned off renewal — no problem. Tap to tell us why; it goes straight to the people who build Trace.",
+    deepLink: "/cancel-survey",
+    enabled: false,
+    description:
+      "Sent when RevenueCat reports a CANCELLATION (auto-renew turned off). Opens a one-question in-app survey. Oct 2026.",
+    variables: [],
+  },
+  trial_day1: {
+    key: "trial_day1",
+    title: "Your Premium week has started",
+    body: "Today's best from {{homeAirport}}: {{destination}} for ${{price}}, {{discount}}% off.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Day 1 of a 7-day trial (Oct 2026). Gets them back into the app on day one with the airport's best deal right now.",
+    variables: ["homeAirport", "destination", "price", "discount", "dealCount"],
+  },
+  trial_day3: {
+    key: "trial_day3",
+    title: "{{destination}} just hit ${{price}}",
+    body: "{{discount}}% off from {{homeAirport}}. You're seeing every deal this week — swipe today's.",
+    deepLink: "/swipe",
+    enabled: false,
+    description:
+      "Day 3 of a 7-day trial (Oct 2026). Mid-trial reminder of what Premium shows them, using a real deal.",
+    variables: ["homeAirport", "destination", "price", "discount", "dealCount"],
+  },
   trial_ending_3d: {
     key: "trial_ending_3d",
     title: "Trace",
@@ -309,6 +339,9 @@ export type NotificationCategory = "deals" | "account" | "reengagement" | "offer
 export const TEMPLATE_CATEGORY: Record<string, NotificationCategory> = {
   deal_of_the_day: "deals",
   welcome: "account",
+  cancel_survey: "account",
+  trial_day1: "deals",
+  trial_day3: "deals",
   trial_ending_3d: "account",
   trial_ending_24h: "account",
   billing_issue: "account",

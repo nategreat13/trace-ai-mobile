@@ -71,6 +71,8 @@ export interface UserProfile {
    * accounts that carry it are routed into the free tier like everyone else.
    */
   feedReadyPending?: boolean;
+  /** Saw the "turn on alerts" step after starting a trial (Oct 2026). */
+  trialAlertsAsked?: boolean;
   /**
    * Destinations this user was shown the last time they opened the gated
    * home screen. Diffed on the next visit to count what's genuinely new.

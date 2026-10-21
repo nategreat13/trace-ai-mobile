@@ -20,6 +20,8 @@ import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
 import SharedDealScreen from "../screens/SharedDealScreen";
 import DiagnosticsScreen from "../screens/DiagnosticsScreen";
 import SaveAccountScreen from "../screens/SaveAccountScreen";
+import TrialAlertsScreen from "../screens/TrialAlertsScreen";
+import CancelSurveyScreen from "../screens/CancelSurveyScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -120,6 +122,23 @@ export default function RootNavigator() {
             component={BusinessWelcomeScreen}
             options={{ presentation: "fullScreenModal" }}
           />
+          {/* After a trial starts from the feed page, PremiumWelcome
+              continues to these; they must exist in this stack too. */}
+          <Stack.Screen
+            name="TrialAlerts"
+            component={TrialAlertsScreen}
+            options={{ presentation: "fullScreenModal", gestureEnabled: false }}
+          />
+          <Stack.Screen
+            name="SaveAccount"
+            component={SaveAccountScreen}
+            options={{ presentation: "fullScreenModal", gestureEnabled: false }}
+          />
+          <Stack.Screen
+            name="CancelSurvey"
+            component={CancelSurveyScreen}
+            options={{ presentation: "fullScreenModal" }}
+          />
           <Stack.Screen
             name="Diagnostics"
             component={DiagnosticsScreen}
@@ -166,6 +185,18 @@ export default function RootNavigator() {
             name="BusinessWelcome"
             component={BusinessWelcomeScreen}
             options={{ presentation: "fullScreenModal" }}
+          />
+          {/* Opened from the push sent when someone turns off auto-renew. */}
+          <Stack.Screen
+            name="CancelSurvey"
+            component={CancelSurveyScreen}
+            options={{ presentation: "fullScreenModal" }}
+          />
+          {/* Right after a trial starts: notifications + alerts on saves. */}
+          <Stack.Screen
+            name="TrialAlerts"
+            component={TrialAlertsScreen}
+            options={{ presentation: "fullScreenModal", gestureEnabled: false }}
           />
           {/* The email ask, after a trial starts on an anonymous session. */}
           <Stack.Screen
