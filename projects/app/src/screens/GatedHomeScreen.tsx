@@ -19,6 +19,7 @@ import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { fetchDeals } from "../services/dealsApi";
 import { getSavedDeals } from "../services/firestore";
+import { repriceDeal } from "../lib/funnelDeals";
 import { logEvent } from "../lib/analytics";
 import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
 import { Gift } from "lucide-react-native";
@@ -253,11 +254,12 @@ export default function GatedHomeScreen() {
   const showGiftPill = giftOfferSeen(profile) && giftOfferEligible(profile, { manual: true });
 
   /**
-   * Real fares only (Oct 2026). This page used to advertise at invented
-   * funnel prices; it now shows what the API returns, filtered to deals that
-   * are genuinely good (see lib/goodDeals).
+   * Funnel prices, matching the first swipe session they just did — the
+   * Phoenix they saved there has to read the same here. Past the paywall
+   * nothing is repriced.
    */
-  const pricedDeals = deals;
+  const pricedDeals = useMemo(() => deals.map(repriceDeal), [deals]);
+  const pricedSaves = useMemo(() => savedDeals.map(repriceDeal), [savedDeals]);
 
   // Everything the page says about "the deals below" is computed from the
   // SAME selection FeedReveal renders — see selectRevealDeals.
@@ -271,8 +273,8 @@ export default function GatedHomeScreen() {
   );
 
   const selection = useMemo(
-    () => selectSavesReveal(pricedDeals, savedDeals),
-    [pricedDeals, savedDeals],
+    () => selectSavesReveal(pricedDeals, pricedSaves),
+    [pricedDeals, pricedSaves],
   );
 
   /**
@@ -512,7 +514,7 @@ export default function GatedHomeScreen() {
             firstName={firstName}
             destinationPreference={profile?.destinationPreference ?? "both"}
             prefs={rankPrefs}
-            savedDeals={savedDeals}
+            savedDeals={pricedSaves}
             headerExtra={matchingBlock}
             footerExtra={savingsBlock}
             // Straight to the paywall. The peek sheet was a good sales page

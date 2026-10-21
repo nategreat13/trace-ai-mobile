@@ -39,11 +39,10 @@ import type { Deal } from "@trace/shared";
  *
  * Every ad ends on "download it free and start swiping", and the old flow
  * made people answer ten screens of questions before they could. This is the
- * real mechanic on real fares — not the looping demo with showcase prices
- * that used to sit on screen eight. It's finite (the parent picks the cards,
- * see firstSessionDeck) and entirely user-driven: nothing swipes itself once
- * the first card is touched, because the cards being swiped are now the
- * user's actual choices and get saved.
+ * real mechanic — not the looping demo that used to sit on screen eight.
+ * It's finite (the parent picks the cards) and entirely user-driven: nothing
+ * swipes itself once the first card is touched, because what's swiped here
+ * is the user's actual choices and gets saved.
  */
 const FLING_MS = 280;
 const SWIPE_THRESHOLD = 70;

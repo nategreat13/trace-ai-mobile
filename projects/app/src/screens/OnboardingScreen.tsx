@@ -21,7 +21,7 @@ import {
 import { fetchDeals } from "../services/dealsApi";
 import { auth } from "../services/firebase";
 import { logMetaFirstSave } from "../lib/metaAppEvents";
-import { firstSessionDeck } from "../lib/goodDeals";
+import { funnelDeals } from "../lib/funnelDeals";
 import {
   DEAL_TYPES,
   TIMEFRAMES,
@@ -198,8 +198,10 @@ export default function OnboardingScreen() {
    * shouldn't cost the others, and none of it may block finishing.
    */
   const saveFirstSessionDeals = async (userId: string) => {
+    const realById = new Map(deals.map((d) => [d.id, d]));
     await Promise.all(
-      firstSaves.map(async (deal) => {
+      firstSaves.map(async (shown) => {
+        const deal = realById.get(shown.id) ?? shown;
         try {
           await saveDeal({
             userId,
@@ -454,8 +456,12 @@ export default function OnboardingScreen() {
    * feed page greets them without a name (FeedReveal already handles that).
    * Profile → Edit is where a name gets set now, if ever.
    */
-  // The first session's cards: the airport's best real fares, best first.
-  const firstDeck = useMemo(() => firstSessionDeck(deals, FIRST_SESSION_SIZE), [deals]);
+  // The first session's cards, at funnel prices (Trevor, Oct 21): the same
+  // showcase set the old demo deck used — real destinations from their
+  // airport, priced by lib/funnelDeals. Saves are written with the real fare
+  // (see saveFirstSessionDeals), so the app past the paywall never shows an
+  // invented price.
+  const firstDeck = useMemo(() => funnelDeals(deals, {}, FIRST_SESSION_SIZE), [deals]);
 
   const beats: Beat[] = [
     {
@@ -503,8 +509,8 @@ export default function OnboardingScreen() {
               saved,
               index,
               destination: deal.destination,
-              discount_pct: Math.round(deal.discount_pct || 0),
-              price: Math.round(deal.price || 0),
+              shown_discount_pct: Math.round(deal.discount_pct || 0),
+              shown_price: Math.round(deal.price || 0),
             });
             if (saved) logMetaFirstSave(deal);
           }}
