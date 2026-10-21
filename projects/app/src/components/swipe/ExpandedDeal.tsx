@@ -89,6 +89,20 @@ interface ExpandedDealProps {
    * in-app free tier keeps its current behaviour.
    */
   guidePreview?: boolean;
+  /**
+   * The free deals on "Your feed is ready" (Oct 2026, Trevor): the whole
+   * deal page — flight details and the full travel guide — for a user who
+   * isn't premium. The bottom button becomes this label and calls onBook,
+   * which the caller wires to the paywall, instead of booking.
+   */
+  unlockedPreview?: { ctaLabel: string };
+  /**
+   * iOS: fires once the sheet has fully animated away. Navigate to another
+   * full-screen modal (the paywall) from here, not from onClose — pushed
+   * while this one is still closing, it lands under a dead native window and
+   * the app stops taking touches.
+   */
+  onDismissed?: () => void;
 }
 
 type FitLevel = { color: "green" | "yellow" | "red" };
@@ -228,12 +242,17 @@ export default function ExpandedDeal({
   onShare,
   userName,
   guidePreview = false,
+  unlockedPreview,
+  onDismissed,
 }: ExpandedDealProps) {
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { isPremium, profile } = useAuth();
+  const { isPremium: isPremiumUser, profile } = useAuth();
+  // A free deal on the feed page reads as a premium one in every gate on
+  // this screen; only the bottom button differs.
+  const isPremium = isPremiumUser || !!unlockedPreview;
 
   // Personalization for the locked-guide panel. Both degrade to null rather
   // than to a placeholder — a guide pitch that says "your undefined travel
@@ -450,6 +469,7 @@ export default function ExpandedDeal({
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}
+      onDismiss={onDismissed}
     >
       <StatusBar barStyle="light-content" />
       <GestureDetector gesture={dismissGesture}>
@@ -1009,6 +1029,12 @@ export default function ExpandedDeal({
 
             <TouchableOpacity
               onPress={() => {
+                // Free deal on the feed page: the button is the unlock, not a
+                // booking — don't count it as one.
+                if (unlockedPreview) {
+                  onBook();
+                  return;
+                }
                 // Analytics: the user tapped through to the deal's booking
                 // URL. This is the `deal_book_tapped` (deal URL clicked) signal.
                 logEvent("deal_book_tapped", {
@@ -1041,13 +1067,17 @@ export default function ExpandedDeal({
                 end={{ x: 1, y: 0 }}
                 style={styles.bookGradient}
               >
-                {guidePreview ? (
+                {guidePreview || unlockedPreview ? (
                   <Sparkles size={16} color="#ffffff" />
                 ) : (
                   <ExternalLink size={16} color="#ffffff" />
                 )}
                 <Text style={styles.bookButtonText}>
-                  {guidePreview ? "Try Free" : "Book Now"}
+                  {unlockedPreview
+                    ? unlockedPreview.ctaLabel
+                    : guidePreview
+                      ? "Try Free"
+                      : "Book Now"}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>

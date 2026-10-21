@@ -15,6 +15,7 @@ import { colors } from "../../theme/colors";
 import { fadeTo } from "../../lib/fade";
 import { rankDeals, type RankPrefs } from "../../lib/dealRanker";
 import { goodDeals } from "../../lib/goodDeals";
+import { roundedCount } from "../../lib/roundedCount";
 import type { Deal } from "@trace/shared";
 
 /**
@@ -231,7 +232,7 @@ export default function FeedReveal({
       >
         <View style={styles.statMain}>
           <Text style={[styles.statNumber, { color: theme.foreground }]}>
-            {totalDestinations}
+            {savesMode ? roundedCount(totalDestinations) : totalDestinations}
           </Text>
           <Text style={[styles.statLabel, { color: theme.mutedForeground }]}>
             {savesMode
@@ -360,7 +361,7 @@ export default function FeedReveal({
         >
           Your saves are yours to keep.{" "}
           <Text style={{ color: theme.foreground, fontWeight: "700" }}>
-            {totalDestinations - rows.filter((r) => !r.locked).length} more great deals
+            {roundedCount(totalDestinations - rows.filter((r) => !r.locked).length)} more great deals
           </Text>{" "}
           from {homeAirport} are waiting behind Premium.
         </Animated.Text>

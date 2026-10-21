@@ -65,7 +65,10 @@ export default function PaywallScreen() {
   const entryPoint = route.params?.entryPoint ?? "unknown";
   const tierParam = route.params?.tier ?? "premium";
   const personalizedSub = route.params?.personalizedSub ?? null;
-  const destinationCount = route.params?.destinationCount ?? null;
+  // Rounded ("100+") when the caller has one, so the paywall matches the
+  // button that opened it.
+  const destinationCount =
+    route.params?.destinationCountLabel ?? route.params?.destinationCount ?? null;
   const lockedStat = route.params?.lockedStat ?? null;
   const tappedDeal = route.params?.deal ?? null;
   // The post-onboarding paywall is the one view the user didn't ask for. It

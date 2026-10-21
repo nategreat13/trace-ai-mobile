@@ -35,6 +35,8 @@ export type RootStackParamList = {
          * "All 115 destinations from SLC" rather than "every destination".
          */
         destinationCount?: number;
+        /** The same count as shown to the user, rounded ("100+"). */
+        destinationCountLabel?: string;
         /**
          * The locked deal they tapped to get here (Oct 2026). The paywall
          * leads with it — photo, real discount, price withheld — instead of

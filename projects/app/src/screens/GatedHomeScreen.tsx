@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  Platform,
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -32,11 +33,14 @@ import FeedReveal, {
 import { useIAP } from "../hooks/useIAP";
 import { formatTrialDuration, trialsEnabledByRemote } from "../lib/trial";
 import TraceLoader from "../components/TraceLoader";
+import ExpandedDeal from "../components/swipe/ExpandedDeal";
+import { roundedCount } from "../lib/roundedCount";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import { firstNameOf, type Deal } from "@trace/shared";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
 
 /**
  * What we say back to the barrier they named in onboarding.
@@ -63,7 +67,7 @@ function barrierAnswer(
       return "You said dates never line up. Every deal shows its travel window, so you only save the ones that fit.";
     case "cant_decide":
       return ctx.total > 0
-        ? `You said you can't decide where to go — here are ${ctx.total} options from ${ctx.airport}, cheapest first.`
+        ? `You said you can't decide where to go — here are ${roundedCount(ctx.total)} options from ${ctx.airport}.`
         : null;
     default:
       return null;
@@ -350,6 +354,26 @@ export default function GatedHomeScreen() {
    * falls back to generic copy — which is what every paywall view has been
    * getting, despite the personalised version being built and working.
    */
+  const unlockLabel =
+    selection.totalDestinations >= 20
+      ? `Unlock ${roundedCount(selection.totalDestinations)} deals`
+      : "Unlock every deal";
+
+  // A free (unlocked) deal opens the full deal page — flight details and the
+  // whole travel guide — with the unlock button where Book Now would be.
+  const [openDeal, setOpenDeal] = useState<Deal | null>(null);
+  const [dealVisible, setDealVisible] = useState(false);
+  // Set when "Unlock" is tapped inside the deal page; the paywall opens once
+  // the page has finished closing (see ExpandedDeal's onDismissed).
+  const unlockAfterCloseRef = useRef(false);
+  const afterDealClosed = () => {
+    setOpenDeal(null);
+    if (unlockAfterCloseRef.current) {
+      unlockAfterCloseRef.current = false;
+      openPaywall("feed_ready_free_deal_unlock");
+    }
+  };
+
   const openPaywall = (entryPoint: string, tapped?: Deal) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     // The paywall leads with a tapped locked deal — at its REAL discount and
@@ -369,9 +393,12 @@ export default function GatedHomeScreen() {
           }
         : undefined,
       destinationCount: selection.totalDestinations || undefined,
+      destinationCountLabel: selection.totalDestinations
+        ? roundedCount(selection.totalDestinations)
+        : undefined,
       lockedStat:
         selection.lockedCount > 0
-          ? `${selection.lockedCount} more great deals from ${airport} are waiting.`
+          ? `${roundedCount(selection.lockedCount)} more great deals from ${airport} are waiting.`
           : undefined,
     });
   };
@@ -541,7 +568,11 @@ export default function GatedHomeScreen() {
             // but it was a stop on the way to the only action that matters
             // here — a gated user can't open a deal, so the tap should move
             // them forward rather than describe what they can't have.
-            onPressDeal={() => openPaywall("feed_ready_saved_tapped")}
+            onPressDeal={(d) => {
+              logEvent("feed_ready_free_deal_opened", { destination: d.destination });
+              setOpenDeal(d);
+              setDealVisible(true);
+            }}
             onPressLocked={(d) => openPaywall("feed_ready_locked_tapped", d)}
           />
         </View>
@@ -576,9 +607,7 @@ export default function GatedHomeScreen() {
             {/* Sells what they get, not the trial mechanics (Trevor, Oct 21);
                 the trial terms sit right under it. */}
             <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-              {selection.totalDestinations > 0
-                ? `Unlock all ${selection.totalDestinations} deals`
-                : "Unlock every deal"}
+              {unlockLabel}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -620,6 +649,26 @@ export default function GatedHomeScreen() {
         </View>
       </View>
 
+      {openDeal && (
+        <ExpandedDeal
+          deal={(() => {
+            const live = deals.find((d) => d.id === openDeal.id);
+            return live ? repriceDeal(live) : openDeal;
+          })()}
+          visible={dealVisible}
+          userProfile={profile}
+          onClose={() => setDealVisible(false)}
+          onSave={() => setDealVisible(false)}
+          onBook={() => {
+            unlockAfterCloseRef.current = true;
+            setDealVisible(false);
+            // Android has no onDismiss; give the slide-out time instead.
+            if (Platform.OS !== "ios") setTimeout(afterDealClosed, 450);
+          }}
+          onDismissed={afterDealClosed}
+          unlockedPreview={{ ctaLabel: unlockLabel }}
+        />
+      )}
     </SafeAreaView>
   );
 }
