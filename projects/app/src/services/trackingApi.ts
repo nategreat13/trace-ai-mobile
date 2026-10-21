@@ -7,6 +7,12 @@ interface TrackSignupParams {
   firstName?: string | null;
   lastName?: string | null;
   country?: string | null;
+  /**
+   * "post_trial" when the account is saved after a trial started (the
+   * anonymous profile was created with no email, so the profile-created
+   * trigger never subscribed them to Klaviyo; the server does it here).
+   */
+  source?: "post_trial";
 }
 
 /**

@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { consumePendingSignIn } from "../lib/pendingSignIn";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Lock } from "lucide-react-native";
 import type { RootStackParamList } from "../navigation/types";
@@ -25,6 +26,8 @@ import { SHOWCASE_DEALS, toDeal } from "../lib/showcaseDeals";
 import { repriceDeal } from "../lib/funnelDeals";
 import { logEvent } from "../lib/analytics";
 import { startAnonymousSession } from "../services/auth";
+import { auth } from "../services/firebase";
+import { identifyForMeta } from "../lib/metaAppEvents";
 import { getEnv } from "../lib/env";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -130,6 +133,11 @@ export default function LandingScreen() {
     setStarting(true);
     try {
       await startAnonymousSession();
+      // Identify the new anonymous user to Meta, so the app events that fire
+      // before any email exists (feed ready, first paywall, trial start)
+      // still carry a stable user id.
+      const anonUid = auth.currentUser?.uid;
+      if (anonUid) identifyForMeta(anonUid);
       // No navigation: RootNavigator swaps the stack once auth state lands.
     } catch (err: any) {
       // Anonymous sign-in is a project-level Firebase setting, not something
@@ -155,6 +163,15 @@ export default function LandingScreen() {
       navigation.navigate("Login", { mode: "signup" });
     }
   };
+
+  // Onboarding's "Already have an account? Sign in" signs the anonymous
+  // session out, which remounts this screen; open the form straight away.
+  useEffect(() => {
+    if (consumePendingSignIn()) {
+      navigation.navigate("Login", { mode: "signin" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const goToSignin = () => {
     setShowDetailPrompt(false);

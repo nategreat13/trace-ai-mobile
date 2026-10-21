@@ -14,7 +14,8 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
-import { linkEmailPassword } from "../services/auth";
+import { linkEmailPassword, login, requestPasswordReset } from "../services/auth";
+import { initializeIAP, restorePurchases } from "../services/iap";
 import { auth } from "../services/firebase";
 import { trackSignup } from "../services/trackingApi";
 import { identifyForMeta, logMetaCompleteRegistration } from "../lib/metaAppEvents";
@@ -46,6 +47,7 @@ export default function SaveAccountScreen() {
   const [account, setAccount] = useState<AccountDraft>({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [emailTaken, setEmailTaken] = useState(false);
 
   useEffect(() => {
     logEvent("signup_viewed", { at: "post_trial" });
@@ -84,7 +86,7 @@ export default function SaveAccountScreen() {
         } catch {
           /* best-effort */
         }
-        trackSignup({ userId: current.uid, email, country });
+        trackSignup({ userId: current.uid, email, country, source: "post_trial" });
         identifyForMeta(current.uid, email);
         logMetaCompleteRegistration("email");
       }
@@ -92,18 +94,67 @@ export default function SaveAccountScreen() {
     } catch (err: any) {
       const code = err?.code || "";
       if (code === "auth/email-already-in-use") {
+        setEmailTaken(true);
         logEvent("signup_existing_email", { at: "post_trial" });
       }
       logEvent("signup_failed", { method: "email", code, at: "post_trial" });
       setError(
         code === "auth/email-already-in-use"
-          ? "That email already has a Trace account. Use another email here — your trial is safe either way."
+          ? "That email already has a Trace account. Sign in to it and your trial moves over with you."
           : code === "auth/invalid-email"
             ? "That doesn't look like a valid email address."
             : code === "auth/weak-password"
               ? "Pick a password with at least 6 characters."
               : err?.message || "Could not save your account. Try again.",
       );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * An existing customer who started a trial on this phone before signing in.
+   * The trial was bought under the anonymous account, so after signing in we
+   * restore purchases: with RevenueCat's restore behaviour set to transfer,
+   * that moves the trial to the account they signed into. Their existing
+   * account's profile and saves take over from there.
+   */
+  const signInInstead = async () => {
+    const email = account.email.trim();
+    setBusy(true);
+    setError(null);
+    try {
+      await login(email, account.password);
+      logEvent("login", { method: "email", at: "post_trial" });
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        await initializeIAP(uid);
+        await restorePurchases().catch((err) =>
+          console.warn("[SaveAccount] restore after sign-in failed:", err),
+        );
+      }
+      done();
+    } catch {
+      setError(
+        "That password doesn't match the account for this email. Try again, or email yourself a reset link below.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resetPassword = async () => {
+    const email = account.email.trim();
+    if (!email) return;
+    setBusy(true);
+    try {
+      await requestPasswordReset(email);
+      logEvent("password_reset_requested", { at: "post_trial" });
+      setError(
+        `We've emailed a reset link to ${email}. Set a new password from it, then come back here and tap Sign in instead.`,
+      );
+    } catch {
+      setError("We couldn't send the reset email. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -143,6 +194,8 @@ export default function SaveAccountScreen() {
             error={error}
             busy={busy}
             firstName={profile?.firstName}
+            onSignInInstead={emailTaken ? signInInstead : undefined}
+            onResetPassword={emailTaken ? resetPassword : undefined}
           />
         </ScrollView>
 

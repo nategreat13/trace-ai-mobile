@@ -10,9 +10,31 @@ const IOS_API_KEY = "appl_BFjCotDvhsDBOschVVzoWiRPabt";
 const ANDROID_API_KEY = "goog_AeONOrpyROKpCepkdogBNUGAsiV";
 
 let initialized = false;
+let currentUserId: string | null = null;
 
+/**
+ * Configure RevenueCat for this Firebase user, or switch to them.
+ *
+ * Signing in while an anonymous session is open (onboarding's "Sign in
+ * instead", or SaveAccount's) changes the Firebase user without ever passing
+ * through signed-out, so logOutIAP never runs. Returning early here used to
+ * leave RevenueCat identified as the anonymous user: the signed-in customer's
+ * entitlement didn't show, and anything restored or bought attached to the
+ * abandoned anonymous id. A different uid now goes through Purchases.logIn.
+ */
 export async function initializeIAP(userId: string): Promise<void> {
-  if (initialized) return;
+  if (initialized) {
+    if (currentUserId !== userId) {
+      currentUserId = userId;
+      try {
+        await Purchases.logIn(userId);
+        console.log("[IAP] Switched to user:", userId);
+      } catch (err) {
+        console.warn("[IAP] logIn failed:", err);
+      }
+    }
+    return;
+  }
 
   if (__DEV__) {
     Purchases.setLogLevel(LOG_LEVEL.DEBUG);
@@ -21,6 +43,7 @@ export async function initializeIAP(userId: string): Promise<void> {
   const apiKey = Platform.OS === "ios" ? IOS_API_KEY : ANDROID_API_KEY;
   await Purchases.configure({ apiKey, appUserID: userId });
   initialized = true;
+  currentUserId = userId;
   console.log("[IAP] Initialized for user:", userId);
 }
 
@@ -113,4 +136,5 @@ export async function logOutIAP(): Promise<void> {
     // silent — user may not have been identified
   }
   initialized = false;
+  currentUserId = null;
 }

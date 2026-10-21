@@ -61,6 +61,8 @@ export type AnalyticsEventName =
   // land.
   | "first_session_swipe"
   | "first_session_done"
+  // "Already have an account? Sign in" on the first onboarding step.
+  | "onboarding_sign_in_tapped"
   | "feed_ready_keep_swiping"
   | "feed_ready_sign_in"
   | "feed_ready_free_deal_opened"

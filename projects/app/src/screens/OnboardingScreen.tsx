@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import {
   View,
   Text,
+  TouchableOpacity,
   Alert,
   useColorScheme,
   Platform,
@@ -19,6 +20,8 @@ import {
   createSwipeAction,
 } from "../services/firestore";
 import { fetchDeals } from "../services/dealsApi";
+import { logout } from "../services/auth";
+import { requestSignInAfterSignOut } from "../lib/pendingSignIn";
 import { auth } from "../services/firebase";
 import { funnelDeals } from "../lib/funnelDeals";
 import {
@@ -133,6 +136,7 @@ export default function OnboardingScreen() {
   const [firstSaves, setFirstSaves] = useState<Deal[]>([]);
   const [deckDone, setDeckDone] = useState(false);
   const [swipedCount, setSwipedCount] = useState(0);
+  const deckDoneRef = useRef(false);
   const dealFetchRef = useRef<string | null>(null);
 
   const startDealFetch = useCallback((airport: string, force = false) => {
@@ -199,9 +203,20 @@ export default function OnboardingScreen() {
    */
   const saveFirstSessionDeals = async (userId: string) => {
     const realById = new Map(deals.map((d) => [d.id, d]));
+    // Only deals that came back from the API are saved. When too few real
+    // deals load, the deck fills in with showcase cards; saving those would
+    // put invented prices and a dead Book button in someone's Saved list.
+    // Deduped by id, because going back to the deck replays it from card 0.
+    const toSave = [
+      ...new Map(
+        firstSaves
+          .map((shown) => realById.get(shown.id))
+          .filter((d): d is Deal => !!d)
+          .map((d) => [d.id, d] as const),
+      ).values(),
+    ];
     await Promise.all(
-      firstSaves.map(async (shown) => {
-        const deal = realById.get(shown.id) ?? shown;
+      toSave.map(async (deal) => {
         try {
           await saveDeal({
             userId,
@@ -244,8 +259,23 @@ export default function OnboardingScreen() {
     );
   };
 
+  /**
+   * The building-feed screen is now the last step, and it has no button and
+   * no back. If finishing fails there, put the user back on the step before
+   * it so they have a working Continue to try again, rather than leaving them
+   * on a 100% progress bar until they kill the app.
+   */
+  const recoverFromFinishFailure = () => {
+    if (isEditing) return;
+    setStep((s) => Math.max(0, s - 1));
+  };
+
   const handleContinue = async (personalityOverride?: string) => {
-    if (!user) return;
+    if (!user) {
+      Alert.alert("Error", "Failed to save your profile. Please try again.");
+      recoverFromFinishFailure();
+      return;
+    }
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
 
@@ -406,6 +436,7 @@ export default function OnboardingScreen() {
     } catch (error) {
       console.error("Failed to save profile:", error);
       Alert.alert("Error", "Failed to save your profile. Please try again.");
+      recoverFromFinishFailure();
     } finally {
       setShowPersonality(false);
       isSubmittingRef.current = false;
@@ -470,10 +501,36 @@ export default function OnboardingScreen() {
       subtitle: "Every deal starts here. A city, airport code or zip works.",
       canProceed: !!data.homeAirport,
       content: (
-        <AirportInput
-          value={data.homeAirport}
-          onChange={(val) => setData({ ...data, homeAirport: val })}
-        />
+        <View style={{ gap: 18 }}>
+          <AirportInput
+            value={data.homeAirport}
+            onChange={(val) => setData({ ...data, homeAirport: val })}
+          />
+          {/* The way back in for existing customers. Onboarding no longer ends
+              in an account step, so without this a returning user on a new
+              phone could only make a second account. Offered only before any
+              profile exists, so signing the anonymous session out loses
+              nothing. */}
+          {user?.isAnonymous && !profile && !isEditing ? (
+            <TouchableOpacity
+              onPress={async () => {
+                logEvent("onboarding_sign_in_tapped", { at: "airport" });
+                requestSignInAfterSignOut();
+                try {
+                  await logout();
+                } catch (err) {
+                  console.warn("[onboarding] sign-out for sign-in failed:", err);
+                }
+              }}
+              style={{ alignSelf: "center", paddingVertical: 6 }}
+            >
+              <Text style={{ color: theme.mutedForeground, fontSize: 14 }}>
+                Already have an account?{" "}
+                <Text style={{ color: theme.foreground, fontWeight: "700" }}>Sign in</Text>
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ),
     },
     {
@@ -494,7 +551,8 @@ export default function OnboardingScreen() {
       ctaLabel: "See my feed",
       newUserOnly: true,
       submit: async () => {
-        if (!deckDone) {
+        if (!deckDoneRef.current) {
+          deckDoneRef.current = true;
           setDeckDone(true);
           logEvent("first_session_done", {
             saved_count: firstSaves.length,
@@ -535,6 +593,11 @@ export default function OnboardingScreen() {
             }
           }}
           onDone={(saved) => {
+            // "See my feed" may already have advanced in the 450ms between
+            // the last card and this callback; advancing again would skip
+            // the next step and log the session twice.
+            if (deckDoneRef.current) return;
+            deckDoneRef.current = true;
             setDeckDone(true);
             logEvent("first_session_done", {
               saved_count: saved.length,
@@ -666,6 +729,21 @@ export default function OnboardingScreen() {
     if (!data.homeAirport) return;
     startDealFetch(data.homeAirport);
   }, [data.homeAirport, isEditing, startDealFetch]);
+
+  // A new airport means a new deck. Saves from the old airport's deck would
+  // otherwise be written for a feed they no longer belong to, and a finished
+  // deck would leave "N trips saved" with nothing to swipe for the new one.
+  const deckAirportRef = useRef("");
+  useEffect(() => {
+    if (isEditing) return;
+    if (deckAirportRef.current && deckAirportRef.current !== data.homeAirport) {
+      setFirstSaves([]);
+      setSwipedCount(0);
+      setDeckDone(false);
+      deckDoneRef.current = false;
+    }
+    deckAirportRef.current = data.homeAirport;
+  }, [data.homeAirport, isEditing]);
 
   const goNext = async () => {
     if (beat?.submit) {

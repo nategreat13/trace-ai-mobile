@@ -207,7 +207,12 @@ export default function ProfileScreen() {
           name: supportName.trim(),
           email: user?.email ?? "",
           subject: supportSubject.trim() || "Support Request",
-          message: supportMessage.trim(),
+          // People who haven't saved an account have no email, so the Slack
+          // post would read "Unknown" with no way to find them. Give support
+          // the user id to look them up by.
+          message: user?.email
+            ? supportMessage.trim()
+            : `${supportMessage.trim()}\n\n(No email on file. User ID: ${user?.uid ?? "unknown"})`,
         }),
       });
       if (!res.ok) throw new Error("Failed");
