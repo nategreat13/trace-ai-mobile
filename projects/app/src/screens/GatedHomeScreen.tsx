@@ -36,6 +36,7 @@ import TraceLoader from "../components/TraceLoader";
 import ExpandedDeal from "../components/swipe/ExpandedDeal";
 import { roundedCount } from "../lib/roundedCount";
 import { goodDeals } from "../lib/goodDeals";
+import { prefetchDestinationInfo } from "../hooks/useDestinationInfo";
 import { requestSignInAfterSignOut } from "../lib/pendingSignIn";
 import { DEAL_TYPES, TIMEFRAMES, BARRIERS } from "../lib/constants";
 import { firstNameOf, type Deal } from "@trace/shared";
@@ -312,6 +313,16 @@ export default function GatedHomeScreen() {
     () => selectSavesReveal(pricedDeals, pricedSaves),
     [pricedDeals, pricedSaves],
   );
+
+  // Load the guides for the unlocked deals while they read the page, so
+  // opening one shows its guide straight away instead of a spinner. The
+  // server caches each guide per destination and month for everyone, so this
+  // is mostly cache reads. Capped: the unlocked rows are saves plus a couple
+  // of stand-ins, rarely more.
+  useEffect(() => {
+    if (loading) return;
+    for (const deal of selection.unlocked.slice(0, 6)) prefetchDestinationInfo(deal);
+  }, [loading, selection.unlocked]);
 
   /**
    * Total saved across the unlocked deals, versus the subscription price.
