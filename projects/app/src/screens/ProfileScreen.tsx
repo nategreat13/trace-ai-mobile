@@ -136,8 +136,26 @@ export default function ProfileScreen() {
     }
   };
 
+  // Anonymous (swipe-first) users have no email or password, so signing out
+  // would strand their saves and any subscription on a session they can never
+  // get back into. They get "Save your account" instead, and signing out
+  // (e.g. to use an existing account) asks first.
+  const isAnonymous = !!user?.isAnonymous;
+
   const handleLogout = async () => {
-    await logout();
+    if (!isAnonymous) {
+      await logout();
+      return;
+    }
+    Alert.alert(
+      "Save your account first?",
+      "You haven't saved an account yet. If you sign out, your saved trips on this phone are gone for good.",
+      [
+        { text: "Save my account", onPress: () => navigation.navigate("SaveAccount") },
+        { text: "Sign out anyway", style: "destructive", onPress: () => logout() },
+        { text: "Cancel", style: "cancel" },
+      ],
+    );
   };
 
   const handleDeleteAccount = async () => {
@@ -903,6 +921,22 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
 {/* Actions */}
+          {isAnonymous && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate("SaveAccount")}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 14,
+                backgroundColor: colors.brand.traceRed,
+                borderRadius: 12,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff" }}>
+                Save your account
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={handleLogout}
             style={{

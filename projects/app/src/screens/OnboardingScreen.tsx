@@ -20,7 +20,6 @@ import {
 } from "../services/firestore";
 import { fetchDeals } from "../services/dealsApi";
 import { auth } from "../services/firebase";
-import { logMetaFirstSave } from "../lib/metaAppEvents";
 import { funnelDeals } from "../lib/funnelDeals";
 import {
   DEAL_TYPES,
@@ -533,7 +532,6 @@ export default function OnboardingScreen() {
             setSwipedCount((n) => n + 1);
             if (saved) {
               setFirstSaves((prev) => [...prev, deal]);
-              logMetaFirstSave(deal);
             }
           }}
           onDone={(saved) => {

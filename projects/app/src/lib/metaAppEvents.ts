@@ -48,7 +48,8 @@ import { getItemRaw, setItemRaw } from "./storage";
  *  missing native module can't break the import. */
 const COMPLETE_REGISTRATION = "fb_mobile_complete_registration";
 const START_TRIAL = "StartTrial";
-const ADD_TO_WISHLIST = "fb_mobile_add_to_wishlist";
+const INITIATED_CHECKOUT = "fb_mobile_initiated_checkout";
+const TUTORIAL_COMPLETION = "fb_mobile_tutorial_completion";
 
 type Logger = {
   logEvent: (name: string, ...args: Array<number | Record<string, string | number>>) => void;
@@ -125,34 +126,55 @@ export function logMetaStartTrial(
   }
 }
 
-const FIRST_SAVE_KEY = "meta.firstSaveLogged";
-let firstSaveLogged = false;
-
-/**
- * A user's first saved deal, as Meta's standard "Add to wishlist" event —
- * which is exactly what a save is.
- *
- * This is the goal for the app campaign once sign-up stops being a wall
- * (Oct 2026 swipe-first flow): the first save happens in the first minute,
- * from someone who has seen real fares and wanted one, and at the volume of
- * new users it clears the ~50/week an ad set needs to leave learning. Logged
- * once per install — repeat saves are engagement, not acquisition.
- */
-export async function logMetaFirstSave(deal: {
-  destination?: string;
-  price?: number;
-}): Promise<void> {
+/** Log a Meta event at most once per install. */
+const loggedOnce = new Set<string>();
+async function logOncePerInstall(
+  key: string,
+  log: (l: Logger) => void,
+): Promise<void> {
   try {
-    if (firstSaveLogged) return;
-    firstSaveLogged = true;
-    if (await getItemRaw(FIRST_SAVE_KEY)) return;
-    await setItemRaw(FIRST_SAVE_KEY, "1");
-    logger()?.logEvent(ADD_TO_WISHLIST, deal.price ?? 0, {
-      fb_content_type: "flight",
-      fb_content_id: deal.destination ?? "",
-      fb_currency: "USD",
-    });
+    if (loggedOnce.has(key)) return;
+    loggedOnce.add(key);
+    const storageKey = `meta.once.${key}`;
+    if (await getItemRaw(storageKey)) return;
+    await setItemRaw(storageKey, "1");
+    const l = logger();
+    if (l) log(l);
   } catch {
     /* best-effort */
   }
+}
+
+/**
+ * First time this install opens the paywall, as Meta's standard "Initiate
+ * checkout" — the proposed app-campaign goal (Oct 2026).
+ *
+ * Why this one: it's the closest event to a trial that still has the volume
+ * to optimize on. An ad set needs ~50 a week to leave learning; at $60/day
+ * that means under ~$8.40 per event. Trials run ~8/week. Paywall opens ran
+ * ~78 unique devices/week over Sept 23–Oct 20 — 22% of everyone who opened
+ * the app, nearly all by tapping (the automatic push was broken), so it's a
+ * real intent signal, not a forced view. Once per install, so one curious
+ * user can't count five times.
+ */
+export function logMetaFirstPaywallView(entryPoint: string): void {
+  logOncePerInstall("paywall_view", (l) =>
+    l.logEvent(INITIATED_CHECKOUT, {
+      fb_content_type: "subscription",
+      fb_content_id: entryPoint,
+      fb_currency: "USD",
+    }),
+  );
+}
+
+/**
+ * Reached "Your feed is ready" — onboarding done — as Meta's standard
+ * "Complete tutorial". The fallback goal if Initiate checkout can't clear
+ * ~50/week: roughly 1 in 3 people who open the app got this far on the old
+ * flow, and the swipe-first flow should push that higher.
+ */
+export function logMetaFeedReady(): void {
+  logOncePerInstall("feed_ready", (l) =>
+    l.logEvent(TUTORIAL_COMPLETION, { fb_success: 1 }),
+  );
 }

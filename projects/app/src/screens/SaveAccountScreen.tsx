@@ -51,7 +51,12 @@ export default function SaveAccountScreen() {
     logEvent("signup_viewed", { at: "post_trial" });
   }, []);
 
-  const done = () => navigation.replace("MainTabs", { screen: "SwipeDeck" });
+  // Opened from Profile it pops back there; after a purchase it replaced
+  // PremiumWelcome, so the deck is the place to land.
+  const done = () =>
+    navigation.canGoBack()
+      ? navigation.goBack()
+      : navigation.replace("MainTabs", { screen: "SwipeDeck" });
 
   const save = async () => {
     const email = account.email.trim();
@@ -128,8 +133,9 @@ export default function SaveAccountScreen() {
               lineHeight: 22,
             }}
           >
-            Save your account so your trial, saves and alerts follow you to any
-            phone — and we'll remind you before your trial ends.
+            Save your account so your saves — and your subscription, if you
+            have one — follow you to any phone. We'll remind you before a trial
+            ends.
           </Text>
           <AccountBeat
             value={account}

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { logMetaFirstPaywallView } from "../lib/metaAppEvents";
 import {
   View,
   Text,
@@ -132,6 +133,7 @@ export default function PaywallScreen() {
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
 
   useEffect(() => {
+    logMetaFirstPaywallView(entryPoint ?? "unknown");
     logEvent("paywall_viewed", {
       current_tier: currentTier ?? "free",
       entry_point: entryPoint,
