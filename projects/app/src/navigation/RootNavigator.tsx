@@ -27,18 +27,17 @@ export default function RootNavigator() {
   const { user, profile, loading, isPremium } = useAuth();
 
   /**
-   * "Your feed is ready" (Oct 2026 swipe-first flow).
+   * "Your feed is ready" is home for new users until they subscribe.
    *
-   * New users land here once, after their first swipe session: their saves,
-   * unlocked, and today's other good deals, locked, with Try Free and "Keep
-   * swiping free". Leaving clears `feedReadyPending` and routes to MainTabs —
-   * the free tier, with its daily swipe limit — for good.
+   * Oct 2026 swipe-first flow, no freemium for new users (Trevor): onboarding
+   * gives everyone a free swipe session — what the ads promise — then this
+   * page, with their saves unlocked, everything else locked, and Try Free.
+   * Closing the paywall or the gift comes back here, never into MainTabs.
    *
-   * This replaces the Sept 2026 hard gate (`accessGate:
-   * "subscription_required"`), which rooted new users at this page with no
-   * way into the app without paying. Every ad promises "download it free and
-   * start swiping"; the gate broke that promise. Accounts still carrying the
-   * old flag are deliberately not special-cased: they get the free tier too.
+   * Applies to `feedReadyPending` (stamped by the new onboarding) and to the
+   * Sept 2026 `accessGate: "subscription_required"` accounts, which had the
+   * same rule. Accounts with neither — the free users from before Sept 2026 —
+   * keep their free access.
    *
    * Paywall and GiftOffer are pushed on top rather than being roots, so both
    * keep a working close affordance:
@@ -47,7 +46,8 @@ export default function RootNavigator() {
    */
   const isGated =
     !!profile?.onboardingComplete &&
-    profile?.feedReadyPending === true &&
+    (profile?.feedReadyPending === true ||
+      profile?.accessGate === "subscription_required") &&
     !isPremium;
 
   // Re-sync this device's push token to the userProfile if OS permission

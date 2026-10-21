@@ -6,10 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Alert,
   useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeIn } from "react-native-reanimated";
@@ -20,9 +21,10 @@ import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import { fetchDeals } from "../services/dealsApi";
 import { getSavedDeals } from "../services/firestore";
+import { logout } from "../services/auth";
 import { repriceDeal } from "../lib/funnelDeals";
 import { logEvent } from "../lib/analytics";
-import { giftOfferEligible, giftOfferSeen, getPaywallDismissals } from "../lib/giftOffer";
+import { giftOfferEligible, giftOfferSeen } from "../lib/giftOffer";
 import { Gift } from "lucide-react-native";
 import FeedReveal, {
   selectSavesReveal,
@@ -223,49 +225,37 @@ export default function GatedHomeScreen() {
   }, [airport, user?.uid]);
 
   /**
-   * Leave for the free app. The page doesn't push the paywall at anyone
-   * (Oct 2026: this page is the pitch, and a modal over it hid the pitch),
-   * and neither should MainTabs on arrival — so `postOnboardingPaywallShown`
-   * is set here too, which keeps TabNavigator's one-shot push from firing on
-   * someone who just chose to keep swiping for free.
+   * This page is home for new users until they subscribe (Trevor, Oct 21:
+   * no freemium for new users). Closing the paywall or the gift always comes
+   * back here — the free swiping the ads promise happens in onboarding's
+   * first session, not in a free tier afterwards.
    */
-  /**
-   * No "Keep swiping free" button (Trevor, Oct 21): the page has one action,
-   * Try Free. The free tier is where someone lands after saying no — closing
-   * the paywall (and the gift, when it shows) brings them back here, and
-   * this sends them on into the app with their 5 free deals a day.
-   *
-   * Measured against the count when the page first loaded, so it only fires
-   * on a close that happened from this page.
-   */
-  const dismissalBaseline = useRef<number | null>(null);
-  useFocusEffect(
-    React.useCallback(() => {
-      let live = true;
-      getPaywallDismissals().then((n) => {
-        if (!live) return;
-        if (dismissalBaseline.current == null) {
-          dismissalBaseline.current = n;
-        } else if (n > dismissalBaseline.current) {
-          enterFreeTier("paywall_declined");
-        }
-      });
-      return () => {
-        live = false;
-      };
-    }, []),
-  );
-
-  const enterFreeTier = (reason: string) => {
-    logEvent("feed_ready_keep_swiping", { saves: savedDeals.length, reason });
-    const updates = { feedReadyPending: false, postOnboardingPaywallShown: true };
-    setProfile((prev) => (prev ? { ...prev, ...updates } : prev));
-    updateProfile(updates).catch(() => {});
-  };
 
   // Nothing on this page opens on its own (Trevor, Oct 21) — no paywall
   // push, no return-visit gift. The gift still answers a paywall close, and
   // the "unclaimed offer" pill below reopens it on request.
+
+  /**
+   * For someone who already has an account. This session is anonymous, so
+   * leaving it drops this phone's saves — say so before doing it. Signing
+   * out lands on Landing, whose "Sign in" opens the login screen.
+   */
+  const signInInstead = () => {
+    Alert.alert(
+      "Sign in to your account?",
+      "The trips you saved just now are only on this session and won't carry over.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          onPress: () => {
+            logEvent("feed_ready_sign_in", {});
+            logout().catch(() => {});
+          },
+        },
+      ],
+    );
+  };
 
   const showGiftPill = giftOfferSeen(profile) && giftOfferEligible(profile, { manual: true });
 
@@ -575,15 +565,29 @@ export default function GatedHomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-          style={{ paddingVertical: 10, alignItems: "center" }}
-          onPress={() => openPaywall("feed_ready_restore")}
-        >
-          <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
-            Restore purchase
-          </Text>
-        </TouchableOpacity>
+        {/* Ways out for people who already have Trace: restore a
+            subscription on this Apple ID, or sign in to an existing account.
+            44pt-ish tap targets — small text alone made them easy to miss. */}
+        <View style={{ flexDirection: "row", justifyContent: "center", gap: 24 }}>
+          <TouchableOpacity
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={{ paddingVertical: 10 }}
+            onPress={() => openPaywall("feed_ready_restore")}
+          >
+            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+              Restore purchase
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
+            style={{ paddingVertical: 10 }}
+            onPress={signInInstead}
+          >
+            <Text style={{ color: theme.mutedForeground, fontSize: 12 }}>
+              Sign in
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
     </SafeAreaView>
