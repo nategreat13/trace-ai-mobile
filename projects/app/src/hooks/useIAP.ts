@@ -78,9 +78,6 @@ export const PRODUCT_IDS = [
   ...PREMIUM_MONTHLY_IDS,
   "trace_business_annual",
   "trace_business_monthly",
-  // The gift's "first month $0.99" product (Oct 2026). Needs to be created
-  // in App Store Connect + RevenueCat; harmless to check before it exists.
-  "trace_premium_monthly_gift",
 ] as const;
 
 export function useIAP(): UseIAPResult {

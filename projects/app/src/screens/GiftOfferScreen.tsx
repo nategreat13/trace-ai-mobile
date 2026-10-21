@@ -116,38 +116,8 @@ export default function GiftOfferScreen() {
    * standard annual package so the screen still functions before Nate has
    * configured one in RevenueCat.
    */
-  const { offerPkg, standardPkg, percentOff, monthlyIntro } = useMemo(() => {
+  const { offerPkg, standardPkg, percentOff } = useMemo(() => {
     const all = offerings?.current?.availablePackages ?? [];
-
-    /**
-     * Preferred gift (Oct 2026, Trevor): "first month $0.99", then the normal
-     * monthly price. A dedicated monthly SKU (id contains "monthly" and a
-     * gift marker) whose App Store intro offer is a paid first month. Apple
-     * allows one intro offer per product, so this can't be stacked on the
-     * free trial — it's the offer for someone who just said no to the trial.
-     * Only used when the intro is real and actually cheaper; otherwise the
-     * annual gift below.
-     */
-    const monthlyGift =
-      all.find((p) => {
-        const id = p.product.identifier.toLowerCase();
-        return id.includes("monthly") && DISCOUNT_MARKERS.some((m) => id.includes(m));
-      }) ?? null;
-    const gi = monthlyGift?.product.introPrice ?? null;
-    if (
-      monthlyGift &&
-      gi &&
-      gi.price > 0 &&
-      gi.price < monthlyGift.product.price &&
-      isTrialEligibleFor(monthlyGift.product.identifier)
-    ) {
-      return {
-        offerPkg: monthlyGift,
-        standardPkg: null,
-        percentOff: null,
-        monthlyIntro: { introPriceString: gi.priceString, regular: monthlyGift.product.priceString },
-      };
-    }
     const discounted =
       all.find((p) => {
         const id = p.product.identifier.toLowerCase();
@@ -183,9 +153,8 @@ export default function GiftOfferScreen() {
       offerPkg: discounted ?? standard,
       standardPkg: discounted ? standard : null,
       percentOff: pct,
-      monthlyIntro: null as null | { introPriceString: string; regular: string },
     };
-  }, [offerings, premiumAnnualPackage, premiumMonthlyPackage, isTrialEligibleFor]);
+  }, [offerings, premiumAnnualPackage, premiumMonthlyPackage]);
 
   /** "$2.49/mo" from an annual package — floored, matching the paywall. */
   const perMonth = (pkg: PurchasesPackage | null): string | null => {
@@ -245,8 +214,7 @@ export default function GiftOfferScreen() {
     logEvent("gift_offer_opened", {
       from_entry_point: fromEntryPoint,
       percent_off: percentOff,
-      has_discount_sku: !!standardPkg || !!monthlyIntro,
-      offer: monthlyIntro ? "first_month_intro" : percentOff != null ? "annual_discount" : "annual",
+      has_discount_sku: !!standardPkg,
     });
   };
 
@@ -268,7 +236,7 @@ export default function GiftOfferScreen() {
     });
     const info = await purchase(offerPkg as PurchasesPackage, {
       tier: "premium",
-      billing: monthlyIntro ? "monthly" : "annual",
+      billing: "annual",
       entryPoint: "gift_offer",
     });
     if (!info) return;
@@ -429,40 +397,7 @@ export default function GiftOfferScreen() {
                   alignItems: "center",
                 }}
               >
-                {monthlyIntro ? (
-                  <>
-                    <Text
-                      style={{
-                        color: colors.brand.traceRed,
-                        fontSize: 54,
-                        fontWeight: "800",
-                        letterSpacing: -2,
-                      }}
-                    >
-                      {monthlyIntro.introPriceString}
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.foreground,
-                        fontSize: 22,
-                        fontWeight: "800",
-                        marginTop: 6,
-                      }}
-                    >
-                      for your first month
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.mutedForeground,
-                        fontSize: 14,
-                        fontWeight: "600",
-                        marginTop: 8,
-                      }}
-                    >
-                      Then {monthlyIntro.regular}/month. Cancel anytime.
-                    </Text>
-                  </>
-                ) : percentOff != null ? (
+                {percentOff != null ? (
                   <>
                     <Text
                       style={{
@@ -626,11 +561,9 @@ export default function GiftOfferScreen() {
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
-                  {monthlyIntro
-                    ? `Claim my ${monthlyIntro.introPriceString} month`
-                    : hasFreeTrial
-                      ? `Try Free for ${trialDurationLabel}`
-                      : "Claim this offer"}
+                  {hasFreeTrial
+                    ? `Try Free for ${trialDurationLabel}`
+                    : "Claim this offer"}
                 </Text>
               )}
             </LinearGradient>
@@ -646,11 +579,9 @@ export default function GiftOfferScreen() {
                   marginTop: 10,
                 }}
               >
-                {monthlyIntro
-                  ? `${monthlyIntro.introPriceString} today, then ${monthlyIntro.regular}/month. Cancel anytime.`
-                  : hasFreeTrial
-                    ? "Apple will ask you to confirm. You won't be charged today."
-                    : `${offerPkg.product.priceString} per year. Cancel anytime.`}
+                {hasFreeTrial
+                  ? "Apple will ask you to confirm. You won't be charged today."
+                  : `${offerPkg.product.priceString} per year. Cancel anytime.`}
               </Text>
               <View
                 style={{
