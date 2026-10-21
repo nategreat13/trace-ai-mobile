@@ -1,4 +1,5 @@
 import { HOME_AIRPORTS, type Airport } from "../components/onboarding/AirportInput";
+import { fuzzyIncludes } from "./fuzzy";
 
 /**
  * Geography for the airport picker's dead end.
@@ -171,11 +172,23 @@ export function nearestServed(point: { lat: number; lng: number }): NearestResul
 export function findUnserved(query: string): GeoAirport[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  return UNSERVED_AIRPORTS.filter(
+  const exact = UNSERVED_AIRPORTS.filter(
     (a) =>
       a.code.toLowerCase().includes(q) ||
       a.city.toLowerCase().includes(q) ||
       a.state.toLowerCase() === q ||
       a.name.toLowerCase().includes(q),
   ).slice(0, 4);
+  if (exact.length > 0) return exact;
+  // Same typo tolerance as the serviced list, so "Sacramnto" is still
+  // recognised and can be pointed at the nearest airport we do cover.
+  const words = q.replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean);
+  if (words.length === 0) return [];
+  return UNSERVED_AIRPORTS.filter((a) => {
+    const tokens = `${a.code} ${a.city} ${a.name}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(" ");
+    return words.every((w) => fuzzyIncludes(tokens, w));
+  }).slice(0, 4);
 }

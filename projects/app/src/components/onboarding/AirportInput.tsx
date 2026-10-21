@@ -11,7 +11,16 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { MapPin, BellRing, Check } from "lucide-react-native";
 import { colors } from "../../theme/colors";
-import { findUnserved, nearestServed, type GeoAirport } from "../../lib/airportGeo";
+import {
+  findUnserved,
+  nearestServed,
+  distanceMiles,
+  HOME_AIRPORT_COORDS,
+  MAX_SUGGEST_MILES,
+  type GeoAirport,
+} from "../../lib/airportGeo";
+import { ZIP3_CENTROIDS } from "../../lib/zipCentroids";
+import { fuzzyIncludes } from "../../lib/fuzzy";
 import { createAirportRequest } from "../../services/firestore";
 import { useAuth } from "../../context/AuthContext";
 import { logEvent } from "../../lib/analytics";
@@ -101,9 +110,42 @@ const HOME_AIRPORT_HAYSTACKS = HOME_AIRPORTS.map((a) =>
 export function searchHomeAirports(query: string): Airport[] {
   const words = normalizeSearch(query).split(" ").filter(Boolean);
   if (words.length === 0) return [];
-  return HOME_AIRPORTS.filter((_, i) =>
+  const exact = HOME_AIRPORTS.filter((_, i) =>
     words.every((w) => HOME_AIRPORT_HAYSTACKS[i].includes(w)),
   ).slice(0, 8);
+  if (exact.length > 0) return exact;
+  // Nothing matched as typed — try again forgiving typos. 1.11.0's dead ends
+  // included "MISMI", "BODTON" and "CLORAD": cities we serve, one slipped key
+  // away from a match.
+  return HOME_AIRPORTS.filter((_, i) =>
+    words.every((w) => fuzzyIncludes(HOME_AIRPORT_TOKENS[i], w)),
+  ).slice(0, 8);
+}
+
+const HOME_AIRPORT_TOKENS = HOME_AIRPORT_HAYSTACKS.map((h) => h.split(" "));
+
+/**
+ * Serviced airports near a US ZIP code, closest first. Four of 1.11.0's dead
+ * ends were ZIP codes ("33173", "11558", "08344", "48093") — a reasonable
+ * answer to "where do you fly from?" that the picker used to reject.
+ *
+ * Resolved by 3-digit prefix, which is precise enough to rank airports that
+ * are tens of miles apart. Returns [] for anything that isn't 3-5 digits, and
+ * for a ZIP with nothing we cover within a day's drive.
+ */
+export function airportsNearZip(query: string): { airport: Airport; miles: number }[] {
+  const digits = query.trim();
+  if (!/^\d{3,5}$/.test(digits)) return [];
+  const centroid = ZIP3_CENTROIDS[digits.slice(0, 3)];
+  if (!centroid) return [];
+  const point = { lat: centroid[0], lng: centroid[1] };
+  return HOME_AIRPORTS.map((airport) => {
+    const c = HOME_AIRPORT_COORDS[airport.code];
+    return { airport, miles: c ? distanceMiles(point, c) : Infinity };
+  })
+    .filter((r) => r.miles <= MAX_SUGGEST_MILES)
+    .sort((a, b) => a.miles - b.miles)
+    .slice(0, 3);
 }
 
 // Full airport list for destination search in Explore.
@@ -241,7 +283,12 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
 
   const selected = HOME_AIRPORTS.find((a) => a.code === value) ?? null;
 
-  const results = searchHomeAirports(query);
+  // A ZIP code answers with the closest airports we serve, each labelled
+  // with its distance; anything else searches names, codes and cities.
+  const zipResults = airportsNearZip(query);
+  const isZip = /^\d{3,5}$/.test(query.trim());
+  const results = isZip ? zipResults.map((r) => r.airport) : searchHomeAirports(query);
+  const milesByCode = new Map(zipResults.map((r) => [r.airport.code, r.miles]));
 
   // Note: dropdown visibility is deliberately decoupled from `focused`.
   // Earlier this read `focused && query.trim().length > 0 && results.length > 0`,
@@ -261,8 +308,10 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
    * nearest origin we do cover, and offer to write when their city launches.
    */
   const trimmed = query.trim();
-  const unserved: GeoAirport[] = showDropdown ? [] : findUnserved(trimmed);
-  const deadEnd = trimmed.length >= 2 && results.length === 0;
+  const unserved: GeoAirport[] = showDropdown || isZip ? [] : findUnserved(trimmed);
+  // Partial ZIPs wait for more digits rather than flashing "no match" at "33".
+  const deadEnd =
+    trimmed.length >= 2 && results.length === 0 && !/^\d{1,4}$/.test(trimmed);
   const match = unserved[0] ?? null;
   const nearest = match ? nearestServed(match) : null;
 
@@ -396,7 +445,7 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
             onChangeText={setQuery}
             onFocus={() => setFocused(true)}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
-            placeholder="Search by city, state, or code…"
+            placeholder="City, airport code, or zip…"
             placeholderTextColor={theme.mutedForeground}
             autoCorrect={false}
             autoCapitalize="characters"
@@ -463,12 +512,16 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
                 <Text style={{ fontSize: 15, fontWeight: "700", color: theme.foreground }}>
                   {match
                     ? `We don't fly from ${match.city} yet`
-                    : `No match for "${trimmed}"`}
+                    : isZip
+                      ? `We don't cover ${trimmed} yet`
+                      : `No match for "${trimmed}"`}
                 </Text>
                 <Text style={{ fontSize: 13, color: theme.mutedForeground, lineHeight: 18 }}>
                   {match
                     ? `${match.code} isn't one of our ${HOME_AIRPORTS.length} airports — we're adding more.`
-                    : `Try a city or airport code. We currently fly from ${HOME_AIRPORTS.length} US airports.`}
+                    : isZip
+                      ? `None of our ${HOME_AIRPORTS.length} US airports is within a day's drive — we're adding more.`
+                      : `Type the city you fly out of, its airport code, or your zip code. We fly from ${HOME_AIRPORTS.length} US airports.`}
                 </Text>
               </View>
 
@@ -570,7 +623,9 @@ export default function AirportInput({ value, onChange }: AirportInputProps) {
                   {airport.city}, {airport.state}
                 </Text>
                 <Text style={{ fontSize: 11, color: theme.mutedForeground }} numberOfLines={1}>
-                  {airport.name.split(" ").slice(0, 2).join(" ")}
+                  {milesByCode.has(airport.code)
+                    ? `${Math.round(milesByCode.get(airport.code)!)} mi away`
+                    : airport.name.split(" ").slice(0, 2).join(" ")}
                 </Text>
               </TouchableOpacity>
             ))}
