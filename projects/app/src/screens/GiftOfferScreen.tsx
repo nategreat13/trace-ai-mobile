@@ -417,7 +417,12 @@ export default function GiftOfferScreen() {
                         marginTop: 14,
                       }}
                     >
-                      {!!standardPkg && (
+                      {/* Strike the monthly price, not the standard annual:
+                          percentOff is measured against twelve months of
+                          monthly, so "50% OFF" beside a struck $35.99 read as
+                          17% to anyone doing the math. Per month on both
+                          sides also matches the price it sits next to. */}
+                      {!!standardPkg && !!premiumMonthlyPackage && (
                         <Text
                           style={{
                             color: theme.mutedForeground,
@@ -426,7 +431,7 @@ export default function GiftOfferScreen() {
                             textDecorationLine: "line-through",
                           }}
                         >
-                          {standardPkg.product.priceString}
+                          {premiumMonthlyPackage.product.priceString}/mo
                         </Text>
                       )}
                       <Text
