@@ -106,6 +106,8 @@ interface ExpandedDealProps {
      * moment to show there are more like it behind the same unlock.
      */
     similar?: { count: number; imageUrls: string[] };
+    /** Rounded count for copy, e.g. "100+". */
+    countLabel?: string;
   };
   /**
    * iOS: fires once the sheet has fully animated away. Navigate to another
@@ -459,6 +461,24 @@ export default function ExpandedDeal({
     }, 900);
   };
   const [activeTab, setActiveTab] = React.useState<"flight" | "destination">("flight");
+
+  /**
+   * Free feed-page deal: after ~25s on the page they've clearly fallen for
+   * the trip, so the pinned strip turns into the pitch for that moment.
+   * Once per page open; never on a normal deal page.
+   */
+  const [dwellHint, setDwellHint] = React.useState(false);
+  React.useEffect(() => {
+    if (!unlockedPreview || !visible) {
+      setDwellHint(false);
+      return;
+    }
+    const t = setTimeout(() => {
+      setDwellHint(true);
+      logEvent("free_deal_dwell_hint_shown", { destination: deal.destination });
+    }, 25000);
+    return () => clearTimeout(t);
+  }, [!!unlockedPreview, visible, deal.id]);
 
   const fitData = useMemo(
     () =>
@@ -830,6 +850,26 @@ export default function ExpandedDeal({
                   </View>
                 )}
 
+                {/* Free feed-page deal: the one thing withheld is booking it.
+                    Shown first so it's the row they read. */}
+                {!!unlockedPreview && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      logEvent("free_deal_booking_row_tapped", { destination: deal.destination });
+                      onBook();
+                    }}
+                    activeOpacity={0.7}
+                    style={[styles.metaRow, { borderBottomColor: theme.border, alignItems: "center" }]}
+                  >
+                    <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Exact dates & booking</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
+                      <Lock size={13} color={colors.brand.traceRed} strokeWidth={2.6} />
+                      <Text style={[styles.metaValue, { color: colors.brand.traceRed, fontWeight: "700" }]}>
+                        Unlock with free trial
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 {!!deal.travel_window && (
                   <View style={[styles.metaRow, { borderBottomColor: theme.border }]}>
                     <Text style={[styles.metaLabel, { color: theme.mutedForeground }]}>Travel window</Text>
@@ -1007,7 +1047,25 @@ export default function ExpandedDeal({
             },
           ]}
         >
-          {!!unlockedPreview?.similar && unlockedPreview.similar.count > 0 && (
+          {dwellHint && (
+            <Reanimated.View entering={FadeInDown.duration(320)}>
+              <TouchableOpacity
+                onPress={() => {
+                  logEvent("free_deal_dwell_hint_tapped", { destination: deal.destination });
+                  onBook();
+                }}
+                activeOpacity={0.85}
+                style={[styles.similarStrip, { backgroundColor: colors.brand.traceRed + "14" }]}
+              >
+                <Sparkles size={16} color={colors.brand.traceRed} />
+                <Text style={{ flex: 1, color: theme.foreground, fontSize: 13.5, fontWeight: "700", lineHeight: 18 }}>
+                  Want deals like {deal.destination} the moment they drop? Start your free week.
+                </Text>
+                <ChevronRight size={16} color={colors.brand.traceRed} />
+              </TouchableOpacity>
+            </Reanimated.View>
+          )}
+          {!dwellHint && !!unlockedPreview?.similar && unlockedPreview.similar.count > 0 && (
             <TouchableOpacity
               onPress={() => {
                 logEvent("free_deal_similar_tapped", { destination: deal.destination });
@@ -1125,7 +1183,9 @@ export default function ExpandedDeal({
                 )}
                 <Text style={styles.bookButtonText}>
                   {unlockedPreview
-                    ? unlockedPreview.ctaLabel
+                    ? activeTab === "destination"
+                      ? `Unlock guides for ${unlockedPreview.countLabel ?? "every"} trips`
+                      : unlockedPreview.ctaLabel
                     : guidePreview
                       ? "Try Free"
                       : "Book Now"}

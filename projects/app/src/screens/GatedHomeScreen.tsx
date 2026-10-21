@@ -689,7 +689,11 @@ export default function GatedHomeScreen() {
             if (Platform.OS !== "ios") setTimeout(afterDealClosed, 450);
           }}
           onDismissed={afterDealClosed}
-          unlockedPreview={{ ctaLabel: unlockLabel, similar: similarLocked(openDeal) }}
+          unlockedPreview={{
+            ctaLabel: unlockLabel,
+            similar: similarLocked(openDeal),
+            countLabel: selection.totalDestinations >= 20 ? roundedCount(selection.totalDestinations) : undefined,
+          }}
         />
       )}
     </SafeAreaView>
