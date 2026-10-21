@@ -1,0 +1,175 @@
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  useColorScheme,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { colors } from "../theme/colors";
+import { useAuth } from "../context/AuthContext";
+import { useProfile } from "../hooks/useProfile";
+import { linkEmailPassword } from "../services/auth";
+import { auth } from "../services/firebase";
+import { trackSignup } from "../services/trackingApi";
+import { identifyForMeta, logMetaCompleteRegistration } from "../lib/metaAppEvents";
+import { logEvent } from "../lib/analytics";
+import AccountBeat, { type AccountDraft } from "../components/onboarding/AccountBeat";
+import type { RootStackParamList } from "../navigation/types";
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+/**
+ * The email ask, after a trial starts (Oct 2026 swipe-first flow).
+ *
+ * Onboarding no longer asks for an account: 40% of 1.11.0 users who reached
+ * that step left, and an in-app purchase never tells us who bought it. So the
+ * ask moves to the one moment someone has every reason to say yes — they've
+ * just started a trial and want their saves, alerts and subscription to
+ * follow them to any phone.
+ *
+ * It's skippable. The trial, saves and alerts all work on the anonymous
+ * session; "Not now" just means they live on this device until restored.
+ */
+export default function SaveAccountScreen() {
+  const navigation = useNavigation<Nav>();
+  const scheme = useColorScheme();
+  const theme = scheme === "dark" ? colors.dark : colors.light;
+  const { profile, setProfile } = useAuth();
+  const { updateProfile } = useProfile();
+
+  const [account, setAccount] = useState<AccountDraft>({ email: "", password: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    logEvent("signup_viewed", { at: "post_trial" });
+  }, []);
+
+  const done = () => navigation.replace("MainTabs", { screen: "SwipeDeck" });
+
+  const save = async () => {
+    const email = account.email.trim();
+    if (!email || account.password.length < 6) {
+      setError("Enter an email and a password of at least 6 characters.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await linkEmailPassword(email, account.password);
+      logEvent("signup_completed", { method: "email", at: "post_trial" });
+      // The profile was created anonymously with no email; give it the one
+      // they just chose so receipts, win-back and trial reminders can reach
+      // them.
+      setProfile((prev) => (prev ? { ...prev, email } : prev));
+      updateProfile({ email }).catch(() => {});
+
+      const current = auth.currentUser;
+      if (current) {
+        let country: string | null = null;
+        try {
+          const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+          if (locale && locale.includes("-")) country = locale.split("-")[1];
+        } catch {
+          /* best-effort */
+        }
+        trackSignup({ userId: current.uid, email, country });
+        identifyForMeta(current.uid, email);
+        logMetaCompleteRegistration("email");
+      }
+      done();
+    } catch (err: any) {
+      const code = err?.code || "";
+      if (code === "auth/email-already-in-use") {
+        logEvent("signup_existing_email", { at: "post_trial" });
+      }
+      logEvent("signup_failed", { method: "email", code, at: "post_trial" });
+      setError(
+        code === "auth/email-already-in-use"
+          ? "That email already has a Trace account. Use another email here — your trial is safe either way."
+          : code === "auth/invalid-email"
+            ? "That doesn't look like a valid email address."
+            : code === "auth/weak-password"
+              ? "Pick a password with at least 6 characters."
+              : err?.message || "Could not save your account. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSave = account.email.trim().length > 3 && account.password.length >= 6 && !busy;
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 32, paddingBottom: 24 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={{ fontSize: 30, fontWeight: "900", color: theme.foreground, lineHeight: 36 }}>
+            Where should we send your deals?
+          </Text>
+          <Text
+            style={{
+              fontSize: 15.5,
+              color: theme.mutedForeground,
+              marginTop: 10,
+              marginBottom: 24,
+              lineHeight: 22,
+            }}
+          >
+            Save your account so your trial, saves and alerts follow you to any
+            phone — and we'll remind you before your trial ends.
+          </Text>
+          <AccountBeat
+            value={account}
+            onChange={setAccount}
+            error={error}
+            busy={busy}
+            firstName={profile?.firstName}
+          />
+        </ScrollView>
+
+        <View style={{ paddingHorizontal: 24, paddingBottom: 12, gap: 4 }}>
+          <TouchableOpacity
+            onPress={save}
+            disabled={!canSave}
+            activeOpacity={0.85}
+            style={{
+              backgroundColor: colors.brand.traceRed,
+              opacity: canSave ? 1 : 0.4,
+              borderRadius: 12,
+              paddingVertical: 17,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 17, fontWeight: "800" }}>
+              Save my account
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              logEvent("signup_skipped", { at: "post_trial" });
+              done();
+            }}
+            style={{ paddingVertical: 14, alignItems: "center" }}
+          >
+            <Text style={{ color: theme.mutedForeground, fontSize: 14, fontWeight: "600" }}>
+              Not now
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}

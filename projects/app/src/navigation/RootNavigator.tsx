@@ -19,6 +19,7 @@ import BusinessWelcomeScreen from "../screens/BusinessWelcomeScreen";
 import UpgradeWelcomeScreen from "../screens/UpgradeWelcomeScreen";
 import SharedDealScreen from "../screens/SharedDealScreen";
 import DiagnosticsScreen from "../screens/DiagnosticsScreen";
+import SaveAccountScreen from "../screens/SaveAccountScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -165,6 +166,12 @@ export default function RootNavigator() {
             name="BusinessWelcome"
             component={BusinessWelcomeScreen}
             options={{ presentation: "fullScreenModal" }}
+          />
+          {/* The email ask, after a trial starts on an anonymous session. */}
+          <Stack.Screen
+            name="SaveAccount"
+            component={SaveAccountScreen}
+            options={{ presentation: "fullScreenModal", gestureEnabled: false }}
           />
           <Stack.Screen
             name="UpgradeWelcome"
