@@ -93,9 +93,35 @@ export async function grantPromotionalEntitlement(opts: {
 }
 
 export interface ActiveEntitlement {
+  /**
+   * The entitlement's lookup key ("premium", "business"), translated from
+   * RevenueCat's internal id. See listActiveEntitlements.
+   */
   entitlement_id: string;
   /** Milliseconds since epoch. null = lifetime grant. */
   expires_at: number | null;
+}
+
+let _entitlementKeys: Map<string, string> | null = null;
+
+/**
+ * RevenueCat entitlement id → lookup key, e.g. "entl414326cc7f" → "premium".
+ * Cached per process: entitlements are project config and rarely change.
+ */
+async function entitlementLookupKeys(): Promise<Map<string, string>> {
+  if (_entitlementKeys) return _entitlementKeys;
+  const projectId = await getRcProjectId();
+  const res = await fetch(
+    `${RC_API_BASE}/projects/${encodeURIComponent(projectId)}/entitlements?limit=50`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "(unreadable)");
+    throw new Error(`RevenueCat entitlements returned ${res.status}: ${body.slice(0, 500)}`);
+  }
+  const data = (await res.json()) as { items?: Array<{ id: string; lookup_key: string }> };
+  _entitlementKeys = new Map((data.items ?? []).map((e) => [e.id, e.lookup_key]));
+  return _entitlementKeys;
 }
 
 /**
@@ -124,5 +150,15 @@ export async function listActiveEntitlements(
     );
   }
   const data = (await res.json()) as { items?: ActiveEntitlement[] };
-  return data.items ?? [];
+  // The v2 API identifies entitlements by RevenueCat's internal id
+  // ("entl414326cc7f"), while every caller compares against the lookup keys
+  // the app and webhooks use ("premium", "business"). Without translating,
+  // no active entitlement ever matched: EXPIRATION always dropped users to
+  // free instead of falling back to a remaining entitlement, and a TRANSFER
+  // left the receiving profile free.
+  const keys = await entitlementLookupKeys();
+  return (data.items ?? []).map((e) => ({
+    ...e,
+    entitlement_id: keys.get(e.entitlement_id) ?? e.entitlement_id,
+  }));
 }
