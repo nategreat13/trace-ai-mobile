@@ -282,7 +282,7 @@ function StripeForm({ email, price, onStarted }: { email: string; price: PlanPri
           })
         }
         onConfirm={payWithWallet}
-        options={{ buttonType: { applePay: "subscribe", googlePay: "subscribe" }, buttonHeight: 52 }}
+        options={{ buttonType: { applePay: "subscribe", googlePay: "subscribe" }, buttonHeight: 52, paymentMethods: { link: "never", amazonPay: "never", paypal: "never", klarna: "never" } }}
       />
       {hasWallet && (
         <div className="flex items-center gap-3 text-[12.5px] font-semibold text-muted">
@@ -291,7 +291,8 @@ function StripeForm({ email, price, onStarted }: { email: string; price: PlanPri
       )}
       <PaymentElement
         onReady={() => setCardReady(true)}
-        options={{ layout: "tabs", wallets: { applePay: "never", googlePay: "never" }, fields: { billingDetails: { email: "never" } }, terms: { card: "never" } }}
+        // Cards only: Link's bank option and its save-your-info box don't fit a card-only trial.
+        options={{ layout: "tabs", wallets: { applePay: "never", googlePay: "never", link: "never" }, fields: { billingDetails: { email: "never" } }, terms: { card: "never" } }}
       />
       {error && <div role="alert" className="rounded-2xl bg-near-bg px-4 py-3 text-[14px] font-semibold text-near">{error}</div>}
       <PrimaryButton onClick={payWithCard} disabled={!stripe || !cardReady || busy || !validEmail(email)}>
