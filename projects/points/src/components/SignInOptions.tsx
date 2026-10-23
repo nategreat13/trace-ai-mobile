@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { sendSignInLink, signInWithGoogle, useAccount } from "@/lib/account";
+import { sendSignInLink, setPassword, signInWithGoogle, suggestPassword, useAccount } from "@/lib/account";
 import { cx, Icon, ICONS } from "./ui";
 
 export const GoogleG = () => (
@@ -117,5 +117,108 @@ export function SignInOptions({
       {email && <p className={cx("-mt-1 truncate text-center text-[12.5px]", dark ? "text-white/70" : "text-muted")}>We'll send it to {email}</p>}
       {error && <p role="alert" className={cx("text-[14px] font-semibold", dark ? "text-[#FFB4B4]" : "text-trace-red")}>{error}</p>}
     </div>
+  );
+}
+
+/**
+ * Puts a password on the signed-in account. The email is filled in and
+ * read-only, and the field is marked new-password, so iPhone and Chrome offer
+ * a strong password and save it to the keychain. "Suggest one" does the same
+ * for browsers that don't.
+ */
+export function PasswordCreate({
+  email,
+  dark,
+  cta = "Create account",
+  onDone,
+}: {
+  email: string;
+  dark?: boolean;
+  cta?: string;
+  onDone: () => void;
+}) {
+  const { refresh } = useAccount();
+  const [password, setPw] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const long = password.length >= 8;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!long || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await setPassword(password);
+      await refresh();
+      onDone();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const field = cx(
+    "min-h-[52px] w-full rounded-2xl border px-4 text-[16px] outline-none",
+    dark ? "border-white/25 bg-white/10 text-white placeholder:text-white/50 focus:border-white/60" : "border-line bg-surface text-ink focus:border-trace-red",
+  );
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2.5">
+      <label className="flex flex-col gap-1.5">
+        <span className={cx("text-[13px] font-bold", dark ? "text-white/80" : "text-muted")}>Email</span>
+        <input type="email" name="email" autoComplete="username" value={email} readOnly className={cx(field, "opacity-80")} />
+      </label>
+      <label className="flex flex-col gap-1.5">
+        <span className="flex items-center justify-between">
+          <span className={cx("text-[13px] font-bold", dark ? "text-white/80" : "text-muted")}>Password</span>
+          <button
+            type="button"
+            onClick={() => {
+              setPw(suggestPassword());
+              setShow(true);
+            }}
+            className={cx("flex min-h-[32px] items-center gap-1.5 text-[13px] font-bold", dark ? "text-white" : "text-trace-pink")}
+          >
+            <Icon d={ICONS.sparkle} size={14} /> Suggest a strong one
+          </button>
+        </span>
+        <span className="relative flex">
+          <input
+            type={show ? "text" : "password"}
+            name="new-password"
+            autoComplete="new-password"
+            minLength={8}
+            value={password}
+            onChange={(e) => setPw(e.target.value)}
+            placeholder="At least 8 characters"
+            className={cx(field, "pr-12", password && "font-mono tracking-wide")}
+          />
+          <button
+            type="button"
+            aria-label={show ? "Hide password" : "Show password"}
+            onClick={() => setShow((s) => !s)}
+            className={cx("absolute inset-y-0 right-0 flex w-12 items-center justify-center", dark ? "text-white/70" : "text-muted")}
+          >
+            <Icon d={show ? ICONS.lock : ICONS.eye} size={18} />
+          </button>
+        </span>
+      </label>
+      {show && password && (
+        <p className={cx("-mt-0.5 text-[12.5px] leading-snug", dark ? "text-white/70" : "text-muted")}>Save it when your phone offers to, or copy it somewhere safe.</p>
+      )}
+      {error && <p role="alert" className={cx("text-[14px] font-semibold", dark ? "text-[#FFB4B4]" : "text-trace-red")}>{error}</p>}
+      <button
+        type="submit"
+        disabled={!long || busy}
+        className={cx(
+          "flex min-h-[54px] items-center justify-center rounded-2xl text-[16px] font-bold active:scale-[0.98] disabled:opacity-50",
+          dark ? "bg-white text-ink" : "bg-ink text-surface",
+        )}
+      >
+        {busy ? "Saving…" : cta}
+      </button>
+    </form>
   );
 }

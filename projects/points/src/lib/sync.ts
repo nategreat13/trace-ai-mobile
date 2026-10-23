@@ -35,6 +35,8 @@ export interface MeResponse {
   email: string | null;
   /** Signed in with Google or an email link (not only the checkout email). */
   verified?: boolean;
+  /** Has a Points password (password.ts), so they can sign in anywhere. */
+  hasPassword?: boolean;
   member: Membership | null;
   state: SyncedState | null;
 }

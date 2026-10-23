@@ -12,6 +12,8 @@ interface Account {
   email: string | null | undefined;
   /** Signed in with Google or an email link, not just from checkout. */
   verified: boolean;
+  /** Has a Points password, so they can sign in on other devices with it. */
+  hasPassword: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -48,6 +50,33 @@ export async function signInWithGoogle(): Promise<{ email: string; moved: boolea
   }
 }
 
+async function postJson(url: string, method: string, body: object): Promise<{ email?: string }> {
+  const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const j = (await r.json().catch(() => ({}))) as { email?: string; error?: string };
+  if (!r.ok) throw new Error(j.error || "Something went wrong. Try again.");
+  return j;
+}
+
+/** Puts a password on the signed-in account (new or changed). */
+export async function setPassword(password: string) {
+  await postJson("/api/password", "PUT", { password });
+}
+
+/** Email + password sign-in. Starts a Points session; call refresh() after. */
+export async function signInWithPassword(email: string, password: string): Promise<string> {
+  const j = await postJson("/api/password", "POST", { email: email.trim(), password });
+  return j.email ?? email.trim().toLowerCase();
+}
+
+/** A strong password in Safari's style (xxxxxx-xxxxxx-xxxxxx), easy to read back. */
+export function suggestPassword(): string {
+  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const pick = new Uint32Array(18);
+  crypto.getRandomValues(pick);
+  const s = Array.from(pick, (n) => chars[n % chars.length]).join("");
+  return `${s.slice(0, 6)}-${s.slice(6, 12)}-${s.slice(12)}`;
+}
+
 /** Emails a sign-in link that opens /signin/finish. Firebase loads only here, keeping it off the landing page. */
 export async function sendSignInLink(email: string) {
   const [{ sendSignInLinkToEmail }, { firebaseAuth }] = await Promise.all([import("firebase/auth"), import("./firebaseClient")]);
@@ -68,6 +97,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { state, update, ready } = usePoints();
   const [email, setEmail] = useState<string | null | undefined>(undefined);
   const [verified, setVerified] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
   const loaded = useRef(false);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -83,6 +113,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (!me.email) {
         setEmail(null);
         setVerified(false);
+        setHasPassword(false);
         return;
       }
       const local = stateRef.current;
@@ -96,6 +127,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       else if (local.member && !local.member.testMode) update({ member: null });
       setEmail(me.email);
       setVerified(!!me.verified);
+      setHasPassword(!!me.hasPassword);
     } catch {
       setEmail(null);
     } finally {
@@ -119,9 +151,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     await fetch("/api/me", { method: "DELETE" });
     setEmail(null);
     setVerified(false);
+    setHasPassword(false);
   }, []);
 
-  const value = useMemo(() => ({ email, verified, refresh, signOut }), [email, verified, refresh, signOut]);
+  const value = useMemo(() => ({ email, verified, hasPassword, refresh, signOut }), [email, verified, hasPassword, refresh, signOut]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

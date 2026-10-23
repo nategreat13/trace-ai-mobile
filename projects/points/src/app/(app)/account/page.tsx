@@ -17,7 +17,7 @@ const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "n
 
 export default function AccountPage() {
   const { state, update, reset } = usePoints();
-  const { email: account, verified, signOut } = useAccount();
+  const { email: account, verified, hasPassword, signOut } = useAccount();
   const router = useRouter();
   const [airport, setAirport] = useState(false);
   const [theme, setTheme] = useTheme();
@@ -83,11 +83,16 @@ export default function AccountPage() {
           <Card className="flex items-center gap-3 p-4">
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               <span className="truncate text-[15.5px] font-bold">{account}</span>
-              {verified ? (
+              {verified || hasPassword ? (
                 <span className="text-[13px] text-muted">Your trips and points sync to every device</span>
               ) : (
-                <Link href={`/signin?email=${encodeURIComponent(account)}`} className="text-[13px] font-bold text-trace-pink">
-                  Set up Google or email sign-in to use other devices
+                <Link href="/password" className="text-[13px] font-bold text-trace-pink">
+                  Create a password to use other devices
+                </Link>
+              )}
+              {hasPassword && (
+                <Link href="/password" className="text-[13px] font-bold text-muted underline-offset-2 hover:underline">
+                  Change password
                 </Link>
               )}
             </span>

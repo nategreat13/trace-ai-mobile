@@ -20,6 +20,11 @@ export interface PointsUserDoc {
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
   stripeStatus?: string;
+  /** scrypt hash (password.ts). Set only from a signed-in session; never moves with mergeAccount. */
+  passwordHash?: string;
+  /** Wrong-password count since the last success, and when sign-in reopens after too many. */
+  passwordFails?: number;
+  passwordLockedUntil?: number;
 }
 
 export const userRef = (email: string) => colRef("pointsUsers").doc(userDocId(email));
@@ -77,6 +82,25 @@ export async function mergeAccount(from: string, to: string): Promise<string | n
     tx.set(a, { member: null, stripeCustomerId: null, mergedInto: normalizeEmail(to), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return src.stripeCustomerId ?? null;
   });
+}
+
+export async function setPasswordHash(email: string, passwordHash: string) {
+  await userRef(email).set(
+    { email: normalizeEmail(email), passwordHash, passwordFails: 0, passwordLockedUntil: 0, updatedAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+}
+
+/** Too many wrong passwords in a row locks password sign-in for a while (the email link still works). */
+const MAX_FAILS = 8;
+const LOCK_MS = 15 * 60 * 1000;
+
+export async function recordPasswordResult(email: string, ok: boolean, fails: number) {
+  const next = ok ? 0 : fails + 1;
+  await userRef(email).set(
+    { passwordFails: next >= MAX_FAILS ? 0 : next, passwordLockedUntil: next >= MAX_FAILS ? Date.now() + LOCK_MS : 0 },
+    { merge: true },
+  );
 }
 
 export async function saveState(email: string, state: SyncedState) {

@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Check, Icon, ICONS, Logo, PrimaryButton } from "@/components/ui";
 import { GoogleG } from "@/components/SignInOptions";
-import { sendSignInLink, signInWithGoogle, useAccount } from "@/lib/account";
+import { sendSignInLink, signInWithGoogle, signInWithPassword, useAccount } from "@/lib/account";
 import { usePoints } from "@/lib/store";
 
-/** Sign in with an emailed link. No passwords. */
+/** Sign in with Google, email and password, or an emailed link (also the way back in after a forgotten password). */
 export default function SignInPage() {
   return (
     <Suspense fallback={<div className="min-h-dvh" />}>
@@ -19,29 +19,34 @@ export default function SignInPage() {
 
 function SignIn() {
   const { state, ready } = usePoints();
-  const { verified, refresh } = useAccount();
+  const { verified, hasPassword, refresh } = useAccount();
   const router = useRouter();
   const prefill = useSearchParams().get("email") ?? "";
   const [email, setEmail] = useState(prefill);
-  const [busy, setBusy] = useState(false);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState<"password" | "link" | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (ready) setEmail((e) => e || state.email);
   }, [ready, state.email]);
-  // Already verified here: nothing to do. (A checkout-only session still gets to verify.)
+  // Already signed in properly here: nothing to do. (A checkout-only session still gets to sign in.)
   useEffect(() => {
-    if (verified) router.replace(state.member ? "/discover" : "/");
-  }, [verified, state.member, router]);
+    if (verified || hasPassword) router.replace(state.member ? "/discover" : "/");
+  }, [verified, hasPassword, state.member, router]);
+
+  const goIn = async () => {
+    await refresh();
+    const me = await fetch("/api/me", { cache: "no-store" }).then((x) => x.json());
+    router.replace(me.member ? "/discover" : "/");
+  };
 
   const google = async () => {
     setError("");
     try {
       await signInWithGoogle();
-      await refresh();
-      const me = await fetch("/api/me", { cache: "no-store" }).then((x) => x.json());
-      router.replace(me.member ? "/discover" : "/");
+      await goIn();
     } catch (e) {
       setError((e as Error).message);
     }
@@ -50,8 +55,20 @@ function SignIn() {
   const valid = /.+@.+\..+/.test(email.trim());
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!valid || !password || busy) return;
+    setBusy("password");
+    setError("");
+    try {
+      await signInWithPassword(email, password);
+      await goIn();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(null);
+    }
+  };
+  const link = async () => {
     if (!valid || busy) return;
-    setBusy(true);
+    setBusy("link");
     setError("");
     try {
       await sendSignInLink(email.trim());
@@ -59,7 +76,7 @@ function SignIn() {
     } catch {
       setError("We couldn't send the link. Check the address and try again.");
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
@@ -85,7 +102,7 @@ function SignIn() {
         <form onSubmit={submit} className="flex flex-1 flex-col gap-5 pt-10">
           <div className="flex flex-col gap-1">
             <h1 className="text-[30px] leading-tight font-black">Sign in</h1>
-            <p className="text-[15px] leading-snug text-muted">Use Google, or the email you started your trial with. No password needed.</p>
+            <p className="text-[15px] leading-snug text-muted">Use Google, or the email you started your trial with.</p>
           </div>
           <button
             type="button"
@@ -101,17 +118,32 @@ function SignIn() {
             <span className="text-[14px] font-bold">Email</span>
             <input
               type="email"
-              autoComplete="email"
+              name="email"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               className="min-h-[52px] rounded-2xl border border-line bg-surface px-4 text-[16px] outline-none focus:border-trace-red"
             />
           </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-[14px] font-bold">Password</span>
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="min-h-[52px] rounded-2xl border border-line bg-surface px-4 text-[16px] outline-none focus:border-trace-red"
+            />
+          </label>
           {error && <p role="alert" className="text-[14px] font-semibold text-trace-red">{error}</p>}
-          <PrimaryButton type="submit" disabled={!valid || busy}>
-            {busy ? "Sending…" : "Email me a sign-in link"}
+          <PrimaryButton type="submit" disabled={!valid || !password || !!busy}>
+            {busy === "password" ? "Signing in…" : "Sign in"}
           </PrimaryButton>
+          <button type="button" onClick={link} disabled={!valid || !!busy} className="-mt-1 min-h-[44px] text-[14.5px] font-bold text-muted disabled:opacity-50">
+            {busy === "link" ? "Sending…" : "Forgot it? Email me a sign-in link"}
+          </button>
           <p className="flex items-center justify-center gap-1.5 text-[13px] text-muted">
             <Check size={12} /> Your trips, points and membership on every device
           </p>
