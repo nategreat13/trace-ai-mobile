@@ -15,6 +15,7 @@ const NAV = [
   { href: "/alerts", label: "Alerts", icon: ICONS.bell },
   { href: "/points", label: "My points", icon: ICONS.wallet },
   { href: "/account", label: "Account and settings", icon: ICONS.gear },
+  { href: "/contact?from=menu", label: "Contact us", icon: ICONS.mail },
 ];
 
 /** Members-only chrome: logo, points pill, hamburger drawer. No bottom tab bar. */

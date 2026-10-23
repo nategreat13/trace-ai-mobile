@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AirportSearch } from "@/components/funnel/AirportSearch";
@@ -130,6 +131,18 @@ export default function AccountPage() {
       </section>
 
       <BalancesEditor />
+
+      <section className="flex flex-col gap-2">
+        <Eyebrow>Help</Eyebrow>
+        <Link href="/contact?from=account" className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line px-4 active:bg-soft">
+          <span className="bg-trace flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"><Icon d={ICONS.mail} size={17} /></span>
+          <span className="flex flex-1 flex-col leading-tight">
+            <span className="text-[15.5px] font-bold">Contact us</span>
+            <span className="text-[13px] text-muted">Questions, bugs or ideas. We read everything.</span>
+          </span>
+          <Icon d={ICONS.chevron} size={16} stroke={2.4} className="text-muted" />
+        </Link>
+      </section>
 
       <section className="flex flex-col gap-2 pt-2">
         <SecondaryButton

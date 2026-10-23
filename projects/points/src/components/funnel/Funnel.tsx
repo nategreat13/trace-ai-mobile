@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AIRLINE_IDS, BANK_IDS, HOTEL_IDS, PROGRAMS, hopFor } from "@/engine/data";
@@ -465,6 +466,9 @@ function EditAnswers({ onClose }: { onClose: () => void }) {
         >
           Start over
         </button>
+        <Link href="/contact?from=results" className="-mt-1 flex min-h-[44px] items-center justify-center gap-1.5 text-[14px] font-semibold text-muted">
+          <Icon d={ICONS.mail} size={15} /> Questions? Contact us
+        </Link>
       </div>
     </div>
   );

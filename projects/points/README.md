@@ -24,6 +24,7 @@ NEXT_DIST_DIR=.next-build yarn workspace @trace/points build   # while dev is ru
 | `src/lib/worldSearch.ts` | Searches that list, plus famous places with no airport (Kyoto → KIX/ITM). |
 | `src/lib/payments.ts`, `src/app/api/` | Checkout, trial start, billing portal and the Stripe webhook. |
 | `src/app/api/cash-deals/`, `src/lib/cashDeals.ts` | Cash fares for trips they're short on, from the Trace prod deals feed (`/deals/{airport}`). Smaller airports use a nearby hub's feed. Cached for an hour. |
+| `src/app/contact/`, `src/app/api/contact/` | Contact us form (menu, Account, and the free results sheet). Email is prefilled; messages go to Slack via `CONTACT_SLACK_WEBHOOK_URL`, or to the server log without it. |
 | `src/lib/value.ts` | Cents per point for a trip (cash fare minus taxes, over points). |
 | `src/lib/store.tsx` | App state, saved in the browser (`localStorage`) until there's a backend. |
 | `src/lib/analytics.ts` | `track()`; logs funnel events and maps them to Meta events. No sink yet. |
@@ -59,6 +60,7 @@ The trial is 7 days with the card collected up front; Stripe bills at the end un
 ## Not built yet
 - **Accounts and a database.** No sign-in; everything is per-browser. Magic-link auth, saved trips, watches and the verification queue need a backend.
 - **Real seat dates.** "Find my seats" records the request locally. Phase 1 is a manual verification queue in an admin page.
+- **Contact delivery.** Create a Slack incoming webhook for the support channel and set `CONTACT_SLACK_WEBHOOK_URL` where the app is hosted. Email delivery can be added to the same route.
 - **Email and SMS** (abandoned-paywall sequence, trial reminder, alerts). Email is now optional during the funnel (an inline "email me this list" card) and required at checkout.
 - **Admin tables** for editing the seed data without a deploy.
 - **Analytics sink, Meta Pixel and CAPI.** `track()` already fires every funnel event.
