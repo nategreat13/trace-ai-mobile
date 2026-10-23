@@ -7,8 +7,9 @@ import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations, rankDestinations, type Destination } from "@/lib/destinations";
-import { money, plural } from "@/lib/format";
-import { usePoints, useDeck } from "@/lib/store";
+import { money, num, plural } from "@/lib/format";
+import { STARTER, usePoints, useDeck } from "@/lib/store";
+import { useBackClose } from "@/lib/useBackClose";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { useCashDeals } from "@/lib/cashDeals";
 import { GiftReminder } from "../GiftOffer";
@@ -45,6 +46,8 @@ export function ResultsView({
   const [filter, setFilter] = useState<FilterId>("all");
   const [sort, setSort] = useState<SortId>("best");
   const [panel, setPanel] = useState(false);
+  useBackClose(view === "swipe", () => setView("list"));
+  useBackClose(panel, () => setPanel(false));
   const [query, setQuery] = useState("");
   const shown = useCountUp(values.flights, countUp);
 
@@ -110,7 +113,7 @@ export function ResultsView({
         <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
         <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
         <div className="relative flex flex-col gap-1">
-          <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
+          <Eyebrow className="text-trace-pink">{state.starter ? "What one card bonus books" : "Hidden in your points"}</Eyebrow>
           <div className="flex items-baseline gap-2">
             <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
             <span className="text-[15px] font-bold text-muted">in flights</span>
@@ -121,7 +124,9 @@ export function ResultsView({
               : <>You&apos;re close to <span className="text-near">{plural(allNear, "destination")}</span>.</>}
           </p>
           <p className="text-[13.5px] leading-snug text-muted">
-            Trips most people never find. We checked 11 airline programs from {state.airport}.{" "}
+            {state.starter
+              ? `Starting from zero: this is what the ${STARTER.card}'s ${num(STARTER.points)}-point sign-up bonus books from ${state.airport}. Trace shows you exactly how. `
+              : `Trips most people never find. We checked 11 airline programs from ${state.airport}. `}
             {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
           <Freshness />

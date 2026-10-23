@@ -114,8 +114,10 @@ export function DestinationCard({
               </span>
               <span className="flex min-w-0 items-center gap-1.5">
                 <ValueChip r={o} />
-                <span className={cx("truncate text-[12.5px] text-muted", locked && "blur-[3px] select-none")}>
-                  {money(o.cashTotal)} fare · via {o.best.partner.short}
+                {/* Locked: the value stays readable (the reason to unlock), the "how" doesn't. */}
+                <span className="truncate text-[12.5px] text-muted">
+                  <span className={cx(locked && "font-bold text-ink")}>{money(o.cashTotal)} fare</span>
+                  <span className={cx(locked && "blur-[3px] select-none")}> · via {o.best.partner.short}</span>
                 </span>
               </span>
             </span>

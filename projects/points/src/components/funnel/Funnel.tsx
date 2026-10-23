@@ -11,7 +11,8 @@ import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
 import { kShort, num, plural } from "@/lib/format";
 import { signInWithGoogle, useAccount } from "@/lib/account";
-import { effectiveBalances, type FunnelStep, usePoints, useDeck } from "@/lib/store";
+import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
+import { useBackClose } from "@/lib/useBackClose";
 import { GiftOffer } from "../GiftOffer";
 import { GoogleG, PasswordCreate, SignInOptions } from "../SignInOptions";
 import { Paywall } from "../Paywall";
@@ -47,7 +48,11 @@ export function Funnel() {
   // Browser back walks back through the funnel instead of leaving the site.
   useEffect(() => {
     if (!ready) return;
-    if (window.history.state?.step !== step) window.history.pushState({ ...window.history.state, step }, "");
+    if (window.history.state?.step !== step) {
+      // A new step's entry never carries an open overlay's marker (useBackClose), or closing that overlay would pop it.
+      const { overlay: _overlay, ...rest } = window.history.state ?? {};
+      window.history.pushState({ ...rest, step }, "");
+    }
   }, [step, ready]);
   useEffect(() => {
     const onPop = (e: PopStateEvent) => {
@@ -65,7 +70,18 @@ export function Funnel() {
     window.scrollTo(0, 0);
   }, [step]);
 
-  if (!ready) return <div className="min-h-dvh bg-midnight" />;
+  // Before the saved answers load (and in the server HTML), show the landing
+  // page: it's what a new visitor from an ad sees, so it appears instantly
+  // instead of a blank screen while the JavaScript downloads.
+  // Same shape as the landing branch below, so it stays the same element once ready.
+  if (!ready) {
+    return (
+      <div className="flex min-h-dvh flex-col">
+        {false}
+        <Landing onStart={() => go("progs")} />
+      </div>
+    );
+  }
 
   const q = QUESTIONS.indexOf(step);
   return (
@@ -75,7 +91,7 @@ export function Funnel() {
           <button
             type="button"
             aria-label="Back"
-            onClick={() => go(PREV[step] ?? "land")}
+            onClick={() => go(step === "air" && state.starter ? "progs" : (PREV[step] ?? "land"))}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-soft active:scale-95"
           >
             <Icon d={ICONS.back} size={18} stroke={2.4} />
@@ -90,7 +106,7 @@ export function Funnel() {
         </div>
       )}
       {step === "land" && <Landing onStart={() => go("progs")} />}
-      {step === "progs" && <Programs onNext={() => go("bal")} />}
+      {step === "progs" && <Programs onNext={() => go("bal")} onStarter={() => go("air")} />}
       {step === "bal" && <BalancesStep onNext={() => go("air")} />}
       {step === "air" && <AirportStep onNext={() => go("picks")} />}
       {step === "picks" && <Picks onNext={() => go("load")} />}
@@ -166,23 +182,43 @@ function ProgramTile({ id, i }: { id: ProgramId; i: number }) {
   );
 }
 
-function Programs({ onNext }: { onNext: () => void }) {
-  const { state } = usePoints();
+function Programs({ onNext, onStarter }: { onNext: () => void; onStarter: () => void }) {
+  const { state, update } = usePoints();
+  // Back here from the "no points yet" path: start clean, so the stand-in bonus isn't mistaken for their own.
+  useEffect(() => {
+    if (state.starter) update({ starter: false, progs: [], balances: {}, estimated: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const n = state.progs.length;
   return (
     <Screen
       title="Which points do you have?"
       sub="Pick every card and airline. We'll combine them."
       footer={
-        <PrimaryButton
-          disabled={!n}
-          onClick={() => {
-            track("programs_selected", { programs: state.progs.join(","), count: n });
-            onNext();
-          }}
-        >
-          {n ? `Continue with ${plural(n, "program")}` : "Pick at least one"}
-        </PrimaryButton>
+        <>
+          <PrimaryButton
+            disabled={!n}
+            onClick={() => {
+              track("programs_selected", { programs: state.progs.join(","), count: n });
+              onNext();
+            }}
+          >
+            {n ? `Continue with ${plural(n, "program")}` : "Pick at least one"}
+          </PrimaryButton>
+          {!n && (
+            <button
+              type="button"
+              onClick={() => {
+                track("programs_selected", { programs: "none", count: 0, starter: true });
+                update({ starter: true, progs: [STARTER.program], balances: { [STARTER.program]: STARTER.points }, estimated: {} });
+                onStarter();
+              }}
+              className="min-h-[48px] rounded-2xl text-[15px] font-bold text-muted active:bg-soft"
+            >
+              I don&apos;t have points yet
+            </button>
+          )}
+        </>
       }
     >
       <Eyebrow className="pb-3">Credit card points</Eyebrow>
@@ -202,13 +238,20 @@ function Programs({ onNext }: { onNext: () => void }) {
 }
 
 function BalancesStep({ onNext }: { onNext: () => void }) {
-  const { state } = usePoints();
+  const { state, update } = usePoints();
   const { values } = useDeck();
+  // Start every program at a typical balance, so Continue works straight away
+  // and nobody has to leave to look a number up. Typing one replaces it.
+  useEffect(() => {
+    const missing = state.progs.filter((id) => !state.estimated[id] && !((Number(state.balances[id]) || 0) > 0));
+    if (missing.length) update((s) => ({ estimated: { ...s.estimated, ...Object.fromEntries(missing.map((id) => [id, true])) } }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const ok = state.progs.length > 0 && state.progs.every((id) => state.estimated[id] || (Number(state.balances[id]) || 0) > 0);
   return (
     <Screen
       title="How many do you have?"
-      sub={`Check your card's app, or tap "Not sure" and we'll estimate.`}
+      sub="We filled in typical balances. Type yours for exact results, or just continue."
       footer={
         <>
           <div
@@ -250,15 +293,36 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
 
 function AirportStep({ onNext }: { onNext: () => void }) {
   const { update } = usePoints();
+  // Our best guess from their location, offered as one tap above the search.
+  const [near, setNear] = useState<{ code: string; city: string; state: string } | null>(null);
+  useEffect(() => {
+    fetch(`/api/nearby-airport${window.location.search}`)
+      .then((r) => r.json())
+      .then((j: { airport: typeof near }) => setNear(j.airport))
+      .catch(() => {});
+  }, []);
+  const pick = (code: string, how: string) => {
+    update({ airport: code });
+    track("airport_selected", { airport: code, how });
+    window.setTimeout(onNext, 220);
+  };
   return (
     <Screen title="Where do you fly from?" sub="Search your city, state, zip or airport." footer={null}>
-      <AirportSearch
-        onPick={(a) => {
-          update({ airport: a.code });
-          track("airport_selected", { airport: a.code });
-          window.setTimeout(onNext, 220);
-        }}
-      />
+      {near && (
+        <button
+          type="button"
+          onClick={() => pick(near.code, "suggested")}
+          className="rise mb-4 flex min-h-[72px] items-center gap-3 rounded-2xl bg-surface px-4 text-left shadow-[0_0_0_2px_#FD297B,0_10px_24px_rgba(253,41,123,0.15)] active:scale-[0.99]"
+        >
+          <span className="bg-trace flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[13px] font-extrabold text-white">{near.code}</span>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="text-[17px] font-extrabold">Flying from {near.city}?</span>
+            <span className="text-[13px] text-muted">Tap to use {near.code}, or search below</span>
+          </span>
+          <Icon d={ICONS.chevron} size={18} stroke={2.4} className="text-trace-pink" />
+        </button>
+      )}
+      <AirportSearch onPick={(a) => pick(a.code, "search")} />
     </Screen>
   );
 }
@@ -396,6 +460,8 @@ function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) 
   const { state, update } = usePoints();
   const [editing, setEditing] = useState(false);
   const [detail, setDetail] = useState<TripResult | null>(null);
+  useBackClose(!!detail, () => setDetail(null));
+  useBackClose(editing, () => setEditing(false));
   const [first] = useState(() => !state.resultsSeen);
   useEffect(() => {
     track("results_view");

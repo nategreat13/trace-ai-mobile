@@ -91,7 +91,15 @@ export interface PointsState {
   alertsReadAt: string | null;
   /** The dollar value counts up only on the first look at results. */
   resultsSeen: boolean;
+  /**
+   * Tapped "I don't have points yet": results show what one card's sign-up
+   * bonus (STARTER below) would book, labeled as such.
+   */
+  starter: boolean;
 }
+
+/** The "no points yet" scenario: the Chase Sapphire Preferred's sign-up bonus. */
+export const STARTER = { program: "chase" as const, points: 75000, card: "Chase Sapphire Preferred" };
 
 export const INITIAL: PointsState = {
   step: "land",
@@ -115,6 +123,7 @@ export const INITIAL: PointsState = {
   member: null,
   alertsReadAt: null,
   resultsSeen: false,
+  starter: false,
 };
 
 const KEY = "trace-points:v1";

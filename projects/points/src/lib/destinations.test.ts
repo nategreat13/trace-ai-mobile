@@ -13,15 +13,15 @@ const input = (p: Partial<PointsInput>): PointsInput => ({
   ...p,
 });
 
-test("opens with the cheapest trip they can book", () => {
+test("opens with the most valuable trip they can book", () => {
   const all = groupDestinations(buildDeck(input({})));
   const ranked = rankDestinations(all, { picks: [], saved: [] });
-  const cheapestNeed = Math.min(...all.filter((d) => d.ok).flatMap((d) => d.options.filter((o) => o.ok).map((o) => o.need)));
+  const okValue = (d: (typeof all)[number]) => Math.max(0, ...d.options.filter((o) => o.ok).map((o) => o.cashTotal));
   assert.equal(ranked[0].ok, true);
-  assert.equal(Math.min(...ranked[0].options.filter((o) => o.ok).map((o) => o.need)), cheapestNeed);
+  assert.equal(okValue(ranked[0]), Math.max(...all.filter((d) => d.ok).map(okValue)));
 });
 
-test("picks come right after the cheap opener, bookable ones first", () => {
+test("picks come right after the opener, bookable ones first", () => {
   // 80k Amex reaches Paris on Flying Blue but not Bali's 120k KrisFlyer.
   const all = groupDestinations(buildDeck(input({ balances: { amex: 80000 }, picks: ["Paris", "Bali"] })));
   const ranked = rankDestinations(all, { picks: ["Paris", "Bali"], saved: [] });

@@ -51,15 +51,17 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
         ? "Search every deal"
       : saved && reason === "cta"
         ? `Get alerts for your ${plural(saved, "saved trip")}`
-        : `Unlock all ${plural(destinations.length, "destination")}`;
+      : reason === "locked"
+        ? `Unlock all ${plural(destinations.length, "destination")}`
+        : "Book your first free flight";
   const sub =
     reason === "filters"
       ? "Beaches, business class, fewest points, closest to booking."
       : reason === "search"
         ? `Find any city in your ${plural(destinations.length, "destination")} in a second, and request places we don't price yet.`
       : okDest
-        ? `${okDest} you can book with points you already have${best ? `, like ${best.trip.city}` : ""}.`
-        : "See exactly how close you are to each one.";
+        ? `${okDest} trips are within reach${best ? `, like ${best.trip.city}` : ""}. We find the dates with open seats and help you book.`
+        : "See exactly how close you are to each one, and how to close the gap.";
 
 
   return (
@@ -95,7 +97,7 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
         <div className="rise bg-premium flex items-center justify-between rounded-3xl px-5 py-4 text-white" style={stagger(1)}>
           <div className="flex flex-col">
-            <span className="text-[12px] font-semibold text-white/60">Your points</span>
+            <span className="text-[12px] font-semibold text-white/60">{state.starter ? "One card bonus" : "Your points"}</span>
             <span className="text-gradient nums text-[32px] leading-tight font-extrabold">{money(values.flights)}</span>
             <span className="text-[12px] text-white/60">in flights</span>
           </div>
@@ -109,11 +111,11 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
         <ul className="flex flex-col gap-2.5 px-1">
           {[
-            `All ${plural(destinations.length, "destination")} with exact dates`,
-            "Instant alerts when seats open",
-            "Transfer bonus and new program alerts",
+            `Exact dates with open seats for all ${plural(destinations.length, "destination")}`,
+            "Our team checks seats and helps you book, within 24 hours",
+            "Instant alerts the moment seats open",
+            "Transfer bonus alerts, so your points go further",
             "Card bonuses picked to close your gap",
-            "Step-by-step booking help",
           ].map((t, i) => (
             <li key={t} className="rise flex items-center gap-3 text-[15.5px] font-bold" style={stagger(i + 2, 60)}>
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-trace-green text-white">
