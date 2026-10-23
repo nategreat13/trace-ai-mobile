@@ -26,34 +26,6 @@ export function ValueChip({ r }: { r: TripResult }) {
 }
 
 /**
- * The same bank points, cashed out vs flown. Only shown when they hold bank
- * points, since airline miles can't be cashed out.
- */
-export function CashOutCompare() {
-  const { values } = useDeck();
-  if (values.bankCash <= 0) return null;
-  const left = Math.max(0, values.bankFlights - values.bankCash);
-  const pct = Math.max(6, Math.round((values.bankCash / values.bankFlights) * 100));
-  return (
-    <div className="mt-3 flex flex-col gap-1.5 rounded-3xl bg-surface/80 px-4 py-3 ring-1 ring-line backdrop-blur">
-      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1.5 text-[12.5px] font-semibold">
-        <span className="text-muted">Cashed out</span>
-        <span className="h-2 overflow-hidden rounded-full bg-soft">
-          <span className="block h-full rounded-full bg-muted/50" style={{ width: `${pct}%` }} />
-        </span>
-        <span className="nums text-right font-extrabold text-muted">{money(values.bankCash)}</span>
-        <span>As flights</span>
-        <span className="h-2 overflow-hidden rounded-full bg-soft">
-          <span className="bg-trace block h-full w-full rounded-full" />
-        </span>
-        <span className="text-gradient nums text-right font-extrabold">{money(values.bankFlights)}</span>
-      </div>
-      <p className="text-[13.5px] font-extrabold text-near">Cashing out your card points leaves {money(left)} on the table.</p>
-    </div>
-  );
-}
-
-/**
  * A live transfer bonus on a program they hold, made personal: how many
  * points it saves on one of their trips. Only when a bonus is running.
  */

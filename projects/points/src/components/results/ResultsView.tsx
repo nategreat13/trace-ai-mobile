@@ -13,7 +13,7 @@ import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { useCashDeals } from "@/lib/cashDeals";
 import { sharePointsCard } from "@/lib/shareCard";
 import { DestinationCard } from "./DestinationCard";
-import { BonusBanner, CashOutCompare } from "./Insights";
+import { BonusBanner } from "./Insights";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
 import { SwipeDeck } from "./SwipeDeck";
 
@@ -141,7 +141,6 @@ export function ResultsView({
             {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
           <Freshness />
-          <CashOutCompare />
         </div>
         <div role="tablist" aria-label="View" className="relative mt-4 grid grid-cols-2 rounded-2xl bg-soft p-1">
           <span
