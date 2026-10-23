@@ -10,11 +10,43 @@ export const PENDING_EMAIL_KEY = "trace-points:signin-email";
 interface Account {
   /** Signed-in email, null when signed out, undefined while checking. */
   email: string | null | undefined;
+  /** Signed in with Google or an email link, not just from checkout. */
+  verified: boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const Ctx = createContext<Account | null>(null);
+
+/**
+ * Trades a Firebase ID token (Google or email link) for a Points session,
+ * then signs out of Firebase: Points keeps its own session.
+ */
+export async function exchangeIdToken(idToken: string): Promise<{ email: string; moved: boolean }> {
+  const r = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+  const j = (await r.json()) as { email?: string; moved?: boolean; error?: string };
+  if (!r.ok || !j.email) throw new Error(j.error || "That sign-in didn't work. Try again.");
+  return { email: j.email, moved: !!j.moved };
+}
+
+/** "Continue with Google": a Google popup, then a Points session for that verified email. */
+export async function signInWithGoogle(): Promise<{ email: string; moved: boolean }> {
+  const [{ GoogleAuthProvider, signInWithPopup, signOut }, { firebaseAuth }] = await Promise.all([import("firebase/auth"), import("./firebaseClient")]);
+  const auth = firebaseAuth();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  try {
+    const cred = await signInWithPopup(auth, provider);
+    return await exchangeIdToken(await cred.user.getIdToken());
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? "";
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") throw new Error("");
+    if (code === "auth/popup-blocked") throw new Error("Your browser blocked the Google window. Allow pop-ups and try again.");
+    throw new Error((e as Error).message && !code ? (e as Error).message : "Google sign-in isn't available right now. Use the email link instead.");
+  } finally {
+    await signOut(auth).catch(() => {});
+  }
+}
 
 /** Emails a sign-in link that opens /signin/finish. Firebase loads only here, keeping it off the landing page. */
 export async function sendSignInLink(email: string) {
@@ -35,6 +67,7 @@ export async function sendSignInLink(email: string) {
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { state, update, ready } = usePoints();
   const [email, setEmail] = useState<string | null | undefined>(undefined);
+  const [verified, setVerified] = useState(false);
   const loaded = useRef(false);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -49,6 +82,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const me = (await r.json()) as MeResponse;
       if (!me.email) {
         setEmail(null);
+        setVerified(false);
         return;
       }
       const local = stateRef.current;
@@ -61,6 +95,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (me.member) update({ member: me.member });
       else if (local.member && !local.member.testMode) update({ member: null });
       setEmail(me.email);
+      setVerified(!!me.verified);
     } catch {
       setEmail(null);
     } finally {
@@ -83,9 +118,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await fetch("/api/me", { method: "DELETE" });
     setEmail(null);
+    setVerified(false);
   }, []);
 
-  const value = useMemo(() => ({ email, refresh, signOut }), [email, refresh, signOut]);
+  const value = useMemo(() => ({ email, verified, refresh, signOut }), [email, verified, refresh, signOut]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

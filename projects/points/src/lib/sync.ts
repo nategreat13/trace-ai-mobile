@@ -33,6 +33,8 @@ export function pickSynced(s: Partial<PointsState>): SyncedState {
 /** What GET /api/me returns. email is null when signed out. */
 export interface MeResponse {
   email: string | null;
+  /** Signed in with Google or an email link (not only the checkout email). */
+  verified?: boolean;
   member: Membership | null;
   state: SyncedState | null;
 }

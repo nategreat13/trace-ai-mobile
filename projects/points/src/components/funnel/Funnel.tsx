@@ -10,8 +10,10 @@ import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
 import { kShort, num, plural } from "@/lib/format";
+import { useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, usePoints, useDeck } from "@/lib/store";
 import { GiftOffer } from "../GiftOffer";
+import { SignInOptions } from "../SignInOptions";
 import { Paywall } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
@@ -486,6 +488,9 @@ function EditAnswers({ onClose }: { onClose: () => void }) {
 function Done({ onOpen }: { onOpen: () => void }) {
   const { state } = usePoints();
   const { deck } = useDeck();
+  const { verified } = useAccount();
+  // The account step: shown until they sign in with Google or an email link.
+  const [linkSent, setLinkSent] = useState(false);
   const first = deck.find((r) => state.saved.includes(r.trip.id)) ?? deck.find((r) => state.picks.includes(r.trip.city)) ?? deck[0];
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-midnight text-white">
@@ -502,10 +507,25 @@ function Done({ onOpen }: { onOpen: () => void }) {
             ? `${first.trip.city} is first on your list. All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`
             : `All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`}
         </p>
-        <div className="rise rounded-2xl border border-white/20 bg-white/10 p-4 text-[14px] leading-snug backdrop-blur" style={stagger(3)}>
-          <span className="font-bold">On iPhone?</span> Tap Share, then &ldquo;Add to Home Screen&rdquo; so seat and bonus alerts can reach you.
-        </div>
-        <PrimaryButton onClick={onOpen}>Open Trace</PrimaryButton>
+        {verified ? (
+          <>
+            <div className="rise rounded-2xl border border-white/20 bg-white/10 p-4 text-[14px] leading-snug backdrop-blur" style={stagger(3)}>
+              <span className="font-bold">On iPhone?</span> Tap Share, then &ldquo;Add to Home Screen&rdquo; so seat and bonus alerts can reach you.
+            </div>
+            <PrimaryButton onClick={onOpen}>Open Trace</PrimaryButton>
+          </>
+        ) : (
+          <div className="rise flex flex-col gap-3 rounded-3xl border border-white/20 bg-black/35 p-5 backdrop-blur-md" style={stagger(3)}>
+            <div className="flex flex-col gap-1">
+              <span className="text-[20px] font-extrabold">Create your account</span>
+              <span className="text-[14px] leading-snug text-white/80">So your trips, points and membership follow you to any device. No password needed.</span>
+            </div>
+            <SignInOptions dark email={state.email || undefined} onSignedIn={onOpen} onLinkSent={() => setLinkSent(true)} />
+            <button type="button" onClick={onOpen} className="min-h-[40px] text-[14px] font-bold text-white/75">
+              {linkSent ? "Open Trace" : "Skip for now"}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

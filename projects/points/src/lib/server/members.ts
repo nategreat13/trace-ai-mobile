@@ -5,11 +5,16 @@ import { colRef, FieldValue, normalizeEmail, userDocId } from "./firebase";
 
 /**
  * pointsUsers/{hash(email)}:
- *   email, state (SyncedState), member (Membership | null),
- *   stripeCustomerId, stripeSubscriptionId, stripeStatus, createdAt, updatedAt
+ *   email, state (SyncedState), member (Membership | null), verified,
+ *   stripeCustomerId, stripeSubscriptionId, stripeStatus, mergedInto,
+ *   createdAt, updatedAt
  */
 export interface PointsUserDoc {
   email: string;
+  /** They proved they own the email (Google or an email link), not just typed it at checkout. */
+  verified?: boolean;
+  /** This account's membership moved to another email when they signed in with it. */
+  mergedInto?: string;
   state?: SyncedState;
   member?: Membership | null;
   stripeCustomerId?: string;
@@ -32,6 +37,45 @@ export async function ensureUser(email: string): Promise<boolean> {
     if (snap.exists) return false;
     tx.set(ref, { email: normalizeEmail(email), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     return true;
+  });
+}
+
+export async function markVerified(email: string) {
+  await userRef(email).set({ email: normalizeEmail(email), verified: true, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
+/**
+ * Someone paid as `from` (signed in on this device) and then signed in with a
+ * different verified email `to`, usually their Google account. Move the
+ * membership, Stripe link and saved state to `to`, unless `to` already has a
+ * membership of its own. Returns the Stripe customer to re-point, if any.
+ */
+export async function mergeAccount(from: string, to: string): Promise<string | null> {
+  const a = userRef(from);
+  const b = userRef(to);
+  return a.firestore.runTransaction(async (tx) => {
+    const [sa, sb] = await Promise.all([tx.get(a), tx.get(b)]);
+    const src = sa.data() as PointsUserDoc | undefined;
+    const dst = sb.data() as PointsUserDoc | undefined;
+    // Only the unverified account checkout just made moves; switching between verified accounts doesn't.
+    if (!src || src.verified || src.mergedInto || dst?.member) return null;
+    tx.set(
+      b,
+      {
+        email: normalizeEmail(to),
+        member: src.member ?? null,
+        stripeCustomerId: src.stripeCustomerId ?? null,
+        stripeSubscriptionId: src.stripeSubscriptionId ?? null,
+        stripeStatus: src.stripeStatus ?? null,
+        ...(dst?.state ? {} : src.state ? { state: { ...src.state, email: normalizeEmail(to) } } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(dst ? {} : { createdAt: FieldValue.serverTimestamp() }),
+      },
+      { merge: true },
+    );
+    // The old doc keeps a pointer but no longer answers to the Stripe customer.
+    tx.set(a, { member: null, stripeCustomerId: null, mergedInto: normalizeEmail(to), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return src.stripeCustomerId ?? null;
   });
 }
 

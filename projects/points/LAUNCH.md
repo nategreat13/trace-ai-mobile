@@ -24,7 +24,7 @@ Use test mode first. Repeat in live mode when the smoke test passes.
 
 ## 2. Firebase (Nate, or anyone with console access to trace-ai-b9cba)
 
-1. **Authentication → Sign-in method → Email/Password:** enable **Email link (passwordless sign-in)**.
+1. **Authentication → Sign-in method:** under **Email/Password**, enable **Email link (passwordless sign-in)**. Also enable **Google** (pick a support email). Those are the two ways members sign in; there are no passwords.
 2. **Authentication → Settings → Authorized domains:** add `points.tracetravel.co` (and the Vercel preview domain while testing).
 3. **Authentication → Templates:** check the sign-in email's sender name and the project's public-facing name read "Trace", not a project number.
 4. **Service account:** reuse the admin web's `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` (in the `trace-travel-ai` Vercel project), copied into the new project's env.
@@ -78,7 +78,7 @@ A new project, `trace-points`, in the **Trace Travel** team. It's separate from 
    ```bash
    cd projects/points
    vercel pull --yes --environment=production --global-config ~/.vercel-trace
-   vercel build --prod --global-config ~/.vercel-trace
+   NEXT_DIST_DIR=.next-build vercel build --prod --global-config ~/.vercel-trace   # own build folder, so a running dev server keeps working
    cd ../.. && mkdir -p .vercel && mv projects/points/.vercel/output .vercel/output
    node projects/points/scripts/stage-prebuilt.mjs . /tmp/points-deploy && rm -rf .vercel
    cd /tmp/points-deploy && VERCEL_ORG_ID=team_CNky3bLoj7BjnytDeqrOvz9u VERCEL_PROJECT_ID=prj_jqhk9TeYreWrpulaPE1BnVWzMsDD \

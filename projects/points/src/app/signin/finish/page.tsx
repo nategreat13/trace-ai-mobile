@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Icon, ICONS, PrimaryButton } from "@/components/ui";
-import { PENDING_EMAIL_KEY, useAccount } from "@/lib/account";
+import { exchangeIdToken, PENDING_EMAIL_KEY, useAccount } from "@/lib/account";
 import { firebaseAuth } from "@/lib/firebaseClient";
 import { usePoints } from "@/lib/store";
 
@@ -28,10 +28,11 @@ export default function SignInFinishPage() {
     try {
       const auth = firebaseAuth();
       const cred = await signInWithEmailLink(auth, address, window.location.href);
-      const idToken = await cred.user.getIdToken();
-      const r = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
-      await signOut(auth);
-      if (!r.ok) throw new Error(((await r.json()) as { error?: string }).error);
+      try {
+        await exchangeIdToken(await cred.user.getIdToken());
+      } finally {
+        await signOut(auth);
+      }
       try {
         localStorage.removeItem(PENDING_EMAIL_KEY);
       } catch {}

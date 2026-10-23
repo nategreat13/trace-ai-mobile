@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAccount } from "@/lib/account";
 import { num } from "@/lib/format";
 import { useDeck, usePoints } from "@/lib/store";
 import { useAlerts } from "./alerts";
@@ -20,7 +21,8 @@ const NAV = [
 
 /** Members-only chrome: logo, points pill, hamburger drawer. No bottom tab bar. */
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { state, ready } = usePoints();
+  const { state, ready, reset } = usePoints();
+  const { email: account, signOut } = useAccount();
   const { values } = useDeck();
   const { unread } = useAlerts();
   const router = useRouter();
@@ -105,8 +107,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
             <div className="flex-1" />
-            <div className="border-t border-line px-3 pt-3 text-[13px] text-muted">
-              {state.email || "Member"} · from {state.airport}
+            <div className="flex items-center gap-2 border-t border-line px-3 pt-3">
+              {account ? (
+                <>
+                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                    <span className="text-[12px] text-muted">Signed in as</span>
+                    <span className="truncate text-[13.5px] font-bold">{account}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setOpen(false);
+                      await signOut();
+                      reset();
+                      router.replace("/");
+                    }}
+                    className="min-h-[40px] shrink-0 rounded-xl bg-soft px-3 text-[13.5px] font-bold"
+                  >
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <Link href="/signin" onClick={() => setOpen(false)} className="flex min-h-[44px] flex-1 items-center gap-2 text-[14px] font-bold">
+                  <Icon d={ICONS.person} size={18} /> Sign in to sync your trips
+                </Link>
+              )}
             </div>
           </nav>
         </div>

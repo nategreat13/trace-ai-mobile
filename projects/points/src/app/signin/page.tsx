@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Check, Icon, ICONS, Logo, PrimaryButton } from "@/components/ui";
-import { sendSignInLink, useAccount } from "@/lib/account";
+import { GoogleG } from "@/components/SignInOptions";
+import { sendSignInLink, signInWithGoogle, useAccount } from "@/lib/account";
 import { usePoints } from "@/lib/store";
 
 /** Sign in with an emailed link. No passwords. */
@@ -18,7 +19,7 @@ export default function SignInPage() {
 
 function SignIn() {
   const { state, ready } = usePoints();
-  const { email: signedIn } = useAccount();
+  const { verified, refresh } = useAccount();
   const router = useRouter();
   const prefill = useSearchParams().get("email") ?? "";
   const [email, setEmail] = useState(prefill);
@@ -29,9 +30,22 @@ function SignIn() {
   useEffect(() => {
     if (ready) setEmail((e) => e || state.email);
   }, [ready, state.email]);
+  // Already verified here: nothing to do. (A checkout-only session still gets to verify.)
   useEffect(() => {
-    if (signedIn) router.replace(state.member ? "/discover" : "/");
-  }, [signedIn, state.member, router]);
+    if (verified) router.replace(state.member ? "/discover" : "/");
+  }, [verified, state.member, router]);
+
+  const google = async () => {
+    setError("");
+    try {
+      await signInWithGoogle();
+      await refresh();
+      const me = await fetch("/api/me", { cache: "no-store" }).then((x) => x.json());
+      router.replace(me.member ? "/discover" : "/");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
 
   const valid = /.+@.+\..+/.test(email.trim());
   const submit = async (e: React.FormEvent) => {
@@ -71,14 +85,23 @@ function SignIn() {
         <form onSubmit={submit} className="flex flex-1 flex-col gap-5 pt-10">
           <div className="flex flex-col gap-1">
             <h1 className="text-[30px] leading-tight font-black">Sign in</h1>
-            <p className="text-[15px] leading-snug text-muted">Use the email you started your trial with. We&apos;ll send you a link, no password needed.</p>
+            <p className="text-[15px] leading-snug text-muted">Use Google, or the email you started your trial with. No password needed.</p>
+          </div>
+          <button
+            type="button"
+            onClick={google}
+            className="flex min-h-[54px] items-center justify-center gap-3 rounded-2xl bg-white text-[16px] font-bold text-[#1F1F1F] ring-1 ring-black/10 active:scale-[0.98]"
+          >
+            <GoogleG /> Continue with Google
+          </button>
+          <div className="flex items-center gap-3 text-[12.5px] font-semibold text-muted">
+            <span className="h-px flex-1 bg-line" /> or use your email <span className="h-px flex-1 bg-line" />
           </div>
           <label className="flex flex-col gap-2">
             <span className="text-[14px] font-bold">Email</span>
             <input
               type="email"
               autoComplete="email"
-              autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"

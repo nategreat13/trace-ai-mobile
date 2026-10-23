@@ -10,7 +10,7 @@ export async function GET() {
   const email = await sessionEmail();
   if (!email) return NextResponse.json({ email: null, member: null, state: null });
   const user = await getUser(email);
-  const body: MeResponse = { email, member: user?.member ?? null, state: user?.state ?? null };
+  const body: MeResponse = { email, verified: !!user?.verified, member: user?.member ?? null, state: user?.state ?? null };
   return NextResponse.json(body);
 }
 
