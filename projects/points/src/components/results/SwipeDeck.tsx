@@ -72,14 +72,10 @@ export function SwipeDeck({
     window.setTimeout(() => {
       if (right) onSave(cur);
       else onSkip(cur);
-      // Swap without animating: the card underneath is already full size, so the change is invisible.
-      setDragging(true);
+      // The card underneath is already full size and becomes the top card as the same element, so nothing reloads.
       setDx(0);
       setIdx((i) => i + 1);
-      requestAnimationFrame(() => {
-        setDragging(false);
-        busy.current = false;
-      });
+      busy.current = false;
     }, 220);
   };
 
@@ -105,61 +101,73 @@ export function SwipeDeck({
     else setDx(0);
   };
 
-  const next = cards[idx + 1];
   // The card underneath grows into place as the top one is dragged away.
   const lift = Math.min(1, Math.abs(dx) / (THRESHOLD * 1.6));
+  const transition = dragging ? "none" : "transform .22s ease, opacity .22s ease";
+  // The top card and the two under it, bottom first, in one list keyed by city.
+  // A card keeps its key as it moves up, so it stays the same element: its
+  // photo is already loaded and nothing flashes when a swipe lands. The
+  // bottom one is invisible and only preloads.
+  const stack = [2, 1, 0]
+    .map((depth) => ({ depth, d: cards[idx + depth] }))
+    .filter((s): s is { depth: number; d: Destination } => !!s.d);
+  const cardClass = "absolute inset-0 flex flex-col overflow-hidden rounded-[30px] bg-midnight text-white shadow-[0_20px_50px_rgba(15,23,48,0.28)]";
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 pb-1">
       {/* Fills whatever the screen leaves after the top bar and buttons. */}
       <div className="relative min-h-[300px] flex-1">
-        {next && (
-          <div
-            key={`under-${next.city}`}
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 overflow-hidden rounded-[30px] bg-midnight text-white"
-            style={{
-              transform: `translateY(${(1 - lift) * 14}px) scale(${0.94 + 0.06 * lift})`,
-              transition: dragging ? "none" : "transform .22s ease",
-              opacity: 0.75 + 0.25 * lift,
-            }}
-          >
-            <Face d={next} origin={origin} travelers={travelers} locked={freeCount !== null && idx + 1 >= freeCount} still />
-          </div>
-        )}
-        <div
-          key={cur.city}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          className="absolute inset-0 flex touch-none flex-col overflow-hidden rounded-[30px] bg-midnight text-white shadow-[0_20px_50px_rgba(15,23,48,0.28)] select-none"
-          style={{
-            transform: `translateX(${dx}px) rotate(${dx / 18}deg)`,
-            transition: dragging ? "none" : "transform .22s ease",
-            cursor: locked ? "pointer" : "grab",
-          }}
-        >
-          <Face d={cur} origin={origin} travelers={travelers} locked={locked} />
-          <Stamp side="left" opacity={Math.min(1, Math.max(0, dx / THRESHOLD))} label="SAVE" color="#00D665" />
-          <Stamp side="right" opacity={Math.min(1, Math.max(0, -dx / THRESHOLD))} label="SKIP" color="#FF655B" />
-
-          {locked && (
-            <button
-              type="button"
-              onClick={onLocked}
-              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-midnight/40 p-7 text-center"
+        {stack.map(({ depth, d }) =>
+          depth > 0 ? (
+            <div
+              key={d.city}
+              aria-hidden="true"
+              className={cx(cardClass, "pointer-events-none")}
+              style={
+                depth === 1
+                  ? { transform: `translateY(${(1 - lift) * 14}px) scale(${0.94 + 0.06 * lift})`, opacity: 0.75 + 0.25 * lift, transition }
+                  : { transform: "translateY(28px) scale(0.88)", opacity: 0, transition }
+              }
             >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink">
-                <LockIcon size={26} />
-              </span>
-              <span className="text-[28px] leading-tight font-extrabold">{plural(rest.length, "more destination")} waiting</span>
-              <span className="text-[15px] font-semibold text-white/85">
-                {restOk ? `Including ${restOk} you can book today` : "Including trips you're close to"}
-              </span>
-              <span className="bg-trace shimmer mt-1 rounded-2xl px-6 py-3.5 text-[15px] font-extrabold">Unlock dates free for 7 days</span>
-            </button>
-          )}
-        </div>
+              <Face d={d} origin={origin} travelers={travelers} locked={freeCount !== null && idx + depth >= freeCount} still />
+            </div>
+          ) : (
+            <div
+              key={d.city}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              className={cx(cardClass, "touch-none select-none")}
+              style={{
+                transform: `translateX(${dx}px) rotate(${dx / 18}deg)`,
+                opacity: 1,
+                transition,
+                cursor: locked ? "pointer" : "grab",
+              }}
+            >
+              <Face d={d} origin={origin} travelers={travelers} locked={locked} />
+              <Stamp side="left" opacity={Math.min(1, Math.max(0, dx / THRESHOLD))} label="SAVE" color="#00D665" />
+              <Stamp side="right" opacity={Math.min(1, Math.max(0, -dx / THRESHOLD))} label="SKIP" color="#FF655B" />
+
+              {locked && (
+                <button
+                  type="button"
+                  onClick={onLocked}
+                  className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-midnight/40 p-7 text-center"
+                >
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink">
+                    <LockIcon size={26} />
+                  </span>
+                  <span className="text-[28px] leading-tight font-extrabold">{plural(rest.length, "more destination")} waiting</span>
+                  <span className="text-[15px] font-semibold text-white/85">
+                    {restOk ? `Including ${restOk} you can book today` : "Including trips you're close to"}
+                  </span>
+                  <span className="bg-trace shimmer mt-1 rounded-2xl px-6 py-3.5 text-[15px] font-extrabold">Unlock dates free for 7 days</span>
+                </button>
+              )}
+            </div>
+          ),
+        )}
       </div>
       <div className="flex items-center justify-center gap-5">
         <button type="button" aria-label="Skip" onClick={() => advance(false)} className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-trace-red shadow-[0_8px_24px_rgba(15,23,48,0.12)] active:scale-90">
