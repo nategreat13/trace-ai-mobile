@@ -11,6 +11,9 @@ projects/app
 # Server (Cloud Function) — deployed separately via firebase
 projects/server
 
+# Trace Points web app — its own project, not part of the subscribe site
+projects/points
+
 # Build artifacts that Vercel will regenerate
 projects/web/.next
 projects/web/.vercel/output

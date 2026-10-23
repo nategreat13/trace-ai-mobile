@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-trace-red: #FF655B;
+  --color-trace-pink: #FD297B;
+  --color-trace-green: #00D665;
+  --color-ok: #15803D;
+  --color-ok-bg: #DCFCE7;
+  --color-near: #B45309;
+  --color-near-bg: #FEF3C7;
+  --color-ink: #1A1A1A;
+  --color-muted: #6B6B6B;
+  --color-line: #E5E5E5;
+  --color-soft: #F5F5F5;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+html,
+body {
+  background: #F5F5F5;
+  color: var(--color-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The app column: phone width, centered on desktop. */
+.app-col {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: #FFFFFF;
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 10px 40px rgba(0, 0, 0, 0.06);
+}
+
+/* Same soft wash as the mobile app's landing screen. */
+.trace-wash {
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.06) 0%, transparent 45%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+.{ padding-top: max(env(safe-area-inset-top), 0px); }
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+input[type="range"] { accent-color: #FF655B; }
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.rise { animation: rise 0.35s ease both; }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.4; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1); }
+}
+.pulse-soft { animation: pulse-soft 1.2s ease infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .pulse-soft { animation: none; }
+}

@@ -14,6 +14,7 @@
     "build:android": "cd projects/app && npx eas-cli build --platform android --profile production",
     "submit:android": "cd projects/app && npx eas-cli submit --platform android --profile production",
     "dev:web": "yarn workspace @trace/web dev",
+    "dev:points": "yarn workspace @trace/points dev",
     "postinstall": "yarn workspace @trace/shared build",
     "android": "expo run:android",
     "ios": "expo run:ios"
