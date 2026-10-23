@@ -41,11 +41,21 @@ const price = (cents: number, interval: "year" | "month", label: string, sub?: s
   return { cents, amount, full: `${amount} a ${interval}`, label: `${label} · ${amount}`, sub: sub ?? `Just ${week} a week`, week, interval };
 };
 
+/** A yearly price per month, rounded up to the cent: $59.99 → "$5", $99 → "$8.25". */
+const perMonth = (cents: number) => {
+  const m = Math.ceil(cents / 12) / 100;
+  return `$${Number.isInteger(m) ? m : m.toFixed(2)}`;
+};
+
 const PRICES = {
   annual: price(9900, "year", "Yearly"),
-  gift: price(5999, "year", "Yearly"),
+  // Shown per month so it lines up against Monthly; it's still charged once a year.
+  gift: { ...price(5999, "year", "Yearly"), label: `Yearly · ${perMonth(5999)}/mo`, sub: "Billed yearly at $59.99" },
   monthly: price(1200, "month", "Monthly", "Cancel anytime"),
 };
+
+/** The gift as a monthly price ("$5") and the regular yearly one it beats ("$8.25"). */
+export const giftMonthly = () => ({ gift: perMonth(PRICES.gift.cents), regular: perMonth(PRICES.annual.cents) });
 
 /** What a plan costs, with the exit gift ($59.99 a year) applied when they claimed it. */
 export const planPrice = (plan: Plan, gift?: boolean): PlanPrice => (plan === "annual" && gift ? PRICES.gift : PRICES[plan]);

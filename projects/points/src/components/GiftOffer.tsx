@@ -3,18 +3,21 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { track } from "@/lib/analytics";
-import { giftDiscount, planPrice, TRIAL_DAYS } from "@/lib/payments";
+import { giftDiscount, giftMonthly, planPrice, TRIAL_DAYS } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 import { Confetti, cx, Icon, ICONS, PrimaryButton } from "./ui";
 
 /**
- * The one-time gift for people who reach the payment page and back out:
- * a year for $59.99 instead of $99, with the same free week. The popup shows
- * once; after "No thanks" the offer stays reachable through GiftReminder.
+ * The one-time gift for people who see the price and close the paywall:
+ * $5 a month (billed yearly at $59.99) instead of $99 a year, with the same
+ * free week. The popup shows once; after "No thanks" the offer stays
+ * reachable through GiftReminder. The payment page never shows it, so
+ * nothing gets between someone ready to pay and the card fields.
  */
-export function GiftOffer({ where, onClaim, onDecline }: { where: "checkout" | "results"; onClaim: () => void; onDecline: () => void }) {
+export function GiftOffer({ where, onClaim, onDecline }: { where: "paywall"; onClaim: () => void; onDecline: () => void }) {
   const { update } = usePoints();
   const gift = planPrice("annual", true);
+  const monthly = giftMonthly();
   useEffect(() => {
     track("gift_shown", { where });
   }, [where]);
@@ -28,15 +31,17 @@ export function GiftOffer({ where, onClaim, onDecline }: { where: "checkout" | "
           <Icon d={ICONS.gift} size={30} stroke={2} />
         </span>
         <span className="text-[13px] font-extrabold tracking-[0.08em] text-trace-pink uppercase">Wait, a gift before you go</span>
-        <h2 className="text-[28px] leading-[1.08] font-black tracking-[-0.02em]">A full year of Trace for {gift.amount}</h2>
+        <h2 className="text-[28px] leading-[1.08] font-black tracking-[-0.02em]">Trace for just {monthly.gift} a month</h2>
         <div className="flex items-baseline gap-2">
-          <span className="nums text-[20px] font-semibold text-muted line-through">$99</span>
-          <span className="nums text-[34px] font-black">{gift.amount}</span>
+          <span className="nums text-[20px] font-semibold text-muted line-through">{monthly.regular}</span>
+          <span className="nums text-[34px] font-black">{monthly.gift}</span>
+          <span className="text-[16px] font-bold text-muted">/mo</span>
           <span className="rounded-full bg-trace-green px-2 py-0.5 text-[12px] font-extrabold text-white">{giftDiscount()}% OFF</span>
         </div>
         <p className="max-w-[320px] text-[15px] leading-snug text-muted">
-          Still free for {TRIAL_DAYS} days, and still cancel anytime. That&apos;s {gift.week} a week for every deal your points can book.
+          Still free for {TRIAL_DAYS} days, and still cancel anytime.
         </p>
+        <p className="-mt-1 text-[12.5px] text-muted/80">Billed yearly at {gift.amount} after your free week.</p>
         <PrimaryButton
           className="mt-2"
           onClick={() => {
@@ -93,8 +98,9 @@ export function GiftReminder({ variant }: { variant: "banner" | "inline" }) {
       <span className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="text-[14.5px] font-extrabold">Your gift is still here</span>
         <span className={cx("text-[12.5px]", variant === "banner" ? "text-white/85" : "text-muted")}>
-          A full year for {gift.amount} <span className="line-through">$99</span>, still free for {TRIAL_DAYS} days
+          Just {giftMonthly().gift}/mo <span className="line-through">{giftMonthly().regular}</span>, still free for {TRIAL_DAYS} days
         </span>
+        <span className={cx("text-[11px]", variant === "banner" ? "text-white/70" : "text-muted/80")}>Billed yearly at {gift.amount}</span>
       </span>
       <span className={cx("shrink-0 rounded-full px-3 py-1.5 text-[13px] font-extrabold", variant === "banner" ? "bg-white text-trace-pink" : "bg-trace text-white")}>
         {variant === "banner" ? "Claim" : "Use it"}

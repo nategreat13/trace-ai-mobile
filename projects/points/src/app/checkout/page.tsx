@@ -5,13 +5,10 @@ import { loadStripe, type Appearance, type Stripe, type StripeExpressCheckoutEle
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { GiftOffer } from "@/components/GiftOffer";
 import { PlanPicker } from "@/components/PlanPicker";
-import { Check, cx, Icon, ICONS, PrimaryButton, stagger } from "@/components/ui";
-import { groupDestinations } from "@/lib/destinations";
-import { money, plural } from "@/lib/format";
+import { Icon, ICONS, PrimaryButton } from "@/components/ui";
 import { createTrial, paymentsMode, planPrice, REMINDER_DAYS_BEFORE, startTestTrial, TRIAL_DAYS, type PaymentsMode, type PlanPrice } from "@/lib/payments";
-import { useDeck, usePoints } from "@/lib/store";
+import { usePoints } from "@/lib/store";
 
 const day = (offset: number) => {
   const d = new Date();
@@ -24,18 +21,18 @@ let stripePromise: Promise<Stripe | null> | null = null;
 const getStripe = (key: string) => (stripePromise ??= loadStripe(key));
 
 /**
- * The last step before the trial: what they're unlocking (their own numbers),
- * the plan, when billing would start, and payment on the page itself (Apple
- * Pay, Google Pay or card through Stripe's fields). $0 today. Backing out
- * once offers the $59.99 annual gift.
+ * The last step before the trial, kept to the minimum: the plan in one line
+ * (changeable), the free-week dates, email, and payment on the page itself
+ * (Apple Pay, Google Pay or card through Stripe's fields). $0 today. The
+ * selling happened on the paywall; the exit gift lives there too, so nothing
+ * here stands between someone ready to pay and the card fields.
  */
 export default function CheckoutPage() {
   const { state, update, ready } = usePoints();
-  const { deck, values } = useDeck();
   const router = useRouter();
   const [mode, setMode] = useState<PaymentsMode | null>(null);
   const [email, setEmail] = useState("");
-  const [gift, setGift] = useState(false);
+  const [changing, setChanging] = useState(false);
   // Set once this page starts a trial, so the "already a member" redirect doesn't race the welcome screen.
   const [finishing, setFinishing] = useState(false);
 
@@ -49,15 +46,8 @@ export default function CheckoutPage() {
     if (!state.checkoutVisited) update({ checkoutVisited: true });
   }, [ready, state.member, state.email, state.checkoutVisited, router, finishing, update]);
 
-  const destinations = groupDestinations(deck);
-  const okCount = destinations.filter((d) => d.ok).length;
   const price = planPrice(state.plan, state.gift);
-
-  const leave = () => (window.history.length > 1 ? router.back() : router.push("/"));
-  const back = () => {
-    if (!state.giftOffered && !state.member) setGift(true);
-    else leave();
-  };
+  const back = () => (window.history.length > 1 ? router.back() : router.push("/"));
 
   const started = (subscription: string | null) => {
     setFinishing(true);
@@ -71,35 +61,31 @@ export default function CheckoutPage() {
         <Icon d={ICONS.back} size={18} stroke={2.4} />
       </button>
 
-      <div className="rise flex flex-col gap-2 pt-4 pb-5">
-        <span className="bg-trace self-start rounded-full px-2.5 py-1 text-[12px] font-extrabold tracking-[0.04em] text-white">$0 TODAY</span>
-        <h1 className="text-[32px] leading-[1.05] font-extrabold tracking-[-0.02em]">Start your free week</h1>
-        <p className="text-[16px] leading-snug font-medium text-muted">
-          {destinations.length ? (
-            <>
-              Unlock all <span className="font-extrabold text-ink">{plural(destinations.length, "destination")}</span>
-              {okCount ? <> ({okCount} you can book today)</> : null}, worth <span className="text-gradient font-extrabold">{money(values.flights)}</span> in flights.
-            </>
-          ) : (
-            <>Every deal your points can book, with exact dates and seat alerts.</>
-          )}
-        </p>
-      </div>
+      <h1 className="rise pt-4 pb-4 text-[30px] leading-[1.05] font-extrabold tracking-[-0.02em]">Start your free week</h1>
 
-      <PlanPicker />
-
-      <ul className="mt-5 flex flex-col gap-2">
-        {["Exact dates and seat counts for every trip", "Alerts the moment seats or bonuses open", "Our team checks seats for you within 24 hours"].map((t, i) => (
-          <li key={t} className="rise flex items-center gap-2.5 text-[14.5px] font-bold" style={stagger(i, 60)}>
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-trace-green text-white">
-              <Check size={11} />
+      {/* What they're paying, decided on the paywall: one line, changeable, nothing else to read. */}
+      {changing ? (
+        <div className="flex flex-col gap-2">
+          <PlanPicker />
+          <button type="button" onClick={() => setChanging(false)} className="min-h-[40px] text-[14px] font-bold text-muted">
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 rounded-2xl bg-soft px-4 py-3">
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="text-[16px] font-extrabold">
+              <span className="text-trace-pink">$0 today</span> · {price.label}
             </span>
-            {t}
-          </li>
-        ))}
-      </ul>
-
-      <Timeline price={price} />
+            <span className="text-[13px] text-muted">
+              Free until {day(TRIAL_DAYS)}. We&apos;ll remind you {day(TRIAL_DAYS - REMINDER_DAYS_BEFORE)}.
+            </span>
+          </span>
+          <button type="button" onClick={() => setChanging(true)} className="min-h-[40px] shrink-0 px-1 text-[14px] font-bold text-trace-pink">
+            Change
+          </button>
+        </div>
+      )}
 
       <label htmlFor="checkout-email" className="mt-5 pb-2 text-[13px] font-bold text-muted">
         Email for your account and receipts
@@ -134,39 +120,7 @@ export default function CheckoutPage() {
         After your free week, renews automatically at {price.full} until you cancel. Cancel anytime in Account. By starting your trial you agree to the{" "}
         <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.
       </p>
-
-      {gift && (
-        <GiftOffer
-          where="checkout"
-          onClaim={() => setGift(false)}
-          onDecline={() => {
-            setGift(false);
-            leave();
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-function Timeline({ price }: { price: PlanPrice }) {
-  const steps = [
-    { when: "Today", what: "Free week starts", icon: null },
-    { when: day(TRIAL_DAYS - REMINDER_DAYS_BEFORE), what: "Reminder email", icon: ICONS.bell },
-    { when: day(TRIAL_DAYS), what: `${price.amount} if you stay`, icon: ICONS.card },
-  ];
-  return (
-    <ol className="mt-5 grid grid-cols-3 gap-2 rounded-3xl bg-soft p-3">
-      {steps.map((s, i) => (
-        <li key={s.what} className="flex flex-col items-center gap-1.5 text-center">
-          <span className={cx("flex h-8 w-8 items-center justify-center rounded-full", i === 0 ? "bg-trace text-white" : "bg-surface text-muted")}>
-            {s.icon ? <Icon d={s.icon} size={15} /> : <Check size={14} />}
-          </span>
-          <span className="text-[11px] font-extrabold tracking-[0.05em] text-muted uppercase">{s.when}</span>
-          <span className="text-[13px] leading-tight font-bold">{s.what}</span>
-        </li>
-      ))}
-    </ol>
   );
 }
 

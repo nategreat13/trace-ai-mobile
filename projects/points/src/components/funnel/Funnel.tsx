@@ -36,6 +36,14 @@ export function Funnel() {
   const go = (s: FunnelStep) => update({ step: s });
   const [payReason, setPayReason] = useState<PayReason>("cta");
 
+  // Saw the price and left the paywall (its close button or browser back): offer the gift once.
+  const [exitGift, setExitGift] = useState(false);
+  const prevStep = useRef(step);
+  useEffect(() => {
+    if (prevStep.current === "pay" && step === "results" && !state.giftOffered && !state.member) setExitGift(true);
+    prevStep.current = step;
+  }, [step, state.giftOffered, state.member]);
+
   // Browser back walks back through the funnel instead of leaving the site.
   useEffect(() => {
     if (!ready) return;
@@ -97,9 +105,8 @@ export function Funnel() {
       )}
       {step === "pay" && <Paywall reason={payReason} onClose={() => go("results")} onStart={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
-      {/* Came back from the payment page without starting (browser back included): offer the gift once. */}
-      {(step === "results" || step === "pay") && state.checkoutVisited && !state.giftOffered && !state.member && (
-        <GiftOffer where="results" onClaim={() => router.push("/checkout")} onDecline={() => {}} />
+      {exitGift && step === "results" && (
+        <GiftOffer where="paywall" onClaim={() => router.push("/checkout")} onDecline={() => setExitGift(false)} />
       )}
     </div>
   );
