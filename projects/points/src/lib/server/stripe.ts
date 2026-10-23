@@ -1,6 +1,6 @@
 /**
  * Server-only (route handlers): minimal Stripe client over fetch, so the app needs no SDK dependency.
- * Keys come from the environment (see .env.example); with no secret key the
+ * Keys come from the environment (see example.env); with no secret key the
  * app runs in test mode.
  */
 const API = "https://api.stripe.com/v1";

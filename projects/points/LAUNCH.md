@@ -64,7 +64,7 @@ Trial reminders send through Resend once these are set; until then Slack asks th
 
 A new project, `trace-points`, in the **Trace Travel** team. It's separate from `trace-travel-ai` (subscribe.tracetravel.co), which must not be touched. Every command uses `--global-config ~/.vercel-trace`, run from `projects/points` (never the repo root, which is linked to the subscribe site).
 
-1. Link (creates `projects/points/.vercel`): `vercel link --global-config ~/.vercel-trace`, choose Trace Travel, create `trace-points`.
+1. Done Oct 23, 2026: `trace-points` exists in Trace Travel and a test-mode preview is deployed.
 2. Production env vars (Vercel → trace-points → Settings → Environment Variables):
    - `TRACE_ENV=prod` (production only; previews stay on staging data)
    - `NEXT_PUBLIC_SITE_URL=https://points.tracetravel.co`
@@ -74,13 +74,17 @@ A new project, `trace-points`, in the **Trace Travel** team. It's separate from 
    - `POINTS_SLACK_WEBHOOK_URL`
    - `NEXT_PUBLIC_META_PIXEL_ID`, `META_CAPI_TOKEN`
    - `RESEND_API_KEY`, `POINTS_EMAIL_FROM` (when step 4 is done)
-3. Deploy, prebuilt so the monorepo builds locally and only the output uploads:
+3. Deploy. The project already exists (`trace-points`, id `prj_jqhk9TeYreWrpulaPE1BnVWzMsDD`, linked in `projects/points/.vercel`). Build locally, then upload from a folder outside the repo, because the repo root's `.vercelignore` (subscribe site) excludes `projects/points`:
    ```bash
+   cd projects/points
    vercel pull --yes --environment=production --global-config ~/.vercel-trace
    vercel build --prod --global-config ~/.vercel-trace
-   vercel deploy --prebuilt --prod --global-config ~/.vercel-trace
+   cd ../.. && mkdir -p .vercel && mv projects/points/.vercel/output .vercel/output
+   node projects/points/scripts/stage-prebuilt.mjs . /tmp/points-deploy && rm -rf .vercel
+   cd /tmp/points-deploy && VERCEL_ORG_ID=team_CNky3bLoj7BjnytDeqrOvz9u VERCEL_PROJECT_ID=prj_jqhk9TeYreWrpulaPE1BnVWzMsDD \
+     vercel deploy --prebuilt --prod --global-config ~/.vercel-trace
    ```
-   Don't connect the GitHub repo (paid-seat risk, same as the subscribe site).
+   Drop `--prod` (and use `--environment=preview` on pull) for a preview. Don't connect the GitHub repo: `vercel link` tries to on its own and failed only because no GitHub login is connected; keep it that way (paid-seat risk, same as the subscribe site).
 4. **Domain:** add `points.tracetravel.co` to `trace-points`. `tracetravel.co` lives on Nate's personal Vercel account, so Nate adds the CNAME (`points` → `cname.vercel-dns.com`) and any verification TXT record Vercel shows. Change nothing else in DNS.
 
 ## 7. Smoke test (with Stripe test keys, on the preview)
