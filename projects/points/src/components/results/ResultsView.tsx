@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { DATA_AS_OF, REFRESH_SCHEDULE } from "@/engine/data";
+import { REFRESH_SCHEDULE } from "@/engine/data";
 import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations, rankDestinations, type Destination } from "@/lib/destinations";
-import { money, plural, relativeDay } from "@/lib/format";
+import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { DestinationCard } from "./DestinationCard";
@@ -354,23 +354,22 @@ function matchesQuery(d: Destination, query: string): boolean {
 }
 
 /**
- * Shows the data is alive: when prices were last refreshed, and that the math
- * reruns against the user's balances and today's bonuses on every visit. The
- * date comes from the data itself, so the refresh job updates it automatically.
+ * Shows the list is alive. What really happens in real time is the math: every
+ * visit reprices every trip against the user's balances and today's transfer
+ * bonuses. Prices themselves are typical saver estimates until a refresh job
+ * runs; once REFRESH_SCHEDULE is "daily" the label says so too. Never claim
+ * live prices before they are.
  */
 function Freshness() {
-  const when = relativeDay(DATA_AS_OF);
-  // A nightly job lands before people wake up, so "today" reads as "this morning".
-  const updated = when === "today" ? "this morning" : when;
-  const schedule = REFRESH_SCHEDULE === "daily" ? " · refreshed every day" : REFRESH_SCHEDULE === "weekly" ? " · refreshed every week" : "";
+  const schedule = REFRESH_SCHEDULE === "daily" ? " Prices refresh every day." : "";
   return (
     <div className="mt-3 flex items-center gap-2.5 self-start rounded-full bg-ok-bg py-1.5 pr-3.5 pl-2.5">
-      <span className="relative flex h-2.5 w-2.5">
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-trace-green opacity-60" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-trace-green" />
       </span>
       <span className="text-[12.5px] leading-tight font-bold text-ok">
-        Live · Prices updated {updated}{schedule}. Today&apos;s transfer bonuses applied, recalculated for your points just now.
+        Live · Recalculated in real time with today&apos;s transfer bonuses and your balances.{schedule}
       </span>
     </div>
   );
