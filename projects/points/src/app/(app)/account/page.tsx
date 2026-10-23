@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AirportSearch } from "@/components/funnel/AirportSearch";
-import { BalanceCard } from "@/components/funnel/BalanceCard";
+import { BalancesEditor } from "@/components/app/BalancesEditor";
 import { PRICES } from "@/components/Paywall";
 import { Card, Chip, cx, Eyebrow, Icon, ICONS, SecondaryButton } from "@/components/ui";
 import { AIRLINE_IDS, BANK_IDS, PROGRAMS } from "@/engine/data";
@@ -129,28 +129,7 @@ export default function AccountPage() {
         </Card>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <Eyebrow>Programs and balances</Eyebrow>
-        <div className="flex flex-wrap gap-2">
-          {[...BANK_IDS, ...AIRLINE_IDS].map((id) => {
-            const on = state.progs.includes(id);
-            return (
-              <Chip
-                key={id}
-                on={on}
-                onClick={() => update((s) => ({ progs: on ? s.progs.filter((x) => x !== id) : [...s.progs, id] }))}
-              >
-                {PROGRAMS[id].short}
-              </Chip>
-            );
-          })}
-        </div>
-        <div className="flex flex-col gap-3 pt-1">
-          {state.progs.map((id) => (
-            <BalanceCard key={id} id={id} />
-          ))}
-        </div>
-      </section>
+      <BalancesEditor />
 
       <section className="flex flex-col gap-2 pt-2">
         <SecondaryButton

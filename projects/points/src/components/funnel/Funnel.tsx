@@ -2,20 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AIRLINE_IDS, BANK_IDS, PROGRAMS, hopFor } from "@/engine/data";
+import { AIRLINE_IDS, BANK_IDS, HOTEL_IDS, PROGRAMS, hopFor } from "@/engine/data";
 import { cityStatuses } from "@/engine/engine";
 import type { ProgramId, TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
+import { milesTotal, tierFor } from "@/lib/tiers";
 import { kShort, num, plural } from "@/lib/format";
-import { type FunnelStep, usePoints, useDeck } from "@/lib/store";
+import { effectiveBalances, type FunnelStep, usePoints, useDeck } from "@/lib/store";
 import { Paywall } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
 import { TripThumb } from "../TripThumb";
 import { Check, Confetti, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, SecondaryButton, stagger } from "../ui";
 import { AirportSearch } from "./AirportSearch";
-import { BalanceCard } from "./BalanceCard";
+import { StoreBalanceCard } from "./BalanceCard";
 import { Landing } from "./Landing";
 
 // Travelers and email used to be steps here. Both moved out of the way: prices
@@ -172,7 +173,11 @@ function Programs({ onNext }: { onNext: () => void }) {
       <Eyebrow className="pb-3">Credit card points</Eyebrow>
       <div className="grid grid-cols-3 gap-2.5">{BANK_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i} />)}</div>
       <Eyebrow className="pt-6 pb-3">Airline miles</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + 5} />)}</div>
+      <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length} />)}</div>
+      <Eyebrow className="pt-6 pb-3">Hotel points</Eyebrow>
+      <div className="grid grid-cols-3 gap-2.5">
+        {HOTEL_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length + AIRLINE_IDS.length} />)}
+      </div>
     </Screen>
   );
 }
@@ -187,9 +192,19 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
       sub={`Check your card's app, or tap "Not sure" and we'll estimate.`}
       footer={
         <>
-          <div className="flex items-center justify-between rounded-2xl bg-midnight px-5 py-3.5 text-white">
-            <span className="text-[14px] font-semibold text-white/70">Total points</span>
-            <span className="nums text-[22px] font-extrabold">{num(values.total)}</span>
+          <div
+            className="flex items-center justify-between rounded-2xl px-5 py-3 text-white transition-[background] duration-700"
+            style={{ background: values.total ? tierFor(milesTotal(effectiveBalances(state))).gradient : "#0F1730" }}
+          >
+            <span className="flex flex-col leading-tight">
+              <span className="text-[13px] font-semibold text-white/80">Total points</span>
+              {values.total > 0 && (
+                <span key={tierFor(milesTotal(effectiveBalances(state))).level} className="pop text-[12.5px] font-extrabold">
+                  {tierFor(milesTotal(effectiveBalances(state))).label}
+                </span>
+              )}
+            </span>
+            <span key={Math.round(values.total / 10000)} className="pop nums text-[24px] font-extrabold">{num(values.total)}</span>
           </div>
           <PrimaryButton
             disabled={!ok}
@@ -206,7 +221,7 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
       <div className="flex flex-col gap-3">
         {state.progs.map((id, i) => (
           <div key={id} className="rise" style={stagger(i, 70)}>
-            <BalanceCard id={id} />
+            <StoreBalanceCard id={id} />
           </div>
         ))}
       </div>
@@ -360,6 +375,7 @@ function Loading({ onDone }: { onDone: () => void }) {
 
 function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) {
   const { state, update } = usePoints();
+  const [editing, setEditing] = useState(false);
   const [detail, setDetail] = useState<TripResult | null>(null);
   const [first] = useState(() => !state.resultsSeen);
   useEffect(() => {
@@ -378,9 +394,17 @@ function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) 
   return (
     <div className="flex min-h-dvh flex-col">
       {first && <Confetti />}
-      <div className="flex items-center px-5 pt-5">
+      <div className="flex items-center justify-between px-5 pt-4">
         <Logo className="h-5" />
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="flex min-h-[40px] items-center gap-1.5 rounded-full bg-soft px-3.5 text-[13.5px] font-bold active:scale-95"
+        >
+          <Icon d={ICONS.gear} size={15} /> Edit answers
+        </button>
       </div>
+      {editing && <EditAnswers onClose={() => setEditing(false)} />}
       <ResultsView
         mode="free"
         countUp={first}
@@ -391,6 +415,57 @@ function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) 
         }}
         onPaywall={(reason) => onPaywall(reason)}
       />
+    </div>
+  );
+}
+
+/**
+ * Free results used to be a dead end. This lets people jump back to any
+ * answer (their answers are kept) or start over, while the rest stays locked.
+ */
+function EditAnswers({ onClose }: { onClose: () => void }) {
+  const { state, update, reset } = usePoints();
+  const { values } = useDeck();
+  const rows: { step: FunnelStep; label: string; now: string; icon: string }[] = [
+    { step: "progs", label: "Change my points", now: `${num(values.total)} points across ${plural(state.progs.length, "program")}`, icon: ICONS.wallet },
+    { step: "air", label: "Change my airport", now: `Flying from ${state.airport}`, icon: ICONS.pin },
+    { step: "picks", label: "Change my trip picks", now: state.picks.length ? state.picks.join(", ") : "Flexible, showing everything", icon: ICONS.heart },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col justify-end" role="dialog" aria-modal="true" aria-label="Edit your answers">
+      <button type="button" aria-label="Close" onClick={onClose} className="fade absolute inset-0 bg-midnight/50" />
+      <div className="sheet-up pb-safe relative flex flex-col gap-2 rounded-t-[32px] bg-surface px-5 pt-3">
+        <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
+        <div className="pb-1 text-[20px] font-extrabold">Edit your answers</div>
+        {rows.map((r) => (
+          <button
+            key={r.step}
+            type="button"
+            onClick={() => {
+              update({ step: r.step });
+              onClose();
+            }}
+            className="flex min-h-[64px] items-center gap-3 rounded-2xl bg-soft px-4 text-left active:scale-[0.99]"
+          >
+            <span className="bg-trace flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"><Icon d={r.icon} size={18} /></span>
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="text-[15.5px] font-bold">{r.label}</span>
+              <span className="truncate text-[13px] text-muted">{r.now}</span>
+            </span>
+            <Icon d={ICONS.chevron} size={16} stroke={2.4} className="text-muted" />
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            onClose();
+          }}
+          className="mt-1 min-h-[48px] text-[14.5px] font-bold text-muted"
+        >
+          Start over
+        </button>
+      </div>
     </div>
   );
 }

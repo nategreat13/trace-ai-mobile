@@ -16,6 +16,13 @@ import type {
  */
 export const DATA_AS_OF = "2026-10-21";
 
+/**
+ * How often prices are refreshed automatically. Leave null while updates are
+ * manual; set to "daily" when the nightly job is live and the results page
+ * will say "Prices refresh every day". The job should also set DATA_AS_OF.
+ */
+export const REFRESH_SCHEDULE: "daily" | "weekly" | null = null;
+
 export const LAUNCH_AIRPORTS = [
   "LAX", "SFO", "SAN", "SJC", "OAK", "SMF", "SEA", "PDX",
   "SLC", "DEN", "PHX", "LAS", "BOI", "ABQ", "TUS",
@@ -36,25 +43,38 @@ export const PROGRAMS: Record<ProgramId, Program> = {
   united: { id: "united", name: "United MileagePlus", short: "United", kind: "airline", badge: "UA", badgeColor: "#34508A", earnedOn: "Explorer, Quest, Club", typical: 35000, sliderMax: 250000, flightCents: 1.2, awardProgram: "united", transferUrl: "https://www.united.com", logo: "/logos/united.png" },
   atmos: { id: "atmos", name: "Alaska Atmos Rewards", short: "Alaska Atmos", kind: "airline", badge: "AS", badgeColor: "#1F6A73", earnedOn: "Summit, Ascent", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "atmos", transferUrl: "https://www.alaskaair.com", logo: "/logos/atmos.png" },
   aa: { id: "aa", name: "American AAdvantage", short: "American", kind: "airline", badge: "AA", badgeColor: "#5A5F6B", earnedOn: "Citi AAdvantage cards", typical: 35000, sliderMax: 250000, flightCents: 1.7, awardProgram: "aa", transferUrl: "https://www.aa.com", logo: "/logos/aa.png" },
+  aeroplan: { id: "aeroplan", name: "Air Canada Aeroplan", short: "Aeroplan", kind: "airline", badge: "AC", badgeColor: "#D22630", earnedOn: "Aeroplan cards, past transfers", typical: 40000, sliderMax: 250000, flightCents: 1.5, awardProgram: "aeroplan", transferUrl: "https://www.aircanada.com/aeroplan", logo: "/logos/aeroplan.png" },
+  avios: { id: "avios", name: "British Airways Avios", short: "Avios", kind: "airline", badge: "BA", badgeColor: "#075AAA", earnedOn: "British Airways, Iberia, Aer Lingus", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "avios", transferUrl: "https://www.britishairways.com", logo: "/logos/avios.png" },
+  flyingblue: { id: "flyingblue", name: "Air France-KLM Flying Blue", short: "Flying Blue", kind: "airline", badge: "FB", badgeColor: "#1A1A9F", earnedOn: "Air France, KLM", typical: 30000, sliderMax: 250000, flightCents: 1.3, awardProgram: "flyingblue", transferUrl: "https://www.flyingblue.com", logo: "/logos/flyingblue.png" },
+  virgin: { id: "virgin", name: "Virgin Atlantic Flying Club", short: "Virgin", kind: "airline", badge: "VS", badgeColor: "#DA0530", earnedOn: "Virgin Atlantic, past transfers", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "virgin", transferUrl: "https://www.virginatlantic.com", logo: "/logos/virgin.png" },
+  marriott: { id: "marriott", name: "Marriott Bonvoy", short: "Marriott", kind: "hotel", badge: "MB", badgeColor: "#8B2131", earnedOn: "Marriott stays, Bonvoy cards", typical: 80000, sliderMax: 500000, flightCents: 0.6, transferUrl: "https://www.marriott.com/loyalty/redeem/travel.mi", logo: "/logos/marriott.png" },
   sw: { id: "sw", name: "Southwest Rapid Rewards", short: "Southwest", kind: "airline", badge: "WN", badgeColor: "#8A6A1F", earnedOn: "Rapid Rewards Plus, Priority", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "sw", transferUrl: "https://www.southwest.com", logo: "/logos/sw.png" },
 };
 
 export const BANK_IDS: ProgramId[] = ["amex", "chase", "c1", "citi", "bilt", "wells"];
-export const AIRLINE_IDS: ProgramId[] = ["delta", "united", "atmos", "aa", "sw"];
+export const AIRLINE_IDS: ProgramId[] = ["delta", "united", "atmos", "aa", "sw", "aeroplan", "avios", "flyingblue", "virgin"];
+export const HOTEL_IDS: ProgramId[] = ["marriott"];
+
+/**
+ * Marriott Bonvoy moves to most airlines at 3:1 (United 3:1.1), plus a bonus
+ * on 60,000-point transfers that this ignores to stay conservative.
+ * Verify ratios on Marriott's transfer page when refreshing data.
+ */
+const BONVOY = { from: "marriott" as const, ratio: 1 / 3 };
 
 /** 1:1 unless noted. An airline's own members are listed as a 1:1 source. */
 export const PARTNERS: TransferPartner[] = [
-  { program: "avios", name: "British Airways Avios", short: "Avios", searchUrl: "https://www.britishairways.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }] },
-  { program: "aeroplan", name: "Air Canada Aeroplan", short: "Aeroplan", searchUrl: "https://www.aircanada.com/aeroplan", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "virgin", name: "Virgin Atlantic Flying Club", short: "Virgin", searchUrl: "https://www.virginatlantic.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "flyingblue", name: "Air France-KLM Flying Blue", short: "Flying Blue", searchUrl: "https://www.flyingblue.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }] },
-  { program: "turkish", name: "Turkish Miles&Smiles", short: "Turkish", searchUrl: "https://www.turkishairlines.com", sources: [{ from: "citi", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "aa", name: "American AAdvantage", short: "AAdvantage", searchUrl: "https://www.aa.com", sources: [{ from: "aa", ratio: 1 }, { from: "citi", ratio: 1 }] },
-  { program: "atmos", name: "Alaska Atmos Rewards", short: "Atmos", searchUrl: "https://www.alaskaair.com", sources: [{ from: "atmos", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "delta", name: "Delta SkyMiles", short: "SkyMiles", dynamic: true, searchUrl: "https://www.delta.com", sources: [{ from: "delta", ratio: 1 }, { from: "amex", ratio: 1 }] },
-  { program: "united", name: "United MileagePlus", short: "MileagePlus", dynamic: true, searchUrl: "https://www.united.com", sources: [{ from: "united", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "sw", name: "Southwest Rapid Rewards", short: "Rapid Rewards", dynamic: true, searchUrl: "https://www.southwest.com", sources: [{ from: "sw", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "kris", name: "Singapore KrisFlyer", short: "KrisFlyer", searchUrl: "https://www.singaporeair.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }] },
+  { program: "avios", name: "British Airways Avios", short: "Avios", searchUrl: "https://www.britishairways.com", sources: [{ from: "avios", ratio: 1 }, { from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }, BONVOY] },
+  { program: "aeroplan", name: "Air Canada Aeroplan", short: "Aeroplan", searchUrl: "https://www.aircanada.com/aeroplan", sources: [{ from: "aeroplan", ratio: 1 }, { from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }, BONVOY] },
+  { program: "virgin", name: "Virgin Atlantic Flying Club", short: "Virgin", searchUrl: "https://www.virginatlantic.com", sources: [{ from: "virgin", ratio: 1 }, { from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }, BONVOY] },
+  { program: "flyingblue", name: "Air France-KLM Flying Blue", short: "Flying Blue", searchUrl: "https://www.flyingblue.com", sources: [{ from: "flyingblue", ratio: 1 }, { from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }, BONVOY] },
+  { program: "turkish", name: "Turkish Miles&Smiles", short: "Turkish", searchUrl: "https://www.turkishairlines.com", sources: [{ from: "citi", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }, BONVOY] },
+  { program: "aa", name: "American AAdvantage", short: "AAdvantage", searchUrl: "https://www.aa.com", sources: [{ from: "aa", ratio: 1 }, { from: "citi", ratio: 1 }, BONVOY] },
+  { program: "atmos", name: "Alaska Atmos Rewards", short: "Atmos", searchUrl: "https://www.alaskaair.com", sources: [{ from: "atmos", ratio: 1 }, { from: "bilt", ratio: 1 }, BONVOY] },
+  { program: "delta", name: "Delta SkyMiles", short: "SkyMiles", dynamic: true, searchUrl: "https://www.delta.com", sources: [{ from: "delta", ratio: 1 }, { from: "amex", ratio: 1 }, BONVOY] },
+  { program: "united", name: "United MileagePlus", short: "MileagePlus", dynamic: true, searchUrl: "https://www.united.com", sources: [{ from: "united", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "marriott", ratio: 1.1 / 3 }] },
+  { program: "sw", name: "Southwest Rapid Rewards", short: "Rapid Rewards", dynamic: true, searchUrl: "https://www.southwest.com", sources: [{ from: "sw", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "bilt", ratio: 1 }, BONVOY] },
+  { program: "kris", name: "Singapore KrisFlyer", short: "KrisFlyer", searchUrl: "https://www.singaporeair.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, BONVOY] },
 ];
 
 export const BONUSES: TransferBonus[] = [

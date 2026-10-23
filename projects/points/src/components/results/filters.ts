@@ -18,7 +18,7 @@ export const FILTERS: { id: FilterId; label: string; test: (r: TripResult) => bo
 ];
 
 export const SORTS: { id: SortId; label: string }[] = [
-  { id: "best", label: "Best value" },
+  { id: "best", label: "Picked for you" },
   { id: "pts", label: "Fewest points" },
   { id: "gap", label: "Closest to booking" },
 ];

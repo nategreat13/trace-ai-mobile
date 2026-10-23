@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { DATA_AS_OF } from "@/engine/data";
+import { DATA_AS_OF, REFRESH_SCHEDULE } from "@/engine/data";
 import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
-import { groupDestinations, type Destination } from "@/lib/destinations";
+import { groupDestinations, rankDestinations, type Destination } from "@/lib/destinations";
 import { money, plural, relativeDay } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
@@ -45,12 +45,21 @@ export function ResultsView({
   const [query, setQuery] = useState("");
   const shown = useCountUp(values.flights, countUp);
 
-  const all = useMemo(() => groupDestinations(deck), [deck]);
+  // Read once per visit: saving a trip shouldn't reshuffle the list mid-scroll.
+  const [savedCities] = useState(() => [...new Set(deck.filter((r) => state.saved.includes(r.trip.id)).map((r) => r.trip.city))]);
+  // Cheapest bookable trip first, then their picks, then what they've shown they like.
+  const all = useMemo(
+    () => rankDestinations(groupDestinations(deck), { picks: state.picks, saved: savedCities }),
+    [deck, state.picks, savedCities],
+  );
+  const rank = useMemo(() => new Map(all.map((d, i) => [d.city, i])), [all]);
   const freeCities = useMemo(() => new Set(all.slice(0, FREE_DESTINATIONS).map((d) => d.city)), [all]);
   const isLocked = (city: string) => mode === "free" && !freeCities.has(city);
 
   const matches = (d: Destination) => matchesQuery(d, query);
-  const shownDest = sortDestinations(filterDestinations(deck, filter), sort, state.picks).filter(matches);
+  const filtered = filterDestinations(deck, filter).filter(matches);
+  const shownDest =
+    sort === "best" ? filtered.sort((a, b) => (rank.get(a.city) ?? 999) - (rank.get(b.city) ?? 999)) : sortDestinations(filtered, sort, state.picks);
   const okDest = shownDest.filter((d) => d.ok);
   const nearDest = shownDest.filter((d) => !d.ok);
   const filterActive = filter !== "all" || sort !== "best";
@@ -350,7 +359,10 @@ function matchesQuery(d: Destination, query: string): boolean {
  * date comes from the data itself, so the refresh job updates it automatically.
  */
 function Freshness() {
-  const updated = relativeDay(DATA_AS_OF);
+  const when = relativeDay(DATA_AS_OF);
+  // A nightly job lands before people wake up, so "today" reads as "this morning".
+  const updated = when === "today" ? "this morning" : when;
+  const schedule = REFRESH_SCHEDULE === "daily" ? " · refreshed every day" : REFRESH_SCHEDULE === "weekly" ? " · refreshed every week" : "";
   return (
     <div className="mt-3 flex items-center gap-2.5 self-start rounded-full bg-ok-bg py-1.5 pr-3.5 pl-2.5">
       <span className="relative flex h-2.5 w-2.5">
@@ -358,7 +370,7 @@ function Freshness() {
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-trace-green" />
       </span>
       <span className="text-[12.5px] leading-tight font-bold text-ok">
-        Live · Prices updated {updated}, recalculated for your points just now
+        Live · Prices updated {updated}{schedule}. Today&apos;s transfer bonuses applied, recalculated for your points just now.
       </span>
     </div>
   );

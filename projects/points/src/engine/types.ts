@@ -10,7 +10,14 @@ export type ProgramId =
   | "united"
   | "atmos"
   | "aa"
-  | "sw";
+  | "sw"
+  // Airline programs people often hold directly (usually from past bank transfers).
+  | "aeroplan"
+  | "avios"
+  | "flyingblue"
+  | "virgin"
+  // Hotel points that transfer to airlines.
+  | "marriott";
 
 /** An airline program that can book an award seat. */
 export type AwardProgramId =
@@ -30,7 +37,7 @@ export interface Program {
   id: ProgramId;
   name: string;
   short: string;
-  kind: "bank" | "airline";
+  kind: "bank" | "airline" | "hotel";
   /** 2–3 letter stand-in for the logo until we have licensed marks. */
   badge: string;
   badgeColor: string;

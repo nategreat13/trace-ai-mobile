@@ -39,6 +39,8 @@ export function SwipeDeck({
   const [dx, setDx] = useState(0);
   const [dragging, setDragging] = useState(false);
   const start = useRef<number | null>(null);
+  // True while a card flies off; input is ignored so a new drag can't grab a card mid-swap.
+  const busy = useRef(false);
 
   const cur = cards[idx];
   const locked = freeCount !== null && idx >= freeCount;
@@ -62,25 +64,37 @@ export function SwipeDeck({
 
   const advance = (right: boolean) => {
     if (locked) return onLocked();
+    if (busy.current) return;
+    busy.current = true;
+    start.current = null;
+    setDragging(false);
     setDx(right ? 640 : -640);
     window.setTimeout(() => {
       if (right) onSave(cur);
       else onSkip(cur);
+      // Swap without animating: the card underneath is already full size, so the change is invisible.
       setDragging(true);
       setDx(0);
       setIdx((i) => i + 1);
-      requestAnimationFrame(() => setDragging(false));
+      requestAnimationFrame(() => {
+        setDragging(false);
+        busy.current = false;
+      });
     }, 220);
   };
 
-  const onPointerDown = (e: React.PointerEvent) => {
-    if (locked) return;
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (locked || busy.current) return;
     start.current = e.clientX;
     setDragging(true);
-    (e.target as Element).setPointerCapture?.(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // The pointer already ended (or isn't capturable); moves still arrive on the card.
+    }
   };
   const onPointerMove = (e: React.PointerEvent) => {
-    if (start.current === null) return;
+    if (start.current === null || busy.current) return;
     setDx(e.clientX - start.current);
   };
   const onPointerUp = () => {
@@ -92,12 +106,23 @@ export function SwipeDeck({
   };
 
   const next = cards[idx + 1];
+  // The card underneath grows into place as the top one is dragged away.
+  const lift = Math.min(1, Math.abs(dx) / (THRESHOLD * 1.6));
   return (
     <div className="flex flex-1 flex-col gap-5">
       <div className="relative h-[min(64dvh,560px)] min-h-[440px]">
         {next && (
-          <div className="absolute inset-x-3 top-3 -bottom-3 overflow-hidden rounded-[30px] opacity-60">
-            <TripThumb city={next.city} code={next.code} blur={freeCount !== null && idx + 1 >= freeCount} className="absolute inset-0" showCode={false} />
+          <div
+            key={`under-${next.city}`}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-[30px] bg-midnight text-white"
+            style={{
+              transform: `translateY(${(1 - lift) * 14}px) scale(${0.94 + 0.06 * lift})`,
+              transition: dragging ? "none" : "transform .22s ease",
+              opacity: 0.75 + 0.25 * lift,
+            }}
+          >
+            <Face d={next} origin={origin} travelers={travelers} locked={freeCount !== null && idx + 1 >= freeCount} still />
           </div>
         )}
         <div
@@ -106,54 +131,16 @@ export function SwipeDeck({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="fade absolute inset-0 flex touch-none flex-col overflow-hidden rounded-[30px] bg-midnight text-white shadow-[0_20px_50px_rgba(15,23,48,0.28)] select-none"
+          className="absolute inset-0 flex touch-none flex-col overflow-hidden rounded-[30px] bg-midnight text-white shadow-[0_20px_50px_rgba(15,23,48,0.28)] select-none"
           style={{
             transform: `translateX(${dx}px) rotate(${dx / 18}deg)`,
             transition: dragging ? "none" : "transform .22s ease",
             cursor: locked ? "pointer" : "grab",
           }}
         >
-          <TripThumb city={cur.city} code={cur.code} blur={locked} className="kenburns absolute inset-0" showCode={false} />
-          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/5 to-black/90" />
+          <Face d={cur} origin={origin} travelers={travelers} locked={locked} />
           <Stamp side="left" opacity={Math.min(1, Math.max(0, dx / THRESHOLD))} label="SAVE" color="#00D665" />
           <Stamp side="right" opacity={Math.min(1, Math.max(0, -dx / THRESHOLD))} label="SKIP" color="#FF655B" />
-
-          <div className={cx("relative flex flex-1 flex-col", locked && "blur-md")}>
-            <div className="flex items-center justify-between p-4">
-              <span className="flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 text-[11.5px] font-bold backdrop-blur-md">
-                <span className="h-2 w-2 rounded-full" style={{ background: REGION_COLOR[cur.region] }} />
-                {cur.region}
-              </span>
-              <StatusPill ok={cur.ok} className="bg-surface">{cur.ok ? "You can book this" : `${num(cur.gap)} points away`}</StatusPill>
-            </div>
-            <div className="mt-auto flex flex-col gap-3 p-4">
-              <div>
-                <div className="nums text-[14px] font-bold opacity-85">{origin} → {cur.code}</div>
-                <div className="text-[44px] leading-none font-extrabold tracking-[-0.02em]">{cur.city}</div>
-              </div>
-              <div className="flex flex-col gap-2">
-                {cur.options.slice(0, 3).map((o) => (
-                  <div
-                    key={o.trip.id}
-                    className={cx(
-                      "flex items-center gap-3 rounded-2xl px-3 py-2.5 backdrop-blur-md",
-                      o.isBusiness ? "bg-premium/80 ring-1 ring-gold/40" : "bg-white/15",
-                    )}
-                  >
-                    <CabinBadge business={o.isBusiness} label={cabinLabel(o)} />
-                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                      <span className="text-[12px] text-white/75">{o.trip.route}{travelers > 1 ? ` · ${travelers} people` : ""}</span>
-                      <span className="text-[12px] text-white/60 line-through">{money(o.cashTotal)}</span>
-                    </span>
-                    <span className="flex flex-col items-end leading-tight">
-                      <span className="nums text-[18px] font-extrabold">{num(o.need)}</span>
-                      <span className={cx("text-[11.5px] font-bold", o.ok ? "text-trace-green" : "text-[#FBBF24]")}>{o.ok ? "Can book" : `${num(o.gap)} short`}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
 
           {locked && (
             <button
@@ -195,6 +182,49 @@ export function SwipeDeck({
         </button>
       </div>
     </div>
+  );
+}
+
+/** What's printed on a card. `still` skips the slow zoom for the card underneath. */
+function Face({ d, origin, travelers, locked, still }: { d: Destination; origin: string; travelers: number; locked: boolean; still?: boolean }) {
+  return (
+    <>
+      <TripThumb city={d.city} code={d.code} blur={locked} className={cx("absolute inset-0", still ? "scale-[1.02]" : "kenburns")} showCode={false} />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/5 to-black/90" />
+      <div className={cx("relative flex flex-1 flex-col", locked && "blur-md")}>
+        <div className="flex items-center justify-between p-4">
+          <span className="flex items-center gap-1.5 rounded-full bg-black/35 px-2.5 py-1 text-[11.5px] font-bold backdrop-blur-md">
+            <span className="h-2 w-2 rounded-full" style={{ background: REGION_COLOR[d.region] }} />
+            {d.region}
+          </span>
+          <StatusPill ok={d.ok} className="bg-surface">{d.ok ? "You can book this" : `${num(d.gap)} points away`}</StatusPill>
+        </div>
+        <div className="mt-auto flex flex-col gap-3 p-4">
+          <div>
+            <div className="nums text-[14px] font-bold opacity-85">{origin} → {d.code}</div>
+            <div className="text-[44px] leading-none font-extrabold tracking-[-0.02em]">{d.city}</div>
+          </div>
+          <div className="flex flex-col gap-2">
+            {d.options.slice(0, 3).map((o) => (
+              <div
+                key={o.trip.id}
+                className={cx("flex items-center gap-3 rounded-2xl px-3 py-2.5 backdrop-blur-md", o.isBusiness ? "bg-premium/80 ring-1 ring-gold/40" : "bg-white/15")}
+              >
+                <CabinBadge business={o.isBusiness} label={cabinLabel(o)} />
+                <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="text-[12px] text-white/75">{o.trip.route}{travelers > 1 ? ` · ${travelers} people` : ""}</span>
+                  <span className="text-[12px] text-white/60 line-through">{money(o.cashTotal)}</span>
+                </span>
+                <span className="flex flex-col items-end leading-tight">
+                  <span className="nums text-[18px] font-extrabold">{num(o.need)}</span>
+                  <span className={cx("text-[11.5px] font-bold", o.ok ? "text-trace-green" : "text-[#FBBF24]")}>{o.ok ? "Can book" : `${num(o.gap)} short`}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 

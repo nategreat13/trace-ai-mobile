@@ -138,3 +138,20 @@ test("point values", () => {
   assert.equal(v.bankCash, 600);
   assert.equal(v.bankFlights, 1800);
 });
+
+test("airline miles held directly are used with no transfer", () => {
+  const r = evalTrip(trip("LAX", "maui"), input({ balances: { aeroplan: 25000 } }));
+  assert.equal(r.ok, true);
+  assert.equal(r.best.option.program, "aeroplan");
+  assert.deepEqual(r.best.parts.map((p) => [p.from, p.direct]), [["aeroplan", true]]);
+});
+
+test("Marriott Bonvoy transfers at 3:1", () => {
+  // 75,000 Bonvoy → 25,000 airline miles: enough for Hawaii on Aeroplan from LAX.
+  const r = evalTrip(trip("LAX", "maui"), input({ balances: { marriott: 75000 } }));
+  assert.equal(r.ok, true);
+  assert.equal(r.best.parts[0].from, "marriott");
+  assert.equal(r.best.parts[0].spend, 75000);
+  const short = evalTrip(trip("LAX", "maui"), input({ balances: { marriott: 60000 } }));
+  assert.equal(short.ok, false);
+});
