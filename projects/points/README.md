@@ -25,7 +25,6 @@ NEXT_DIST_DIR=.next-build yarn workspace @trace/points build   # while dev is ru
 | `src/lib/payments.ts`, `src/app/api/` | Checkout, trial start, billing portal and the Stripe webhook. |
 | `src/app/api/cash-deals/`, `src/lib/cashDeals.ts` | Cash fares for trips they're short on, from the Trace prod deals feed (`/deals/{airport}`). Smaller airports use a nearby hub's feed. Cached for an hour. |
 | `src/lib/value.ts` | Cents per point for a trip (cash fare minus taxes, over points). |
-| `src/lib/shareCard.ts` | Draws the shareable "my points are worth" image and opens the share sheet. |
 | `src/lib/store.tsx` | App state, saved in the browser (`localStorage`) until there's a backend. |
 | `src/lib/analytics.ts` | `track()`; logs funnel events and maps them to Meta events. No sink yet. |
 | `src/components/funnel/` | The pre-signup funnel, landing through paywall. |

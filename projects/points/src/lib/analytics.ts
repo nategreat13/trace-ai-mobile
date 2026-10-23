@@ -26,8 +26,7 @@ export type PointsEvent =
   | "plan_search"
   | "trip_request"
   | "bonus_banner_tap"
-  | "cash_deal_click"
-  | "share_points";
+  | "cash_deal_click";
 
 /** Meta standard events the brief maps onto our funnel. */
 const META: Partial<Record<PointsEvent, string>> = {

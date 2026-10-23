@@ -11,7 +11,6 @@ import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { useCashDeals } from "@/lib/cashDeals";
-import { sharePointsCard } from "@/lib/shareCard";
 import { DestinationCard } from "./DestinationCard";
 import { BonusBanner } from "./Insights";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
@@ -110,23 +109,7 @@ export function ResultsView({
         <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
         <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
         <div className="relative flex flex-col gap-1">
-          <div className="flex items-center justify-between">
-            <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
-            <button
-              type="button"
-              onClick={() =>
-                sharePointsCard({
-                  worth: values.flights,
-                  bookable: allOk,
-                  origin: state.airport ?? "",
-                  best: [...all].filter((d) => d.ok).sort((a, b) => b.value - a.value)[0]?.city,
-                })
-              }
-              className="flex min-h-[34px] items-center gap-1.5 rounded-full bg-surface/80 px-3 text-[12.5px] font-bold ring-1 ring-line backdrop-blur active:scale-95"
-            >
-              <Icon d={ICONS.external} size={13} stroke={2.4} /> Share
-            </button>
-          </div>
+          <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
           <div className="flex items-baseline gap-2">
             <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
             <span className="text-[15px] font-bold text-muted">in flights</span>
