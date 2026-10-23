@@ -62,7 +62,7 @@ export default function TripsPage() {
         <section className="flex flex-col gap-2.5">
           <Eyebrow className="px-1">Watching · {watching.length}</Eyebrow>
           {watching.map(({ p, r }, i) => (
-            <article key={p.id} className="rise overflow-hidden rounded-[24px] bg-white shadow-[0_8px_24px_rgba(15,23,48,0.08)]" style={stagger(i)}>
+            <article key={p.id} className="rise overflow-hidden rounded-[24px] bg-surface shadow-[0_8px_24px_rgba(15,23,48,0.08)]" style={stagger(i)}>
               <div className="flex items-center gap-3 p-3">
                 <Link href={`/trip/${r.trip.id}`} className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl">
                   <TripThumb city={r.trip.city} code={r.trip.code} className="absolute inset-0" showCode={false} />

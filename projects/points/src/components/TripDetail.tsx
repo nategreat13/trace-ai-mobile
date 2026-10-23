@@ -89,7 +89,7 @@ export function TripDetail({
               <span className="nums text-[26px] leading-tight font-extrabold">{num(r.need)} <span className="text-[15px] font-semibold opacity-80">points</span></span>
               <span className="text-[13px] opacity-85">+ about {money(r.taxesTotal)} taxes{n > 1 ? ` for ${n}` : ""} · <span className="line-through">{money(r.cashTotal)}</span> cash</span>
             </div>
-            <StatusPill ok={r.ok} className="bg-white">{r.ok ? "You can book this" : `${num(r.gap)} short`}</StatusPill>
+            <StatusPill ok={r.ok} className="bg-surface">{r.ok ? "You can book this" : `${num(r.gap)} short`}</StatusPill>
           </div>
           {credit && (
             <a href={credit.page} target="_blank" rel="noopener noreferrer" className="text-[10.5px] opacity-60">
@@ -134,7 +134,7 @@ export function TripDetail({
           (r.suggestion ? (
             <CardOfferLink suggestion={r.suggestion} gap={r.gap} trip={r.trip.id} where="detail" />
           ) : (
-            <div className="rounded-3xl bg-near-bg p-4 text-[14px] font-semibold text-[#5A3A00]">
+            <div className="rounded-3xl bg-near-bg p-4 text-[14px] font-semibold text-[#5A3A00] dark:text-near">
               You&apos;re {num(r.gap)} points short. Keep earning and we&apos;ll tell you the day you can book it.
             </div>
           ))}
@@ -154,7 +154,7 @@ export function TripDetail({
                   track("book_request", { trip: id });
                   update((s) => ({ checks: { ...s.checks, [`${id}:seats-requested`]: true } }));
                 }}
-                className="flex min-h-[64px] items-center gap-3 rounded-2xl border border-trace-red bg-white p-4 text-left"
+                className="flex min-h-[64px] items-center gap-3 rounded-2xl border border-trace-red bg-surface p-4 text-left"
               >
                 <span className="text-trace-red"><Icon d={ICONS.seat} size={22} /></span>
                 <span className="flex flex-col">
@@ -167,7 +167,7 @@ export function TripDetail({
             <button
               type="button"
               onClick={onUnlock}
-              className="flex min-h-[64px] items-center gap-3 rounded-2xl border border-dashed border-trace-red bg-white p-4 text-left"
+              className="flex min-h-[64px] items-center gap-3 rounded-2xl border border-dashed border-trace-red bg-surface p-4 text-left"
             >
               <span className="text-trace-red"><LockIcon size={22} /></span>
               <span className="flex flex-col">

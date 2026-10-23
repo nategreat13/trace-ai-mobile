@@ -20,6 +20,9 @@ NEXT_DIST_DIR=.next-build yarn workspace @trace/points build   # while dev is ru
 | `src/lib/images.ts` | Destination photos (Trace's deals feed, plus credited Commons photos) and hero list. |
 | `src/lib/destinations.ts` | Groups trips by city so economy and business show in one card. |
 | `public/logos/` | Program logos, **development placeholders** (see below). |
+| `src/lib/worldAirports.ts` | 3,244 airports with scheduled service, from OurAirports (public domain). Generated; loaded on demand by Plan a trip. |
+| `src/lib/worldSearch.ts` | Searches that list, plus famous places with no airport (Kyoto → KIX/ITM). |
+| `src/lib/payments.ts`, `src/app/api/` | Checkout, trial start, billing portal and the Stripe webhook. |
 | `src/lib/store.tsx` | App state, saved in the browser (`localStorage`) until there's a backend. |
 | `src/lib/analytics.ts` | `track()`; logs funnel events and maps them to Meta events. No sink yet. |
 | `src/components/funnel/` | The pre-signup funnel, landing through paywall. |
@@ -38,12 +41,21 @@ Everything lives in `src/engine/data.ts`. Each value is labeled in the UI as typ
 
 Still to verify: the inland price adjustments, Virgin's ANA pricing (last confirmed 2024), and Bilt's current card bonus.
 
-## Not built yet
+## Payments (Stripe)
 
-- **Payments.** "Start my free week" sets a local test-mode membership; the paywall says so. Stripe Checkout and the customer portal go here.
+Checkout lives at `/checkout`. With no Stripe keys it runs in **test mode**: the trial starts on the device and the page says so. Add keys and it switches to Stripe Checkout with no code changes:
+
+1. In Stripe (test mode first), create a product "Trace Points" with two recurring prices: **$99/year** and **$12/month**.
+2. Copy `.env.example` to `.env.local` in this folder and fill in `STRIPE_SECRET_KEY` and the two price IDs. Never commit it or paste keys in chat.
+3. Add a webhook endpoint pointing at `https://<site>/api/stripe/webhook` for `customer.subscription.created`, `.updated`, `.deleted`, `.trial_will_end` and `invoice.payment_failed`, and put its signing secret in `STRIPE_WEBHOOK_SECRET`. Locally: `stripe listen --forward-to localhost:3003/api/stripe/webhook`.
+4. Turn on the customer portal in Stripe settings (cancel and switch plans).
+
+The trial is 7 days with the card collected up front; Stripe bills at the end unless the user cancels. Every trial start, test or real, goes through `onTrialStarted` in `src/lib/payments.ts` (analytics and Meta StartTrial today; welcome email later). The webhook marks where server-side work goes once there's a database: saving the member, the trial-ending reminder (Stripe sends `trial_will_end` 3 days out; send ours 2 days out), and cancellations.
+
+## Not built yet
 - **Accounts and a database.** No sign-in; everything is per-browser. Magic-link auth, saved trips, watches and the verification queue need a backend.
 - **Real seat dates.** "Find my seats" records the request locally. Phase 1 is a manual verification queue in an admin page.
-- **Email and SMS** (abandoned-paywall sequence, trial reminder, alerts).
+- **Email and SMS** (abandoned-paywall sequence, trial reminder, alerts). Email is now optional during the funnel (an inline "email me this list" card) and required at checkout.
 - **Admin tables** for editing the seed data without a deploy.
 - **Analytics sink, Meta Pixel and CAPI.** `track()` already fires every funnel event.
 - **"New today" badges** on Discover, which need the nightly refresh.

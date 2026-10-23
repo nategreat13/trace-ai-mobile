@@ -43,6 +43,21 @@ export interface TripRequest {
   createdAt: string;
 }
 
+/**
+ * A started trial or subscription. Test mode (no Stripe keys yet) creates it
+ * on the device; with Stripe it's created after Checkout succeeds and the
+ * session is verified server-side.
+ */
+export interface Membership {
+  plan: "annual" | "monthly";
+  startedAt: string;
+  /** When the free week ends and billing starts, ISO. */
+  trialEndsAt: string;
+  testMode: boolean;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+}
+
 export interface PointsState {
   step: FunnelStep;
   progs: ProgramId[];
@@ -62,8 +77,7 @@ export interface PointsState {
   planned: PlannedTrip[];
   requests: TripRequest[];
   plan: "annual" | "monthly";
-  /** Set by the paywall's test unlock until Stripe is connected. */
-  member: null | { plan: "annual" | "monthly"; startedAt: string; testMode: true };
+  member: null | Membership;
   alertsReadAt: string | null;
   /** The dollar value counts up only on the first look at results. */
   resultsSeen: boolean;
@@ -108,7 +122,10 @@ export function PointsProvider({ children }: { children: React.ReactNode }) {
         // Plans from the first build had no dates; drop them rather than show broken rows.
         saved.planned = (saved.planned ?? []).filter((p) => p.tripId && p.depart);
         // A reload mid-animation picks up where the animation would have ended.
-        if (saved.step === "load") saved.step = "email";
+        if (saved.step === "load") saved.step = "results";
+        // Steps from older builds that no longer exist.
+        if (saved.step === "trav") saved.step = "picks";
+        if (saved.step === "email") saved.step = "results";
         setState(saved);
       }
     } catch {

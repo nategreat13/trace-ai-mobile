@@ -53,7 +53,7 @@ export function SwipeDeck({
         </span>
         <div className="text-[26px] font-extrabold">That&apos;s all {plural(cards.length, "destination")}.</div>
         <p className="text-[15px] text-muted">Your saved trips are in My trips.</p>
-        <button type="button" onClick={onDone} className="min-h-[46px] rounded-2xl bg-ink px-5 font-bold text-white">
+        <button type="button" onClick={onDone} className="min-h-[46px] rounded-2xl bg-ink px-5 font-bold text-surface">
           See the list
         </button>
       </div>
@@ -124,7 +124,7 @@ export function SwipeDeck({
                 <span className="h-2 w-2 rounded-full" style={{ background: REGION_COLOR[cur.region] }} />
                 {cur.region}
               </span>
-              <StatusPill ok={cur.ok} className="bg-white">{cur.ok ? "You can book this" : `${num(cur.gap)} points away`}</StatusPill>
+              <StatusPill ok={cur.ok} className="bg-surface">{cur.ok ? "You can book this" : `${num(cur.gap)} points away`}</StatusPill>
             </div>
             <div className="mt-auto flex flex-col gap-3 p-4">
               <div>
@@ -161,7 +161,7 @@ export function SwipeDeck({
               onClick={onLocked}
               className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-midnight/40 p-7 text-center"
             >
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-ink">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-ink">
                 <LockIcon size={26} />
               </span>
               <span className="text-[28px] leading-tight font-extrabold">{plural(rest.length, "more destination")} waiting</span>
@@ -174,14 +174,14 @@ export function SwipeDeck({
         </div>
       </div>
       <div className="flex items-center justify-center gap-5">
-        <button type="button" aria-label="Skip" onClick={() => advance(false)} className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-trace-red shadow-[0_8px_24px_rgba(15,23,48,0.12)] active:scale-90">
+        <button type="button" aria-label="Skip" onClick={() => advance(false)} className="flex h-16 w-16 items-center justify-center rounded-full bg-surface text-trace-red shadow-[0_8px_24px_rgba(15,23,48,0.12)] active:scale-90">
           <Icon d={ICONS.close} size={26} stroke={2.8} />
         </button>
         <button
           type="button"
           aria-label="Trip details"
           onClick={() => (locked ? onLocked() : onInfo(cur.lead))}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-muted shadow-[0_8px_24px_rgba(15,23,48,0.10)] active:scale-90"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-surface text-muted shadow-[0_8px_24px_rgba(15,23,48,0.10)] active:scale-90"
         >
           <Icon d={ICONS.info} size={20} />
         </button>

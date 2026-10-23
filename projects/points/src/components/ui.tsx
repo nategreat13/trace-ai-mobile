@@ -8,9 +8,20 @@ export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
 }
 
+/** The Trace wordmark. Follows the theme unless `light` forces the white version (for photos). */
 export function Logo({ className = "h-6", light }: { className?: string; light?: boolean }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={light ? "/trace-logo-light.png" : "/trace-logo.png"} alt="Trace" className={cx("w-auto", className)} />;
+  if (light) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src="/trace-logo-light.png" alt="Trace" className={cx("w-auto", className)} />;
+  }
+  return (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/trace-logo.png" alt="Trace" className={cx("w-auto dark:hidden", className)} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/trace-logo-light.png" alt="" aria-hidden="true" className={cx("hidden w-auto dark:block", className)} />
+    </>
+  );
 }
 
 /** Staggered entrance: index → animation delay. */
@@ -24,7 +35,7 @@ export function PrimaryButton({ className, children, disabled, ...rest }: Button
       disabled={disabled}
       className={cx(
         "w-full min-h-[58px] rounded-2xl px-5 py-4 text-[17px] font-extrabold text-white transition active:scale-[0.98]",
-        disabled ? "bg-[#E3E5EC] text-[#9AA0AE]" : "bg-trace shimmer shadow-[0_10px_28px_rgba(253,41,123,0.32)]",
+        disabled ? "bg-soft text-muted" : "bg-trace shimmer shadow-[0_10px_28px_rgba(253,41,123,0.32)]",
         className,
       )}
       {...rest}
@@ -39,7 +50,7 @@ export function SecondaryButton({ className, children, ...rest }: ButtonHTMLAttr
     <button
       type="button"
       className={cx(
-        "w-full min-h-[50px] rounded-2xl border border-line bg-white px-4 py-3 text-[15px] font-bold text-ink active:bg-soft",
+        "w-full min-h-[50px] rounded-2xl border border-line bg-surface px-4 py-3 text-[15px] font-bold text-ink active:bg-soft",
         className,
       )}
       {...rest}
@@ -61,7 +72,7 @@ export function Chip({
       aria-pressed={on}
       className={cx(
         "min-h-[40px] whitespace-nowrap rounded-full border px-4 text-[14px] font-bold transition active:scale-95",
-        on ? "border-ink bg-ink text-white" : "border-line bg-white text-ink",
+        on ? "border-ink bg-ink text-surface" : "border-line bg-surface text-ink",
         className,
       )}
       {...rest}
@@ -105,7 +116,7 @@ export function ProgramBadge({ id, size = 44 }: { id: ProgramId; size?: number }
 
 export function Card({ className, children, style }: { className?: string; children: ReactNode; style?: CSSProperties }) {
   return (
-    <div className={cx("rounded-3xl border border-line bg-white", className)} style={style}>
+    <div className={cx("rounded-3xl border border-line bg-surface", className)} style={style}>
       {children}
     </div>
   );

@@ -37,7 +37,7 @@ export function DestinationCard({
   const offer = !d.ok ? d.lead.suggestion : null;
   return (
     <article
-      className="rise overflow-hidden rounded-[28px] bg-white shadow-[0_1px_0_rgba(15,23,48,0.04),0_10px_30px_rgba(15,23,48,0.08)]"
+      className="rise overflow-hidden rounded-[28px] bg-surface shadow-[0_1px_0_rgba(15,23,48,0.04),0_10px_30px_rgba(15,23,48,0.08)]"
       style={stagger(i, 55)}
     >
       <div className="relative h-[176px]">
@@ -61,17 +61,17 @@ export function DestinationCard({
               </span>
             </span>
             {picked && !locked && (
-              <span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10.5px] font-extrabold text-trace-pink">YOUR PICK</span>
+              <span className="shrink-0 rounded-full bg-surface px-2 py-0.5 text-[10.5px] font-extrabold text-trace-pink">YOUR PICK</span>
             )}
           </span>
         </button>
         <span className="pointer-events-none absolute top-3 right-3">
           {locked ? (
-            <span className="flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[12px] font-extrabold text-ink">
+            <span className="flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1 text-[12px] font-extrabold text-ink">
               <LockIcon size={12} /> Locked
             </span>
           ) : (
-            !showHeart && <StatusPill ok={d.ok} className="bg-white">{d.ok ? "Can book now" : `${kShort(d.gap)} away`}</StatusPill>
+            !showHeart && <StatusPill ok={d.ok} className="bg-surface">{d.ok ? "Can book now" : `${kShort(d.gap)} away`}</StatusPill>
           )}
         </span>
         {showHeart && (
@@ -82,7 +82,7 @@ export function DestinationCard({
             aria-pressed={saved}
             className={cx(
               "absolute top-2.5 right-2.5 flex h-11 w-11 items-center justify-center rounded-full backdrop-blur-md transition active:scale-90",
-              saved ? "bg-white text-trace-pink" : "bg-black/30 text-white",
+              saved ? "bg-surface text-trace-pink" : "bg-black/30 text-white",
             )}
           >
             <span key={String(saved)} className={saved ? "pop" : ""}>
@@ -100,7 +100,7 @@ export function DestinationCard({
             onClick={() => onOpen(o)}
             className={cx(
               "flex min-h-[64px] w-full items-center gap-3 px-4 py-3 text-left active:bg-soft",
-              o.isBusiness && "bg-gradient-to-r from-[#F6F1FF] to-white",
+              o.isBusiness && "bg-gradient-to-r from-[#F6F1FF] to-surface dark:from-[#1E1A3A]",
             )}
           >
             <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -119,7 +119,7 @@ export function DestinationCard({
                 {o.ok ? "Can book" : `${num(o.gap)} short`}
               </span>
             </span>
-            <span className="text-[#C2C6D0]"><Icon d={ICONS.chevron} size={16} stroke={2.4} /></span>
+            <span className="text-muted/50"><Icon d={ICONS.chevron} size={16} stroke={2.4} /></span>
           </button>
         ))}
       </div>

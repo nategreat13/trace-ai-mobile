@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Dark mode follows data-theme on <html>, set before paint by the script in layout.tsx. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
 @theme {
   --color-trace-red: #FF655B;
   --color-trace-pink: #FD297B;
@@ -19,12 +22,31 @@
   --color-muted: #646B7A;
   --color-line: #E7E8EE;
   --color-soft: #F4F5F8;
+  /* Cards, sheets and the app column. */
+  --color-surface: #FFFFFF;
+  /* Behind the app column on desktop. */
+  --color-page: #EEF0F5;
   --font-sans: var(--font-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Night palette: deep navy rather than pure black, so photos and the Trace gradient still glow. */
+[data-theme=dark] {
+  --color-ink: #F1F3F8;
+  --color-muted: #9AA3B7;
+  --color-line: #262D40;
+  --color-soft: #1A2032;
+  --color-surface: #11162A;
+  --color-page: #070A14;
+  --color-ok: #34D399;
+  --color-ok-bg: rgba(16, 185, 129, 0.16);
+  --color-near: #FBBF24;
+  --color-near-bg: rgba(245, 158, 11, 0.16);
+  color-scheme: dark;
 }
 
 html,
 body {
-  background: #EEF0F5;
+  background: var(--color-page);
   color: var(--color-ink);
   -webkit-tap-highlight-color: transparent;
   font-feature-settings: "ss01" 0;
@@ -41,7 +63,7 @@ body {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
-  background: #FFFFFF;
+  background: var(--color-surface);
   position: relative;
   overflow-x: clip;
   box-shadow: 0 0 0 1px rgba(15, 23, 48, 0.04), 0 20px 60px rgba(15, 23, 48, 0.08);
@@ -51,7 +73,7 @@ body {
   background:
     radial-gradient(120% 60% at 100% 0%, rgba(253, 41, 123, 0.10), transparent 60%),
     radial-gradient(100% 50% at 0% 10%, rgba(14, 165, 233, 0.10), transparent 60%),
-    #FFFFFF;
+    var(--color-surface);
 }
 
 .text-gradient {

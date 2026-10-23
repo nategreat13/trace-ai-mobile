@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { evalAll } from "@/engine/engine";
 import type { Region, TripResult } from "@/engine/types";
 import { CardOfferLink } from "@/components/CardOffer";
@@ -12,16 +12,19 @@ import { CabinBadge, Check, cx, Eyebrow, Icon, ICONS, PrimaryButton, stagger } f
 import { track } from "@/lib/analytics";
 import { REGION_COLOR } from "@/lib/destinations";
 import { fuzzyIncludes } from "@/lib/fuzzy";
+import type { WorldAirport } from "@/lib/worldAirports";
+import { coordsFor, miles, placeLabel, searchWorld, type WorldPlace } from "@/lib/worldSearch";
 import { num, plural, shortDate, todayIso } from "@/lib/format";
 import { useDeck, usePoints, type PlannedTrip, type TripRequest } from "@/lib/store";
 
 type Where =
-  | { kind: "city"; city: string; region: Region }
+  /** `via` is what they typed when it flies into a city we price (Kyoto → Osaka). */
+  | { kind: "city"; city: string; region: Region; via?: string }
   | { kind: "region"; region: Region }
   | { kind: "beach" }
   | { kind: "anywhere" }
   /** Somewhere Trace doesn't price yet; searching it leads to a request. */
-  | { kind: "custom"; text: string };
+  | { kind: "custom"; text: string; place?: WorldPlace };
 
 const whereLabel = (w: Where) =>
   w.kind === "city"
@@ -69,6 +72,29 @@ export default function PlanPage() {
   }, [all]);
   const regions = useMemo(() => [...new Set(cities.map((c) => c.region))], [cities]);
 
+  // The world airport list loads the first time someone types a destination.
+  const [world, setWorld] = useState<WorldAirport[] | null>(null);
+  useEffect(() => {
+    if (focus && !world) import("@/lib/worldAirports").then((m) => setWorld(m.WORLD_AIRPORTS));
+  }, [focus, world]);
+  const priced = useMemo(() => {
+    if (!world) return [];
+    const codes = new Map<string, string>();
+    for (const r of all) codes.set(r.trip.city, r.trip.code);
+    return cities
+      .map((c) => ({ ...c, code: codes.get(c.city)!, at: coordsFor(world, codes.get(c.city)!) }))
+      .filter((c): c is typeof c & { at: [number, number] } => !!c.at);
+  }, [world, all, cities]);
+  /** The closest destination we price, if it's a reasonable alternative. */
+  const nearestPriced = (p: WorldPlace) => {
+    let best: { city: string; region: Region; mi: number } | null = null;
+    for (const c of priced) {
+      const mi = miles(p.lat, p.lng, c.at[0], c.at[1]);
+      if (mi < 500 && (!best || mi < best.mi)) best = { city: c.city, region: c.region, mi: Math.round(mi / 5) * 5 };
+    }
+    return best;
+  };
+
   const suggestions: Where[] = useMemo(() => {
     const t = q.toLowerCase().trim();
     const out: Where[] = [];
@@ -83,11 +109,24 @@ export default function PlanPage() {
     if ("beach".startsWith(t) || "beaches".startsWith(t)) out.push({ kind: "beach" });
     if ("anywhere".startsWith(t)) out.push({ kind: "anywhere" });
     const exact = cities.some((c) => c.city.toLowerCase() === t);
-    const list = out.slice(0, 7);
-    // Anything we don't price can still be requested.
-    if (t.length >= 2 && !exact) list.push({ kind: "custom", text: titleCase(q.trim()) });
+    const list = out.slice(0, 6);
+    // Real places from the world airport list that we don't price yet.
+    const pricedCodes = new Set(priced.map((c) => c.code));
+    const pricedCities = new Set(cities.map((c) => c.city.toLowerCase()));
+    const found = world ? searchWorld(world, q, 6).filter((p) => !pricedCities.has(p.city.toLowerCase())) : [];
+    const placesFound: WorldPlace[] = [];
+    for (const p of found) {
+      // A place that flies into one of our destinations becomes that destination.
+      const via = priced.find((c) => p.codes.includes(c.code));
+      if (via) {
+        if (!list.some((w) => w.kind === "city" && w.city === via.city)) list.unshift({ kind: "city", city: via.city, region: via.region, via: p.city });
+      } else placesFound.push(p);
+    }
+    for (const p of placesFound.slice(0, 5)) list.push({ kind: "custom", text: placeLabel(p), place: p });
+    // Anything else can still be requested as typed.
+    if (t.length >= 2 && !exact && !found.length) list.push({ kind: "custom", text: titleCase(q.trim()) });
     return list;
-  }, [q, cities, regions]);
+  }, [q, cities, regions, world, priced]);
 
   const match = (w: Where, c: PlannedTrip["cabin"], n: number): TripResult[] =>
     evalAll({ ...input, travelers: n })
@@ -138,7 +177,7 @@ export default function PlanPage() {
   const requesting = !!where && (liveCount === 0 || wantRequest);
   const reason = where?.kind === "custom" ? "unpriced" : liveCount === 0 ? "cabin" : "more";
   const draft: RequestDraft | null = where
-    ? { destination: whereLabel(where), depart, ret: oneWay ? "" : ret, flexible, travelers, cabin }
+    ? { destination: where.kind === "custom" && where.place ? `${whereLabel(where)} (${where.place.codes.join("/")})` : whereLabel(where), depart, ret: oneWay ? "" : ret, flexible, travelers, cabin }
     : null;
   const already = draft ? find(draft) : undefined;
   const chooseWhere = (w: Where | null) => {
@@ -165,7 +204,7 @@ export default function PlanPage() {
       </header>
 
       {sent ? (
-        <div className="rise mx-4 flex flex-col gap-4 rounded-[28px] bg-white p-5 shadow-[0_10px_30px_rgba(15,23,48,0.10)]" aria-live="polite">
+        <div className="rise mx-4 flex flex-col gap-4 rounded-[28px] bg-surface p-5 shadow-[0_10px_30px_rgba(15,23,48,0.10)]" aria-live="polite">
           <div className="flex items-center gap-3">
             <span className="check-in flex h-11 w-11 items-center justify-center rounded-2xl bg-trace-green text-white">
               <Check size={20} />
@@ -187,7 +226,7 @@ export default function PlanPage() {
         </div>
       ) : (
         <form
-          className="mx-4 flex flex-col gap-4 rounded-[28px] bg-white p-4 shadow-[0_10px_30px_rgba(15,23,48,0.10)]"
+          className="mx-4 flex flex-col gap-4 rounded-[28px] bg-surface p-4 shadow-[0_10px_30px_rgba(15,23,48,0.10)]"
           onSubmit={(e) => {
             e.preventDefault();
             if (!canSearch || !where || !draft) return;
@@ -230,11 +269,11 @@ export default function PlanPage() {
                     onBlur={() => window.setTimeout(() => setFocus(false), 150)}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="City, region, or anywhere"
-                    className="min-h-[54px] w-full rounded-2xl bg-soft pr-4 pl-11 text-[16.5px] outline-none focus:bg-white focus:ring-2 focus:ring-trace-pink"
+                    className="min-h-[54px] w-full rounded-2xl bg-soft pr-4 pl-11 text-[16.5px] outline-none focus:bg-surface focus:ring-2 focus:ring-trace-pink"
                   />
                 </div>
                 {focus && (
-                  <ul className="absolute inset-x-0 z-20 mt-2 max-h-[320px] overflow-auto rounded-2xl border border-line bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,48,0.16)]" role="listbox">
+                  <ul className="absolute inset-x-0 z-20 mt-2 max-h-[320px] overflow-auto rounded-2xl border border-line bg-surface p-1.5 shadow-[0_16px_40px_rgba(15,23,48,0.16)]" role="listbox">
                     {suggestions.map((s) => (
                       <li key={whereLabel(s)}>
                         <button
@@ -250,6 +289,10 @@ export default function PlanPage() {
                         >
                           {s.kind === "city" ? (
                             <TripThumb city={s.city} code="" className="h-9 w-9 shrink-0 rounded-lg" showCode={false} />
+                          ) : s.kind === "custom" && s.place ? (
+                            <span className="nums flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-soft text-[11px] font-extrabold text-muted">
+                              {s.place.codes[0]}
+                            </span>
                           ) : (
                             <span
                               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
@@ -259,14 +302,21 @@ export default function PlanPage() {
                             </span>
                           )}
                           <span className="flex flex-col leading-tight">
-                            <span className="text-[15px] font-bold">{s.kind === "custom" ? `Request “${s.text}”` : whereLabel(s)}</span>
+                            <span className="text-[15px] font-bold">{s.kind === "custom" && !s.place ? `Request “${s.text}”` : whereLabel(s)}</span>
                             <span className="text-[12px] text-muted">
                               {s.kind === "city"
-                                ? s.region
+                              ? s.via
+                                ? `For ${s.via} · ${s.region}`
+                                : s.region
                                 : s.kind === "region"
                                   ? `${plural(cities.filter((c) => c.region === s.region).length, "destination")}`
                                   : s.kind === "custom"
-                                    ? "Not priced yet. Ask Trace to find it"
+                                    ? s.place
+                                      ? (() => {
+                                          const n = nearestPriced(s.place);
+                                          return n ? `Not priced yet · ${n.city} is ${n.mi} mi away` : `${s.place.codes.join(" · ")} · Not priced yet, request it`;
+                                        })()
+                                      : "Not priced yet. Ask Trace to find it"
                                     : "Show me the best options"}
                             </span>
                           </span>
@@ -287,7 +337,7 @@ export default function PlanPage() {
                   [false, "Round trip"],
                   [true, "One way"],
                 ].map(([v, l]) => (
-                  <button key={String(v)} type="button" aria-pressed={oneWay === v} onClick={() => setOneWay(v as boolean)} className={cx("rounded-full px-3 py-1.5", oneWay === v ? "bg-white shadow-sm" : "text-muted")}>
+                  <button key={String(v)} type="button" aria-pressed={oneWay === v} onClick={() => setOneWay(v as boolean)} className={cx("rounded-full px-3 py-1.5", oneWay === v ? "bg-surface shadow-sm" : "text-muted")}>
                     {l as string}
                   </button>
                 ))}
@@ -311,7 +361,7 @@ export default function PlanPage() {
                 <span className="text-[14.5px] font-bold">Flexible dates</span>
                 <span className="text-[12.5px] text-muted">Look 3 days either side. Award seats are easier to find.</span>
               </span>
-              <span className={cx("flex h-7 w-12 shrink-0 rounded-full p-0.5 transition", flexible ? "justify-end bg-trace-pink" : "justify-start bg-[#D5D8E0]")}>
+              <span className={cx("flex h-7 w-12 shrink-0 rounded-full p-0.5 transition", flexible ? "justify-end bg-trace-pink" : "justify-start bg-line")}>
                 <span className="h-6 w-6 rounded-full bg-white shadow" />
               </span>
             </button>
@@ -321,11 +371,11 @@ export default function PlanPage() {
             <div className="flex flex-col gap-1.5">
               <span className="text-[12px] font-extrabold tracking-[0.06em] text-muted uppercase">Travelers</span>
               <div className="flex min-h-[50px] items-center justify-between rounded-2xl bg-soft px-1.5">
-                <button type="button" aria-label="Fewer travelers" disabled={travelers <= 1} onClick={() => setTravelers(travelers - 1)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white disabled:opacity-40">
+                <button type="button" aria-label="Fewer travelers" disabled={travelers <= 1} onClick={() => setTravelers(travelers - 1)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface disabled:opacity-40">
                   <Icon d={ICONS.minus} size={16} stroke={2.6} />
                 </button>
                 <span className="nums text-[17px] font-extrabold" aria-live="polite">{travelers}</span>
-                <button type="button" aria-label="More travelers" disabled={travelers >= 6} onClick={() => setTravelers(travelers + 1)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white disabled:opacity-40">
+                <button type="button" aria-label="More travelers" disabled={travelers >= 6} onClick={() => setTravelers(travelers + 1)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface disabled:opacity-40">
                   <Icon d={ICONS.plus} size={16} stroke={2.6} />
                 </button>
               </div>
@@ -346,7 +396,7 @@ export default function PlanPage() {
           </div>
 
           {requesting && (
-            <div className="rise flex flex-col gap-3 rounded-3xl bg-gradient-to-br from-[#F3EEFF] via-[#FFF0F6] to-[#FFF4E5] p-4">
+            <div className="rise flex flex-col gap-3 rounded-3xl bg-gradient-to-br from-[#F3EEFF] via-[#FFF0F6] to-[#FFF4E5] p-4 dark:from-[#1E1A3A] dark:via-[#2A1630] dark:to-[#2A2014]">
               <div className="flex items-start gap-3">
                 <span className="bg-trace flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white">
                   <Icon d={ICONS.sparkle} size={20} stroke={2.2} />
@@ -364,6 +414,23 @@ export default function PlanPage() {
                   </span>
                 </div>
               </div>
+              {where?.kind === "custom" && where.place && (() => {
+                const n = nearestPriced(where.place);
+                return n ? (
+                  <button
+                    type="button"
+                    onClick={() => chooseWhere({ kind: "city", city: n.city, region: n.region })}
+                    className="flex min-h-[52px] items-center gap-3 rounded-2xl bg-surface px-3 text-left active:scale-[0.99]"
+                  >
+                    <TripThumb city={n.city} code="" className="h-9 w-9 shrink-0 rounded-lg" showCode={false} />
+                    <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                      <span className="text-[14px] font-bold">Or fly into {n.city}, {n.mi} mi away</span>
+                      <span className="text-[12px] text-muted">We price that one now</span>
+                    </span>
+                    <Icon d={ICONS.chevron} size={16} stroke={2.4} className="text-muted" />
+                  </button>
+                ) : null;
+              })()}
               <label className="flex flex-col gap-1.5">
                 <span className="text-[12px] font-extrabold tracking-[0.06em] text-muted uppercase">Anything else? (optional)</span>
                 <textarea
@@ -372,7 +439,7 @@ export default function PlanPage() {
                   rows={2}
                   maxLength={280}
                   placeholder="Nonstop only, a specific airline, use my Amex first…"
-                  className="resize-none rounded-2xl bg-white px-4 py-3 text-[15px] outline-none focus:ring-2 focus:ring-trace-pink"
+                  className="resize-none rounded-2xl bg-surface px-4 py-3 text-[15px] outline-none focus:ring-2 focus:ring-trace-pink"
                 />
               </label>
             </div>
@@ -407,7 +474,7 @@ export default function PlanPage() {
           {results.map((r, i) => {
             const on = !!watchingId(r.trip.id);
             return (
-              <article key={r.trip.id} className="rise overflow-hidden rounded-[24px] bg-white shadow-[0_8px_24px_rgba(15,23,48,0.08)]" style={stagger(i, 40)}>
+              <article key={r.trip.id} className="rise overflow-hidden rounded-[24px] bg-surface shadow-[0_8px_24px_rgba(15,23,48,0.08)]" style={stagger(i, 40)}>
                 <div className="flex gap-3 p-3">
                   <Link href={`/trip/${r.trip.id}`} className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl">
                     <TripThumb city={r.trip.city} code={r.trip.code} className="absolute inset-0" showCode={false} />
@@ -429,7 +496,7 @@ export default function PlanPage() {
                         aria-pressed={on}
                         className={cx(
                           "flex min-h-[40px] items-center gap-1.5 rounded-xl px-3 text-[13.5px] font-extrabold transition active:scale-95",
-                          on ? "bg-ok-bg text-ok" : "bg-ink text-white",
+                          on ? "bg-ok-bg text-ok" : "bg-ink text-surface",
                         )}
                       >
                         {on ? <><Check size={13} /> Watching</> : <><Icon d={ICONS.eye} size={15} /> Watch</>}
@@ -486,7 +553,7 @@ export default function PlanPage() {
 
 function DateField({ label, value, min, onChange }: { label: string; value: string; min: string; onChange: (v: string) => void }) {
   return (
-    <label className="flex min-h-[54px] flex-col justify-center rounded-2xl bg-soft px-4 py-1.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-trace-pink">
+    <label className="flex min-h-[54px] flex-col justify-center rounded-2xl bg-soft px-4 py-1.5 focus-within:bg-surface focus-within:ring-2 focus-within:ring-trace-pink">
       <span className="text-[11px] font-bold text-muted">{label}</span>
       <input
         type="date"

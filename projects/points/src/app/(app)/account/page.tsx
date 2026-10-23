@@ -5,10 +5,12 @@ import { useState } from "react";
 import { AirportSearch } from "@/components/funnel/AirportSearch";
 import { BalanceCard } from "@/components/funnel/BalanceCard";
 import { PRICES } from "@/components/Paywall";
-import { Card, Chip, Eyebrow, Icon, ICONS, SecondaryButton } from "@/components/ui";
+import { Card, Chip, cx, Eyebrow, Icon, ICONS, SecondaryButton } from "@/components/ui";
 import { AIRLINE_IDS, BANK_IDS, PROGRAMS } from "@/engine/data";
 import { airportByCode } from "@/lib/airports";
+import { openBillingPortal } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
+import { useTheme } from "@/lib/theme";
 
 const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
@@ -16,9 +18,10 @@ export default function AccountPage() {
   const { state, update, reset } = usePoints();
   const router = useRouter();
   const [airport, setAirport] = useState(false);
+  const [theme, setTheme] = useTheme();
   const member = state.member!;
   const started = new Date(member.startedAt);
-  const trialEnds = new Date(started.getTime() + 7 * 86400000);
+  const trialEnds = new Date(member.trialEndsAt ?? started.getTime() + 7 * 86400000);
   const home = state.airport ? airportByCode(state.airport) : undefined;
 
   return (
@@ -32,8 +35,37 @@ export default function AccountPage() {
           <div className="text-[14px] text-muted">
             Started {fmt(started)}. Trial ends {fmt(trialEnds)}.
           </div>
-          <div className="pt-1 text-[12px] text-muted">Test mode: no card on file. Billing connects later.</div>
+          {member.testMode ? (
+            <div className="pt-1 text-[12px] text-muted">Test mode: no card on file. Billing connects when Stripe keys are added.</div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openBillingPortal(member.stripeCustomerId)}
+              className="mt-2 flex min-h-[44px] items-center justify-center rounded-xl bg-soft text-[14px] font-bold"
+            >
+              Manage billing
+            </button>
+          )}
         </Card>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <Eyebrow>Appearance</Eyebrow>
+        <div role="radiogroup" aria-label="Appearance" className="grid grid-cols-3 gap-1 rounded-2xl bg-soft p-1">
+          {(["system", "light", "dark"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="radio"
+              aria-checked={theme === t}
+              onClick={() => setTheme(t)}
+              className={cx("min-h-[44px] rounded-xl text-[14px] font-bold capitalize transition", theme === t ? "bg-surface shadow-sm" : "text-muted")}
+            >
+              {t === "system" ? "Automatic" : t}
+            </button>
+          ))}
+        </div>
+        <p className="px-1 text-[12.5px] text-muted">Automatic follows your phone, so Trace goes dark at night if your phone does.</p>
       </section>
 
       <section className="flex flex-col gap-2">
@@ -122,7 +154,9 @@ export default function AccountPage() {
 
       <section className="flex flex-col gap-2 pt-2">
         <SecondaryButton
-          onClick={() => {
+          onClick={async () => {
+            // Real subscriptions cancel in Stripe's portal; test trials just end here.
+            if (!member.testMode && (await openBillingPortal(member.stripeCustomerId))) return;
             update({ member: null, step: "results" });
             router.replace("/");
           }}

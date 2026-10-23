@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations, type Destination } from "@/lib/destinations";
 import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
-import { Chip, cx, Eyebrow, Icon, ICONS } from "../ui";
+import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { DestinationCard } from "./DestinationCard";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
 import { SwipeDeck } from "./SwipeDeck";
 
 export const FREE_DESTINATIONS = 3;
+
+/** Why the paywall opened, so its headline can match. */
+export type PayReason = "locked" | "filters" | "cta";
 
 /**
  * The results experience, shared by the free funnel and the member Discover
@@ -27,7 +30,7 @@ export function ResultsView({
 }: {
   mode: "free" | "member";
   onOpen: (r: TripResult) => void;
-  onPaywall: (r?: TripResult) => void;
+  onPaywall: (reason: PayReason, r?: TripResult) => void;
   countUp?: boolean;
 }) {
   const { state, update } = usePoints();
@@ -51,7 +54,7 @@ export function ResultsView({
 
   const isSaved = (d: Destination) => d.options.some((o) => state.saved.includes(o.trip.id));
   const toggleSave = (d: Destination) => {
-    if (isLocked(d.city)) return onPaywall(d.lead);
+    if (isLocked(d.city)) return onPaywall("locked", d.lead);
     const ids = d.options.map((o) => o.trip.id);
     update((s) => ({
       saved: ids.some((id) => s.saved.includes(id)) ? s.saved.filter((x) => !ids.includes(x)) : [...s.saved, d.lead.trip.id],
@@ -60,7 +63,7 @@ export function ResultsView({
   const open = (r: TripResult) => {
     if (isLocked(r.trip.city)) {
       track("locked_row_tap", { trip: r.trip.id });
-      return onPaywall(r);
+      return onPaywall("locked", r);
     }
     onOpen(r);
   };
@@ -98,16 +101,17 @@ export function ResultsView({
               : <>You&apos;re close to <span className="text-near">{plural(allNear, "destination")}</span>.</>}
           </p>
           <p className="text-[13.5px] leading-snug text-muted">
-            Trips most people never find. We checked 11 airline programs from {state.airport} for {plural(state.travelers, "traveler")}. Values are estimates.
+            Trips most people never find. We checked 11 airline programs from {state.airport}.{" "}
+            {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
         </div>
       </header>
 
-      <div className="sticky top-0 z-20 flex items-center gap-2 bg-white/90 px-5 py-3 backdrop-blur-md">
+      <div className="sticky top-0 z-20 flex items-center gap-2 bg-surface/90 px-5 py-3 backdrop-blur-md">
         <div role="tablist" aria-label="View" className="relative grid flex-1 grid-cols-2 rounded-2xl bg-soft p-1">
           <span
             aria-hidden="true"
-            className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-white shadow-sm transition-transform duration-300"
+            className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-surface shadow-sm transition-transform duration-300"
             style={{ transform: view === "swipe" ? "translateX(100%)" : "none" }}
           />
           {(["list", "swipe"] as const).map((v) => (
@@ -127,11 +131,16 @@ export function ResultsView({
           type="button"
           aria-label="Filter and sort"
           aria-expanded={panel}
-          onClick={() => setPanel(true)}
-          className={cx("relative flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl transition active:scale-95", filterActive ? "bg-ink text-white" : "bg-soft text-ink")}
+          onClick={() => (mode === "free" ? onPaywall("filters") : setPanel(true))}
+          className={cx("relative flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl transition active:scale-95", filterActive ? "bg-ink text-surface" : "bg-soft text-ink")}
         >
           <Icon d={ICONS.filter} size={20} stroke={2.4} />
           {filterActive && <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full border-2 border-ink bg-trace-pink" />}
+          {mode === "free" && (
+            <span className="bg-trace absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-white ring-2 ring-surface">
+              <LockIcon size={10} />
+            </span>
+          )}
         </button>
       </div>
 
@@ -142,7 +151,12 @@ export function ResultsView({
           ) : (
             <>
               {okDest.length > 0 && <SectionHead ok label="Ready to book" count={okDest.length} />}
-              {okDest.map((d, i) => card(d, i))}
+              {okDest.map((d, i) => (
+                <Fragment key={d.city}>
+                  {card(d, i)}
+                  {mode === "free" && i === 1 && <EmailListCard />}
+                </Fragment>
+              ))}
               {nearDest.length > 0 && <SectionHead ok={false} label="Almost there" count={nearDest.length} />}
               {nearDest.map((d, i) => card(d, i + okDest.length))}
             </>
@@ -160,17 +174,17 @@ export function ResultsView({
             }}
             onSkip={(d) => track("swipe_skip", { trip: d.lead.trip.id })}
             onInfo={open}
-            onLocked={() => onPaywall()}
+            onLocked={() => onPaywall("locked")}
             onDone={() => setView("list")}
           />
         )}
       </div>
 
       {mode === "free" && (
-        <div className="pb-safe sticky bottom-0 z-20 bg-gradient-to-t from-white from-60% to-white/0 px-5 pt-6">
+        <div className="pb-safe sticky bottom-0 z-20 bg-gradient-to-t from-surface from-60% to-surface/0 px-5 pt-6">
           <button
             type="button"
-            onClick={() => onPaywall()}
+            onClick={() => onPaywall("cta")}
             className="bg-trace shimmer min-h-[58px] w-full rounded-2xl px-4 text-[16.5px] font-extrabold text-white shadow-[0_10px_28px_rgba(253,41,123,0.32)] active:scale-[0.98]"
           >
             Unlock dates {savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(all.length, "destination")}`}
@@ -193,6 +207,66 @@ export function ResultsView({
           }}
           onClose={() => setPanel(false)}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Optional email capture that sits in the list instead of blocking it: people
+ * see their trips first, and anyone who wants the list (or bonus alerts) can
+ * leave an address. Checkout asks again, since an account needs one.
+ */
+function EmailListCard() {
+  const { state, update } = usePoints();
+  const { deck } = useDeck();
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  if (state.email && !sent) return null;
+  const valid = /.+@.+\..+/.test(email);
+  return (
+    <div className="rise flex flex-col gap-3 rounded-[28px] bg-gradient-to-br from-[#EEF6FF] via-[#F6F1FF] to-[#FFF0F6] p-5 dark:from-[#14203A] dark:via-[#1E1A3A] dark:to-[#2A1630]">
+      {sent ? (
+        <div className="flex items-center gap-3">
+          <span className="check-in flex h-10 w-10 items-center justify-center rounded-2xl bg-trace-green text-white"><Check size={18} /></span>
+          <span className="text-[15px] font-bold">Sent to {state.email}. Keep scrolling.</span>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-sky text-white">
+              <Icon d={ICONS.bell} size={19} stroke={2.2} />
+            </span>
+            <div>
+              <div className="text-[17px] leading-tight font-extrabold">Want this list in your inbox?</div>
+              <div className="pt-0.5 text-[13.5px] leading-snug text-muted">We&apos;ll send it, plus a heads-up when a bonus makes one of these cheaper.</div>
+            </div>
+          </div>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!valid) return;
+              update({ email });
+              track("email_captured", { where: "results", trips: deck.length });
+              setSent(true);
+            }}
+          >
+            <label htmlFor="list-email" className="sr-only">Email</label>
+            <input
+              id="list-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="min-h-[50px] min-w-0 flex-1 rounded-2xl bg-surface px-4 text-[16px] outline-none focus:ring-2 focus:ring-trace-pink"
+            />
+            <button type="submit" disabled={!valid} className="min-h-[50px] rounded-2xl bg-ink px-4 text-[15px] font-extrabold text-surface disabled:opacity-40">
+              Send
+            </button>
+          </form>
+        </>
       )}
     </div>
   );
@@ -243,7 +317,7 @@ function FilterSheet({
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col justify-end" role="dialog" aria-modal="true" aria-label="Filter and sort">
       <button type="button" aria-label="Close filters" onClick={onClose} className="fade absolute inset-0 bg-midnight/50" />
-      <div className="sheet-up pb-safe relative flex flex-col gap-4 rounded-t-[32px] bg-white px-5 pt-3">
+      <div className="sheet-up pb-safe relative flex flex-col gap-4 rounded-t-[32px] bg-surface px-5 pt-3">
         <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
         <div className="text-[20px] font-extrabold">Filter and sort</div>
         <Eyebrow>Show</Eyebrow>

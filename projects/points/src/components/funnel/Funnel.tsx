@@ -10,7 +10,7 @@ import { groupDestinations } from "@/lib/destinations";
 import { kShort, num, plural } from "@/lib/format";
 import { type FunnelStep, usePoints, useDeck } from "@/lib/store";
 import { Paywall } from "../Paywall";
-import { ResultsView } from "../results/ResultsView";
+import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
 import { TripThumb } from "../TripThumb";
 import { Check, Confetti, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, SecondaryButton, stagger } from "../ui";
@@ -18,14 +18,18 @@ import { AirportSearch } from "./AirportSearch";
 import { BalanceCard } from "./BalanceCard";
 import { Landing } from "./Landing";
 
-const QUESTIONS: FunnelStep[] = ["progs", "bal", "air", "trav", "picks"];
-const PREV: Partial<Record<FunnelStep, FunnelStep>> = { progs: "land", bal: "progs", air: "bal", trav: "air", picks: "trav" };
+// Travelers and email used to be steps here. Both moved out of the way: prices
+// default to one ticket (changeable later), and email is asked for alongside
+// results and at checkout instead of blocking them.
+const QUESTIONS: FunnelStep[] = ["progs", "bal", "air", "picks"];
+const PREV: Partial<Record<FunnelStep, FunnelStep>> = { progs: "land", bal: "progs", air: "bal", picks: "air" };
 
 export function Funnel() {
   const { state, update, ready } = usePoints();
   const router = useRouter();
   const step = state.step;
   const go = (s: FunnelStep) => update({ step: s });
+  const [payReason, setPayReason] = useState<PayReason>("cta");
 
   // Browser back walks back through the funnel instead of leaving the site.
   useEffect(() => {
@@ -54,7 +58,7 @@ export function Funnel() {
   return (
     <div className="flex min-h-dvh flex-col">
       {q >= 0 && (
-        <div className="sticky top-0 z-30 flex items-center gap-3.5 bg-white/90 px-5 pt-4 pb-3 backdrop-blur">
+        <div className="sticky top-0 z-30 flex items-center gap-3.5 bg-surface/90 px-5 pt-4 pb-3 backdrop-blur">
           <button
             type="button"
             aria-label="Back"
@@ -63,7 +67,7 @@ export function Funnel() {
           >
             <Icon d={ICONS.back} size={18} stroke={2.4} />
           </button>
-          <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={q + 1} aria-label={`Step ${q + 1} of 5`}>
+          <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={0} aria-valuemax={QUESTIONS.length} aria-valuenow={q + 1} aria-label={`Step ${q + 1} of ${QUESTIONS.length}`}>
             {QUESTIONS.map((s, k) => (
               <span key={s} className="h-1.5 flex-1 overflow-hidden rounded-full bg-soft">
                 <span className={cx("block h-full rounded-full bg-trace transition-[width] duration-500", k <= q ? "w-full" : "w-0")} />
@@ -75,13 +79,18 @@ export function Funnel() {
       {step === "land" && <Landing onStart={() => go("progs")} />}
       {step === "progs" && <Programs onNext={() => go("bal")} />}
       {step === "bal" && <BalancesStep onNext={() => go("air")} />}
-      {step === "air" && <AirportStep onNext={() => go("trav")} />}
-      {step === "trav" && <Travelers onNext={() => go("picks")} />}
+      {step === "air" && <AirportStep onNext={() => go("picks")} />}
       {step === "picks" && <Picks onNext={() => go("load")} />}
-      {step === "load" && <Loading onDone={() => go("email")} />}
-      {step === "email" && <EmailStep onNext={() => go("results")} />}
-      {step === "results" && <FreeResults onPaywall={() => go("pay")} />}
-      {step === "pay" && <Paywall onClose={() => go("results")} onStart={() => go("done")} />}
+      {step === "load" && <Loading onDone={() => go("results")} />}
+      {step === "results" && (
+        <FreeResults
+          onPaywall={(reason) => {
+            setPayReason(reason);
+            go("pay");
+          }}
+        />
+      )}
+      {step === "pay" && <Paywall reason={payReason} onClose={() => go("results")} onStart={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
     </div>
   );
@@ -109,7 +118,7 @@ function Screen({
         {sub && <p className="text-[16px] leading-snug text-muted">{sub}</p>}
       </div>
       <div className="flex flex-1 flex-col">{children}</div>
-      {footer && <div className="pb-safe sticky bottom-0 flex flex-col gap-2 bg-gradient-to-t from-white from-70% to-white/0 pt-6">{footer}</div>}
+      {footer && <div className="pb-safe sticky bottom-0 flex flex-col gap-2 bg-gradient-to-t from-surface from-70% to-surface/0 pt-6">{footer}</div>}
     </div>
   );
 }
@@ -125,7 +134,7 @@ function ProgramTile({ id, i }: { id: ProgramId; i: number }) {
       style={stagger(i)}
       className={cx(
         "rise relative flex min-h-[112px] flex-col items-center justify-center gap-2.5 rounded-3xl px-1.5 py-3 text-center transition-all duration-200 active:scale-95",
-        on ? "bg-white shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.18)]" : "bg-soft",
+        on ? "bg-surface shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.18)]" : "bg-soft",
       )}
     >
       <span className={cx("transition-transform duration-200", on && "scale-110")}>
@@ -216,68 +225,6 @@ function AirportStep({ onNext }: { onNext: () => void }) {
           window.setTimeout(onNext, 220);
         }}
       />
-    </Screen>
-  );
-}
-
-function Travelers({ onNext }: { onNext: () => void }) {
-  const { state, update } = usePoints();
-  const n = state.travelers;
-  const set = (v: number) => update({ travelers: Math.max(1, Math.min(6, v)) });
-  return (
-    <Screen
-      title="Who's coming with you?"
-      sub="We'll price every trip for your whole crew."
-      footer={
-        <PrimaryButton
-          onClick={() => {
-            track("travelers_set", { travelers: n });
-            onNext();
-          }}
-        >
-          Price trips for {plural(n, "traveler")}
-        </PrimaryButton>
-      }
-    >
-      <div className="rise flex flex-col items-center gap-6 rounded-[28px] bg-gradient-to-br from-[#FFF1F3] via-[#FDF2FF] to-[#EEF6FF] px-5 py-8">
-        <div className="flex w-full items-center justify-between">
-          <button type="button" aria-label="Fewer travelers" disabled={n <= 1} onClick={() => set(n - 1)} className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm active:scale-90 disabled:opacity-40">
-            <Icon d={ICONS.minus} size={26} stroke={2.6} />
-          </button>
-          <div className="flex flex-col items-center" aria-live="polite">
-            <span key={n} className="pop text-gradient nums text-[76px] leading-none font-extrabold">{n}</span>
-            <span className="text-[14px] font-semibold text-muted">{n === 1 ? "traveler" : "travelers"}</span>
-          </div>
-          <button type="button" aria-label="More travelers" disabled={n >= 6} onClick={() => set(n + 1)} className="bg-trace flex h-16 w-16 items-center justify-center rounded-full text-white shadow-[0_8px_20px_rgba(253,41,123,0.35)] active:scale-90 disabled:opacity-40">
-            <Icon d={ICONS.plus} size={26} stroke={2.6} />
-          </button>
-        </div>
-        <div className="flex gap-1.5" aria-hidden="true">
-          {[0, 1, 2, 3, 4, 5].map((k) => (
-            <span key={k} className={cx("transition-all duration-300", k < n ? "scale-100 text-trace-pink" : "scale-90 text-[#D5D8E0]")}>
-              <Icon d={ICONS.person} size={30} />
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2 pt-5">
-        {[
-          [1, "Solo"],
-          [2, "Couple"],
-          [3, "Family of 3"],
-          [4, "Family of 4"],
-        ].map(([v, label]) => (
-          <button
-            key={label}
-            type="button"
-            aria-pressed={n === v}
-            onClick={() => set(v as number)}
-            className={cx("min-h-[46px] rounded-full border px-4 text-[15px] font-bold transition active:scale-95", n === v ? "border-ink bg-ink text-white" : "border-line")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
     </Screen>
   );
 }
@@ -373,7 +320,7 @@ function Loading({ onDone }: { onDone: () => void }) {
     `Reading ${holders.join(" and ")} transfer partners`,
     "Checking 11 airline programs",
     "Applying live transfer bonuses",
-    `Pricing trips from ${state.airport} for ${state.travelers === 1 ? "you" : plural(state.travelers, "traveler")}`,
+    `Pricing every trip from ${state.airport}`,
     "Finding the cheapest way to book each one",
   ];
   const path = "M 24 150 C 110 20, 250 20, 336 120";
@@ -399,7 +346,7 @@ function Loading({ onDone }: { onDone: () => void }) {
       </h1>
       <ul className="flex flex-col gap-3.5" aria-live="polite">
         {lines.map((l, k) => (
-          <li key={l} className={cx("flex items-center gap-3 text-[15.5px] font-medium transition-colors duration-300", k < i ? "text-ink" : "text-[#B3B8C4]")}>
+          <li key={l} className={cx("flex items-center gap-3 text-[15.5px] font-medium transition-colors duration-300", k < i ? "text-ink" : "text-muted/60")}>
             <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all duration-300", k < i ? "bg-trace-green text-white" : "border-2 border-line")}>
               {k < i && <span className="check-in"><Check size={12} /></span>}
             </span>
@@ -411,65 +358,7 @@ function Loading({ onDone }: { onDone: () => void }) {
   );
 }
 
-function EmailStep({ onNext }: { onNext: () => void }) {
-  const { state, update } = usePoints();
-  const { deck } = useDeck();
-  const dests = groupDestinations(deck);
-  const ok = dests.filter((d) => d.ok);
-  const near = dests.filter((d) => !d.ok);
-  const [email, setEmail] = useState(state.email);
-  const valid = /.+@.+\..+/.test(email);
-  const head = ok.length ? `We found ${plural(ok.length, "destination")} you can book today.` : `We found ${plural(near.length, "destination")} you're close to.`;
-  const sub = ok.length && near.length ? `Plus ${near.length} you're close to. Where should we send your list?` : "Where should we send your list?";
-  const submit = () => {
-    if (!valid) return;
-    update({ email });
-    track("email_captured", { trips: ok.length + near.length });
-    onNext();
-  };
-  return (
-    <Screen
-      title={head}
-      sub={sub}
-      icon={
-        <span className="check-in bg-trace flex h-16 w-16 items-center justify-center rounded-3xl text-white shadow-[0_10px_28px_rgba(253,41,123,0.35)]">
-          <Icon d={ICONS.sparkle} size={30} stroke={2.2} />
-        </span>
-      }
-      footer={
-        <>
-          <PrimaryButton disabled={!valid} onClick={submit}>
-            See my trips
-          </PrimaryButton>
-          <button type="button" onClick={onNext} className="min-h-[44px] text-[14px] font-semibold text-muted">
-            Skip for now
-          </button>
-        </>
-      }
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-        className="flex flex-col gap-2 pt-1"
-      >
-        <label htmlFor="email" className="text-[13px] font-bold text-muted">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="min-h-[58px] rounded-2xl border border-line bg-soft px-4 text-[17px] outline-none focus:border-trace-pink focus:bg-white"
-        />
-      </form>
-    </Screen>
-  );
-}
-
-function FreeResults({ onPaywall }: { onPaywall: () => void }) {
+function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) {
   const { state, update } = usePoints();
   const [detail, setDetail] = useState<TripResult | null>(null);
   const [first] = useState(() => !state.resultsSeen);
@@ -482,7 +371,7 @@ function FreeResults({ onPaywall }: { onPaywall: () => void }) {
   if (detail) {
     return (
       <div className="slide-in-right">
-        <TripDetail r={detail} mode="free" onBack={() => setDetail(null)} onUnlock={onPaywall} />
+        <TripDetail r={detail} mode="free" onBack={() => setDetail(null)} onUnlock={() => onPaywall("locked")} />
       </div>
     );
   }
@@ -500,7 +389,7 @@ function FreeResults({ onPaywall }: { onPaywall: () => void }) {
           window.scrollTo(0, 0);
           setDetail(r);
         }}
-        onPaywall={() => onPaywall()}
+        onPaywall={(reason) => onPaywall(reason)}
       />
     </div>
   );

@@ -7,6 +7,7 @@ import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { money, plural, shortDate } from "@/lib/format";
 import { useDeck, usePoints } from "@/lib/store";
+import type { PayReason } from "./results/ResultsView";
 import { TripThumb } from "./TripThumb";
 import { Check, cx, Icon, ICONS, PrimaryButton, stagger } from "./ui";
 
@@ -29,14 +30,14 @@ function useUrgency(): string | null {
   return null;
 }
 
-export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: () => void }) {
+export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReason; onClose: () => void; onStart: () => void }) {
   const { state, update } = usePoints();
   const { deck, ok, values } = useDeck();
   const urgency = useUrgency();
   const destinations = groupDestinations(deck);
-  const savedTrip = deck.find((r) => state.saved.includes(r.trip.id));
   const best = [...ok].sort((a, b) => b.cashTotal - a.cashTotal)[0];
-  const hero = savedTrip ?? best ?? deck[0];
+  const okDest = destinations.filter((d) => d.ok).length;
+  const mosaic = destinations.slice(0, 4);
   const saved = state.saved.length;
 
   useEffect(() => {
@@ -45,11 +46,19 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const head = saved
-    ? `Get alerts for your ${plural(saved, "saved trip")}`
-    : best
-      ? `Fly to ${best.trip.city} on points you already have`
-      : `Unlock all ${plural(destinations.length, "destination")}`;
+  // The headline follows why they're here: a locked deal, the filters, or the main button.
+  const head =
+    reason === "filters"
+      ? "Filter every deal your way"
+      : saved && reason === "cta"
+        ? `Get alerts for your ${plural(saved, "saved trip")}`
+        : `Unlock all ${plural(destinations.length, "destination")}`;
+  const sub =
+    reason === "filters"
+      ? "Beaches, business class, fewest points, closest to booking."
+      : okDest
+        ? `${okDest} you can book with points you already have${best ? `, like ${best.trip.city}` : ""}.`
+        : "See exactly how close you are to each one.";
 
   const pick = (plan: "annual" | "monthly") => {
     track("plan_selected", { plan });
@@ -59,15 +68,21 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
   return (
     <div className="flex min-h-dvh flex-col">
       <div className="relative h-[230px] overflow-hidden text-white">
-        {hero && <TripThumb city={hero.trip.city} code={hero.trip.code} className="kenburns absolute inset-0" showCode={false} />}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/10 to-white" />
+        <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5">
+          {mosaic.map((d, i) => (
+            <div key={d.city} className="relative overflow-hidden">
+              <TripThumb city={d.city} code={d.code} blur={i > 0} className="kenburns absolute inset-0" showCode={false} />
+            </div>
+          ))}
+        </div>
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-surface" />
         <button type="button" aria-label="Close" onClick={onClose} className="absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-black/30 backdrop-blur-md active:scale-95">
           <Icon d={ICONS.close} size={20} stroke={2.4} />
         </button>
       </div>
 
       <div className="-mt-16 flex flex-1 flex-col gap-4 px-5 pb-safe">
-        <div className="rise flex items-center gap-2 self-center rounded-full bg-white py-1 pr-3 pl-1 text-ink shadow-[0_6px_18px_rgba(15,23,48,0.12)]">
+        <div className="rise flex items-center gap-2 self-center rounded-full bg-surface py-1 pr-3 pl-1 text-ink shadow-[0_6px_18px_rgba(15,23,48,0.12)]">
           <span className="flex">
             {["#FF655B", "#FD297B", "#0EA5E9"].map((c, i) => (
               <span key={c} className="h-5 w-5 rounded-full border-2 border-white" style={{ background: c, marginLeft: i ? -7 : 0 }} />
@@ -77,7 +92,8 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
         </div>
         <div className="rise flex flex-col gap-1.5 text-center">
           <h1 className="text-[31px] leading-[1.06] font-extrabold tracking-[-0.02em]">{head}</h1>
-          <p className="text-[16px] font-medium text-muted">Try everything free for 7 days.</p>
+          <p className="text-[16px] font-medium text-muted">{sub}</p>
+          <p className="text-[15px] font-extrabold text-trace-pink">Try everything free for 7 days.</p>
         </div>
 
         <div className="rise bg-premium flex items-center justify-between rounded-3xl px-5 py-4 text-white" style={stagger(1)}>
@@ -112,7 +128,7 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
         </ul>
 
         {urgency && (
-          <div className="flex items-center gap-2 rounded-2xl bg-near-bg px-3.5 py-3 text-[13.5px] font-bold text-[#5A3A00]">
+          <div className="flex items-center gap-2 rounded-2xl bg-near-bg px-3.5 py-3 text-[13.5px] font-bold text-[#5A3A00] dark:text-near">
             <span className="pulse-soft"><Icon d={ICONS.clock} size={16} /></span>
             {urgency}
           </div>
@@ -129,7 +145,7 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
               onClick={() => pick(plan)}
               className={cx(
                 "relative flex min-h-[76px] flex-col items-start justify-center rounded-2xl px-4 text-left transition active:scale-[0.98]",
-                state.plan === plan ? "bg-white shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.15)]" : "bg-soft",
+                state.plan === plan ? "bg-surface shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.15)]" : "bg-soft",
               )}
             >
               {plan === "annual" && (
@@ -141,20 +157,10 @@ export function Paywall({ onClose, onStart }: { onClose: () => void; onStart: ()
           ))}
         </div>
 
-        <PrimaryButton
-          className="text-[18px]"
-          onClick={() => {
-            track("trial_started", { plan: state.plan, test_mode: true });
-            update({ member: { plan: state.plan, startedAt: new Date().toISOString(), testMode: true } });
-            onStart();
-          }}
-        >
+        <PrimaryButton className="text-[18px]" onClick={onStart}>
           Start my free week
         </PrimaryButton>
         <div className="-mt-2 text-center text-[13px] font-medium text-muted">$0 today · Cancel anytime · Money-back guarantee</div>
-        <div className="rounded-xl border border-dashed border-line px-3 py-2 text-center text-[11.5px] text-muted">
-          Test mode: no card is collected yet. Payments connect later.
-        </div>
       </div>
     </div>
   );

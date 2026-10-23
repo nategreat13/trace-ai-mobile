@@ -48,7 +48,7 @@ export default function PointsPage() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-[28px] bg-white p-5 shadow-[0_8px_24px_rgba(15,23,48,0.07)]">
+      <div className="flex flex-col gap-4 rounded-[28px] bg-surface p-5 shadow-[0_8px_24px_rgba(15,23,48,0.07)]">
         {state.progs.map((id, i) => {
           const v = bal[id] ?? 0;
           return (

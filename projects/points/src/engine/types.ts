@@ -5,6 +5,7 @@ export type ProgramId =
   | "c1"
   | "citi"
   | "bilt"
+  | "wells"
   | "delta"
   | "united"
   | "atmos"

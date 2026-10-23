@@ -16,6 +16,10 @@ const SLIDES = [
 
 const INTERVAL = 4500;
 
+/**
+ * A framed window onto the trip: the photos zoom slowly inside a rounded
+ * frame, like looking out the plane window, with the headline below.
+ */
 export function Landing({ onStart }: { onStart: () => void }) {
   const [i, setI] = useState(0);
   useEffect(() => {
@@ -27,63 +31,77 @@ export function Landing({ onStart }: { onStart: () => void }) {
   const credit = creditFor(s.city);
 
   return (
-    <div className="relative flex h-dvh min-h-[640px] flex-col overflow-hidden bg-midnight text-white">
-      {SLIDES.map((sl, k) => (
-        <div
-          key={sl.city}
-          aria-hidden="true"
-          className="absolute inset-0 transition-opacity duration-[1200ms] ease-out"
-          style={{ opacity: k === i ? 1 : 0 }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={photoFor(sl.city)}
-            alt=""
-            className={cx("h-full w-full object-cover", k === i && "kenburns")}
-            fetchPriority={k === 0 ? "high" : "low"}
-          />
-        </div>
-      ))}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-black/0 to-black/85" />
+    <div className="trace-wash flex min-h-dvh flex-col px-5 pt-5">
+      <div className="flex items-center justify-between">
+        <Logo className="h-[22px]" />
+        <span className="rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-muted shadow-sm">For your points and miles</span>
+      </div>
 
-      <div className="relative z-10 flex items-center justify-between px-6 pt-6">
-        <Logo light className="h-[22px]" />
-        <div className="flex gap-1.5" aria-hidden="true">
+      <div className="relative mt-5">
+        <div className="relative h-[min(46dvh,420px)] min-h-[280px] overflow-hidden rounded-[36px] bg-midnight shadow-[0_24px_60px_rgba(15,23,48,0.22)] ring-[6px] ring-surface">
           {SLIDES.map((sl, k) => (
-            <span key={sl.city} className={cx("h-1.5 rounded-full bg-white transition-all duration-500", k === i ? "w-5 opacity-100" : "w-1.5 opacity-50")} />
+            <div
+              key={sl.city}
+              aria-hidden="true"
+              className="absolute inset-0 transition-opacity duration-[1200ms] ease-out"
+              style={{ opacity: k === i ? 1 : 0 }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={photoFor(sl.city)}
+                alt=""
+                className={cx("h-full w-full object-cover", k === i && "kenburns")}
+                fetchPriority={k === 0 ? "high" : "low"}
+              />
+            </div>
           ))}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/40" />
+          <div className="absolute top-4 right-4 left-4 flex items-center justify-between">
+            <span key={s.city} className="fade rounded-full bg-black/30 px-3 py-1 text-[12.5px] font-bold text-white backdrop-blur-md">
+              {s.city}
+            </span>
+            <div className="flex gap-1.5" aria-hidden="true">
+              {SLIDES.map((sl, k) => (
+                <span key={sl.city} className={cx("h-1.5 rounded-full bg-white transition-all duration-500", k === i ? "w-5 opacity-100" : "w-1.5 opacity-50")} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div
+          key={s.city}
+          className="rise absolute -bottom-7 left-1/2 flex w-[86%] -translate-x-1/2 items-center gap-3 rounded-2xl bg-surface p-3 shadow-[0_14px_36px_rgba(15,23,48,0.18)]"
+        >
+          <span className="bg-trace flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white">
+            <Icon d={ICONS.plane} size={22} stroke={1.6} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col leading-tight">
+            <span className="nums text-[19px] font-extrabold">{s.points} points</span>
+            <span className="truncate text-[13.5px] font-medium text-muted">{s.what}</span>
+          </span>
+          <span className="nums rounded-lg bg-soft px-2 py-1 text-[12px] font-extrabold text-muted">{s.code}</span>
         </div>
       </div>
 
-      <div className="relative z-10 mt-auto flex flex-col gap-5 px-6 pb-safe">
-        <div key={s.city} className="rise flex items-center gap-3 self-start rounded-2xl border border-white/25 bg-white/15 py-2.5 pr-4 pl-3 backdrop-blur-md">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-trace-pink">
-            <Icon d={ICONS.plane} size={20} stroke={1.6} />
-          </span>
-          <span className="flex flex-col leading-tight">
-            <span className="nums text-[19px] font-extrabold">{s.points} points</span>
-            <span className="text-[13.5px] font-medium text-white/85">{s.what}</span>
-          </span>
-        </div>
-
-        <h1 className="text-[44px] leading-[1.02] font-extrabold tracking-[-0.02em] drop-shadow-[0_2px_12px_rgba(0,0,0,0.35)]">
-          You&apos;re sitting on a free flight.
+      <div className="mt-14 flex flex-1 flex-col gap-3">
+        <h1 className="text-[40px] leading-[1.02] font-extrabold tracking-[-0.025em]">
+          You&apos;re sitting on a <span className="text-gradient">free flight.</span>
         </h1>
-        <p className="-mt-1 max-w-[30ch] text-[17px] leading-snug font-medium text-white/90">
+        <p className="text-[16.5px] leading-snug font-medium text-muted">
           Your points already book trips most people never find. We&apos;ll show you which ones, from your airport.
         </p>
+      </div>
 
-        <div className="flex flex-col gap-2.5 pt-1">
-          <PrimaryButton onClick={onStart}>See what my points can book</PrimaryButton>
-          <div className="flex items-center justify-center gap-3 text-[13px] font-medium text-white/80">
-            <span>60 seconds</span>
-            <span className="h-1 w-1 rounded-full bg-white/60" />
-            <span>No card needed</span>
-            <span className="h-1 w-1 rounded-full bg-white/60" />
-            <span>No logins</span>
-          </div>
+      <div className="flex flex-col gap-2.5 pt-5 pb-safe">
+        <PrimaryButton onClick={onStart}>See what my points can book</PrimaryButton>
+        <div className="flex items-center justify-center gap-3 text-[13px] font-medium text-muted">
+          <span>60 seconds</span>
+          <span className="h-1 w-1 rounded-full bg-muted/60" />
+          <span>No card needed</span>
+          <span className="h-1 w-1 rounded-full bg-muted/60" />
+          <span>No logins</span>
         </div>
-        <div className="-mt-2 flex justify-between text-[10.5px] text-white/55">
+        <div className="flex justify-between text-[10.5px] text-muted/80">
           <span>Typical saver prices, one way.</span>
           {credit && (
             <a href={credit.page} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">

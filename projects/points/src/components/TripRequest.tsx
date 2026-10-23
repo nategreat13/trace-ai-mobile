@@ -42,7 +42,7 @@ export function RequestStatus({ r, fresh, bare, onRemove }: { r: TripRequest; fr
     { label: "We watch for seats on your dates", sub: "You'll get an alert when they open", state: "next" as const },
   ];
   return (
-    <div className={cx("flex flex-col gap-4", !bare && "rounded-[24px] bg-white p-4 shadow-[0_8px_24px_rgba(15,23,48,0.08)]", fresh && "rise")}>
+    <div className={cx("flex flex-col gap-4", !bare && "rounded-[24px] bg-surface p-4 shadow-[0_8px_24px_rgba(15,23,48,0.08)]", fresh && "rise")}>
       <div className="flex items-start gap-3">
         <span className="bg-premium flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-gold">
           <Icon d={ICONS.pin} size={22} stroke={2} />

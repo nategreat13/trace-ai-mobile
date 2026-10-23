@@ -39,7 +39,7 @@ export function CardOfferLink({
         target="_blank"
         rel="sponsored noopener noreferrer"
         onClick={() => go(c, where, trip)}
-        className="flex min-h-[52px] items-center gap-3 bg-gradient-to-r from-[#FFF4E5] to-[#FFF0F6] px-4 py-2.5"
+        className="flex min-h-[52px] items-center gap-3 bg-gradient-to-r from-[#FFF4E5] to-[#FFF0F6] px-4 py-2.5 dark:from-[#2A2014] dark:to-[#2A1630]"
       >
         <ProgramBadge id={c.currency} size={30} />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
@@ -53,7 +53,7 @@ export function CardOfferLink({
     );
   }
   return (
-    <div className="flex flex-col gap-3 rounded-3xl bg-gradient-to-br from-[#FFF4E5] via-[#FFF0F6] to-[#F3EEFF] p-5">
+    <div className="flex flex-col gap-3 rounded-3xl bg-gradient-to-br from-[#FFF4E5] via-[#FFF0F6] to-[#F3EEFF] p-5 dark:from-[#2A2014] dark:via-[#2A1630] dark:to-[#1E1A3A]">
       <div className="flex items-center gap-3">
         <ProgramBadge id={c.currency} size={44} />
         <div className="flex flex-col leading-tight">
@@ -66,7 +66,7 @@ export function CardOfferLink({
           <span className="text-gradient nums text-[34px] leading-none font-extrabold">{bonusText(c)}</span>
           <span className="text-[13px] text-muted">bonus after {c.spend}</span>
         </div>
-        {c.tag && <span className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-extrabold text-near">{c.tag}</span>}
+        {c.tag && <span className="rounded-full bg-surface px-2.5 py-1 text-[11.5px] font-extrabold text-near">{c.tag}</span>}
       </div>
       <a
         href={c.applyUrl}
@@ -92,7 +92,7 @@ export function OfferTile({ card, why, className }: { card: CardOffer; why: stri
       target="_blank"
       rel="sponsored noopener noreferrer"
       onClick={() => go(card, "points")}
-      className={cx("flex w-[180px] shrink-0 flex-col gap-2 rounded-3xl border border-line bg-white p-4 active:scale-[0.98]", className)}
+      className={cx("flex w-[180px] shrink-0 flex-col gap-2 rounded-3xl border border-line bg-surface p-4 active:scale-[0.98]", className)}
     >
       <div className="flex items-center justify-between">
         <ProgramBadge id={card.currency} size={32} />

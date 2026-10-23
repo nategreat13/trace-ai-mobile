@@ -31,6 +31,7 @@ export const PROGRAMS: Record<ProgramId, Program> = {
   c1: { id: "c1", name: "Capital One Miles", short: "Capital One", kind: "bank", badge: "C1", badgeColor: "#8A4B5C", earnedOn: "Venture, Venture X", typical: 50000, sliderMax: 300000, flightCents: 1.6, cashCents: 0.5, transferUrl: "https://www.capitalone.com", logo: "/logos/c1.png" },
   citi: { id: "citi", name: "Citi ThankYou Points", short: "Citi", kind: "bank", badge: "TY", badgeColor: "#2E7D6B", earnedOn: "Strata Premier, Strata Elite", typical: 40000, sliderMax: 300000, flightCents: 1.6, cashCents: 1.0, transferUrl: "https://www.thankyou.com", logo: "/logos/citi.png" },
   bilt: { id: "bilt", name: "Bilt Points", short: "Bilt", kind: "bank", badge: "BLT", badgeColor: "#4A4A58", earnedOn: "Blue, Obsidian, Palladium", typical: 30000, sliderMax: 300000, flightCents: 1.8, cashCents: 0.55, transferUrl: "https://www.biltrewards.com", logo: "/logos/bilt.png" },
+  wells: { id: "wells", name: "Wells Fargo Rewards", short: "Wells Fargo", kind: "bank", badge: "WF", badgeColor: "#B3261E", earnedOn: "Autograph, Autograph Journey", typical: 40000, sliderMax: 300000, flightCents: 1.5, cashCents: 1.0, transferUrl: "https://www.wellsfargo.com", logo: "/logos/wells.png" },
   delta: { id: "delta", name: "Delta SkyMiles", short: "Delta", kind: "airline", badge: "DL", badgeColor: "#7A3E3E", earnedOn: "Delta SkyMiles Amex cards", typical: 40000, sliderMax: 250000, flightCents: 1.2, awardProgram: "delta", transferUrl: "https://www.delta.com", logo: "/logos/delta.png" },
   united: { id: "united", name: "United MileagePlus", short: "United", kind: "airline", badge: "UA", badgeColor: "#34508A", earnedOn: "Explorer, Quest, Club", typical: 35000, sliderMax: 250000, flightCents: 1.2, awardProgram: "united", transferUrl: "https://www.united.com", logo: "/logos/united.png" },
   atmos: { id: "atmos", name: "Alaska Atmos Rewards", short: "Alaska Atmos", kind: "airline", badge: "AS", badgeColor: "#1F6A73", earnedOn: "Summit, Ascent", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "atmos", transferUrl: "https://www.alaskaair.com", logo: "/logos/atmos.png" },
@@ -38,15 +39,15 @@ export const PROGRAMS: Record<ProgramId, Program> = {
   sw: { id: "sw", name: "Southwest Rapid Rewards", short: "Southwest", kind: "airline", badge: "WN", badgeColor: "#8A6A1F", earnedOn: "Rapid Rewards Plus, Priority", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "sw", transferUrl: "https://www.southwest.com", logo: "/logos/sw.png" },
 };
 
-export const BANK_IDS: ProgramId[] = ["amex", "chase", "c1", "citi", "bilt"];
+export const BANK_IDS: ProgramId[] = ["amex", "chase", "c1", "citi", "bilt", "wells"];
 export const AIRLINE_IDS: ProgramId[] = ["delta", "united", "atmos", "aa", "sw"];
 
 /** 1:1 unless noted. An airline's own members are listed as a 1:1 source. */
 export const PARTNERS: TransferPartner[] = [
-  { program: "avios", name: "British Airways Avios", short: "Avios", searchUrl: "https://www.britishairways.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }] },
+  { program: "avios", name: "British Airways Avios", short: "Avios", searchUrl: "https://www.britishairways.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }] },
   { program: "aeroplan", name: "Air Canada Aeroplan", short: "Aeroplan", searchUrl: "https://www.aircanada.com/aeroplan", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }] },
   { program: "virgin", name: "Virgin Atlantic Flying Club", short: "Virgin", searchUrl: "https://www.virginatlantic.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }] },
-  { program: "flyingblue", name: "Air France-KLM Flying Blue", short: "Flying Blue", searchUrl: "https://www.flyingblue.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }] },
+  { program: "flyingblue", name: "Air France-KLM Flying Blue", short: "Flying Blue", searchUrl: "https://www.flyingblue.com", sources: [{ from: "amex", ratio: 1 }, { from: "chase", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "citi", ratio: 1 }, { from: "bilt", ratio: 1 }, { from: "wells", ratio: 1 }] },
   { program: "turkish", name: "Turkish Miles&Smiles", short: "Turkish", searchUrl: "https://www.turkishairlines.com", sources: [{ from: "citi", ratio: 1 }, { from: "c1", ratio: 1 }, { from: "bilt", ratio: 1 }] },
   { program: "aa", name: "American AAdvantage", short: "AAdvantage", searchUrl: "https://www.aa.com", sources: [{ from: "aa", ratio: 1 }, { from: "citi", ratio: 1 }] },
   { program: "atmos", name: "Alaska Atmos Rewards", short: "Atmos", searchUrl: "https://www.alaskaair.com", sources: [{ from: "atmos", ratio: 1 }, { from: "bilt", ratio: 1 }] },
@@ -74,6 +75,10 @@ export const CARD_OFFERS: CardOffer[] = [
   { id: "united-explorer", name: "United Explorer", currency: "united", bonus: 70000, spend: "$3,000 in 3 months", fee: "$0 first year", tag: "Elevated offer", applyUrl: "https://creditcards.chase.com/travel-credit-cards/united/united-explorer" },
   { id: "atmos-summit", name: "Atmos Rewards Summit", currency: "atmos", bonus: 100000, extra: " + 25k companion award", spend: "$6,000 in 90 days", fee: "$395/yr", tag: "Elevated offer", applyUrl: "https://www.alaskaair.com/atmosrewards/content/credit-cards/visa-summit" },
   { id: "aa-plat", name: "Citi AAdvantage Platinum Select", currency: "aa", bonus: 80000, spend: "$3,500 in 4 months", fee: "$0 first year", tag: "Limited time", applyUrl: "https://www.citi.com/credit-cards/citi-aadvantage-platinum-select-world-elite-mastercard" },
+  // Added Oct 22, 2026 from current public reporting; confirm on the issuer page before promoting.
+  { id: "venture-x", name: "Capital One Venture X", currency: "c1", bonus: 75000, spend: "$4,000 in 3 months", fee: "$395/yr", applyUrl: "https://www.capitalone.com/credit-cards/venture-x/" },
+  { id: "amex-plat", name: "Amex Platinum", currency: "amex", bonus: 175000, upTo: true, spend: "$12,000 in 6 months", fee: "$895/yr", tag: "Personalized offer", applyUrl: "https://www.americanexpress.com/us/credit-cards/card/platinum/" },
+  { id: "wf-journey", name: "Wells Fargo Autograph Journey", currency: "wells", bonus: 60000, spend: "$4,000 in 3 months", fee: "$95/yr", applyUrl: "https://creditcards.wellsfargo.com/autograph-journey-visa-credit-card/" },
   { id: "sw-plus", name: "Southwest Rapid Rewards Plus", currency: "sw", bonus: 50000, spend: "$1,000 in 3 months", fee: "$99/yr", applyUrl: "https://creditcards.chase.com/travel-credit-cards/southwest/plus" },
 ];
 

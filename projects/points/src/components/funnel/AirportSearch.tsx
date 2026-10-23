@@ -30,12 +30,12 @@ export function AirportSearch({ onPick }: { onPick: (a: LaunchAirport) => void }
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="City, state, zip or airport code"
-          className="min-h-[60px] w-full rounded-2xl bg-soft pr-4 pl-12 text-[17px] outline-none focus:bg-white focus:ring-2 focus:ring-trace-pink"
+          className="min-h-[60px] w-full rounded-2xl bg-soft pr-4 pl-12 text-[17px] outline-none focus:bg-surface focus:ring-2 focus:ring-trace-pink"
         />
       </div>
 
       {matches.length > 0 && (
-        <ul className="rise overflow-hidden rounded-3xl bg-white shadow-[0_10px_30px_rgba(15,23,48,0.10)]" role="listbox" aria-label="Airports">
+        <ul className="rise overflow-hidden rounded-3xl bg-surface shadow-[0_10px_30px_rgba(15,23,48,0.10)]" role="listbox" aria-label="Airports">
           {matches.map(({ airport: a, detail }) => (
             <li key={a.code} className="border-b border-line last:border-b-0">
               <button
@@ -82,7 +82,7 @@ export function AirportSearch({ onPick }: { onPick: (a: LaunchAirport) => void }
                 placeholder="you@example.com"
                 className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-line px-3 text-[16px] outline-none focus:border-trace-red"
               />
-              <button type="submit" disabled={!emailOk} className="min-h-[48px] rounded-xl bg-ink px-4 text-[15px] font-bold text-white disabled:bg-line disabled:text-muted">
+              <button type="submit" disabled={!emailOk} className="min-h-[48px] rounded-xl bg-ink px-4 text-[15px] font-bold text-surface disabled:bg-line disabled:text-muted">
                 Notify me
               </button>
             </form>

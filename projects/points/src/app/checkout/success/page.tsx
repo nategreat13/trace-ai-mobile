@@ -1,0 +1,58 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { Icon, ICONS } from "@/components/ui";
+import { verifyCheckout } from "@/lib/payments";
+import { usePoints } from "@/lib/store";
+
+/** Stripe sends people here after Checkout. Verify the session, then unlock. */
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh" />}>
+      <Confirm />
+    </Suspense>
+  );
+}
+
+function Confirm() {
+  const { update, ready } = usePoints();
+  const router = useRouter();
+  const sessionId = useSearchParams().get("session_id");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!sessionId) {
+      setError("We couldn't find your checkout.");
+      return;
+    }
+    verifyCheckout(sessionId)
+      .then((m) => {
+        update({ member: m, step: "done" });
+        router.replace("/");
+      })
+      .catch((e: Error) => setError(e.message));
+  }, [ready, sessionId, update, router]);
+
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-8 text-center">
+      {error ? (
+        <>
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-near-bg text-near">
+            <Icon d={ICONS.info} size={26} />
+          </span>
+          <h1 className="text-[24px] font-extrabold">We couldn&apos;t confirm your trial</h1>
+          <p className="text-[15px] text-muted">{error} If you were charged, contact support and we&apos;ll sort it out.</p>
+          <Link href="/checkout" className="bg-trace mt-2 rounded-2xl px-6 py-3.5 font-extrabold text-white">Try again</Link>
+        </>
+      ) : (
+        <>
+          <span className="pulse-soft text-trace-pink"><Icon d={ICONS.plane} size={44} stroke={1.6} /></span>
+          <h1 className="text-[24px] font-extrabold">Confirming your free week…</h1>
+        </>
+      )}
+    </div>
+  );
+}

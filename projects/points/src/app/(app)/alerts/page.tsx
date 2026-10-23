@@ -48,7 +48,7 @@ export default function AlertsPage() {
       ))}
 
       <div className="flex gap-3 rounded-2xl bg-soft p-4">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface">
           <Icon d={ICONS.seat} size={18} />
         </span>
         <p className="text-[14px] leading-snug text-muted">
