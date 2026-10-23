@@ -8,6 +8,9 @@ import { money, num } from "@/lib/format";
 import { creditFor } from "@/lib/images";
 import { usePoints } from "@/lib/store";
 import { finePrint } from "@/lib/tripText";
+import { useCashDeals } from "@/lib/cashDeals";
+import { centsPerPoint, cppLabel } from "@/lib/value";
+import { CashDealStrip } from "./results/Insights";
 import { CardOfferLink } from "./CardOffer";
 import { cabinLabel } from "./results/DestinationCard";
 import { TripThumb } from "./TripThumb";
@@ -105,6 +108,7 @@ export function TripDetail({
   const pct = Math.min(100, Math.round((have / r.need) * 100));
   const saved = Math.max(0, r.cashTotal - r.taxesTotal);
   const credit = creditFor(r.trip.city);
+  const cash = useCashDeals(r.ok ? null : state.airport, [r.trip.city])[r.trip.city];
 
   return (
     <div className="flex flex-col">
@@ -153,6 +157,10 @@ export function TripDetail({
               <span className="nums text-white/75 line-through">{money(r.cashTotal)} cash fare</span>
               <span className="nums">You pay ~{money(r.taxesTotal)} + points</span>
             </div>
+          </div>
+          <div className="relative mt-3 flex items-center gap-2 border-t border-white/20 pt-3 text-[13px] font-semibold">
+            <span className="nums shrink-0 whitespace-nowrap rounded-full bg-white px-2.5 py-0.5 text-[13px] font-extrabold text-trace-pink">{cppLabel(centsPerPoint(r))} per point</span>
+            <span className="text-white/90">Cashing out gets you about 1¢.</span>
           </div>
         </div>
 
@@ -211,6 +219,11 @@ export function TripDetail({
         </section>
 
         {!r.ok && r.suggestion && <CardOfferLink suggestion={r.suggestion} gap={r.gap} trip={r.trip.id} where="detail" />}
+        {!r.ok && cash && (
+          <div className="overflow-hidden rounded-[24px] bg-surface ring-1 ring-line [&>a]:border-t-0">
+            <CashDealStrip deal={cash} city={r.trip.city} />
+          </div>
+        )}
 
         {/* Seats */}
         {member ? (

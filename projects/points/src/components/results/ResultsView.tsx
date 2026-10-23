@@ -10,7 +10,10 @@ import { groupDestinations, rankDestinations, type Destination } from "@/lib/des
 import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
+import { useCashDeals } from "@/lib/cashDeals";
+import { sharePointsCard } from "@/lib/shareCard";
 import { DestinationCard } from "./DestinationCard";
+import { BonusBanner, CashOutCompare } from "./Insights";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
 import { SwipeDeck } from "./SwipeDeck";
 
@@ -83,6 +86,8 @@ export function ResultsView({
   };
 
   const savedCount = state.saved.length;
+  // Cash fares from Trace's deals feed, for the trips they're short on.
+  const cashDeals = useCashDeals(state.airport, all.filter((d) => !d.ok).map((d) => d.city));
   const card = (d: Destination, i: number) => (
     <DestinationCard
       key={d.city}
@@ -95,6 +100,7 @@ export function ResultsView({
       showHeart={mode === "member"}
       onOpen={open}
       onToggleSave={toggleSave}
+      cashDeal={d.ok ? undefined : cashDeals[d.city]}
     />
   );
 
@@ -104,7 +110,23 @@ export function ResultsView({
         <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
         <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
         <div className="relative flex flex-col gap-1">
-          <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
+          <div className="flex items-center justify-between">
+            <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
+            <button
+              type="button"
+              onClick={() =>
+                sharePointsCard({
+                  worth: values.flights,
+                  bookable: allOk,
+                  origin: state.airport ?? "",
+                  best: [...all].filter((d) => d.ok).sort((a, b) => b.value - a.value)[0]?.city,
+                })
+              }
+              className="flex min-h-[34px] items-center gap-1.5 rounded-full bg-surface/80 px-3 text-[12.5px] font-bold ring-1 ring-line backdrop-blur active:scale-95"
+            >
+              <Icon d={ICONS.external} size={13} stroke={2.4} /> Share
+            </button>
+          </div>
           <div className="flex items-baseline gap-2">
             <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
             <span className="text-[15px] font-bold text-muted">in flights</span>
@@ -119,6 +141,7 @@ export function ResultsView({
             {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
           <Freshness />
+          <CashOutCompare />
         </div>
         <div role="tablist" aria-label="View" className="relative mt-4 grid grid-cols-2 rounded-2xl bg-soft p-1">
           <span
@@ -207,6 +230,7 @@ export function ResultsView({
             )
           ) : (
             <>
+              {!query && <BonusBanner onOpen={open} />}
               {okDest.length > 0 && <SectionHead ok label="Ready to book" count={okDest.length} />}
               {okDest.map((d, i) => (
                 <Fragment key={d.city}>

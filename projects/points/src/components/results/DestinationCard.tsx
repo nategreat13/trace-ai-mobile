@@ -3,7 +3,9 @@
 import type { TripResult } from "@/engine/types";
 import { REGION_COLOR, type Destination } from "@/lib/destinations";
 import { kShort, money, num } from "@/lib/format";
+import type { CashDeal } from "@/lib/cashDeals";
 import { CardOfferLink } from "../CardOffer";
+import { CashDealStrip, ValueChip } from "./Insights";
 import { TripThumb } from "../TripThumb";
 import { CabinBadge, cx, HeartIcon, Icon, ICONS, LockIcon, StatusPill, stagger } from "../ui";
 
@@ -21,6 +23,7 @@ export function DestinationCard({
   showHeart,
   onOpen,
   onToggleSave,
+  cashDeal,
 }: {
   d: Destination;
   i: number;
@@ -31,6 +34,7 @@ export function DestinationCard({
   showHeart: boolean;
   onOpen: (r: TripResult) => void;
   onToggleSave: (d: Destination) => void;
+  cashDeal?: CashDeal;
 }) {
   const blur = locked ? "blur-[6px] select-none" : "";
   // Shown even when locked: the gap is already visible, and the card is the way past it.
@@ -106,10 +110,13 @@ export function DestinationCard({
             <span className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="flex items-center gap-2">
                 <CabinBadge business={o.isBusiness} label={cabinLabel(o)} />
-                <span className="text-[13px] font-semibold text-muted">{o.trip.route}</span>
+                <span className="text-[13px] font-semibold whitespace-nowrap text-muted">{o.trip.route}</span>
               </span>
-              <span className={cx("truncate text-[12.5px] text-muted", locked && "blur-[3px] select-none")}>
-                {money(o.cashTotal)} fare · via {o.best.partner.short}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <ValueChip r={o} />
+                <span className={cx("truncate text-[12.5px] text-muted", locked && "blur-[3px] select-none")}>
+                  {money(o.cashTotal)} fare · via {o.best.partner.short}
+                </span>
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-0.5">
@@ -125,6 +132,8 @@ export function DestinationCard({
       </div>
 
       {offer && <CardOfferLink compact suggestion={offer} gap={d.lead.gap} trip={d.lead.trip.id} where="list" />}
+      {/* The fare link names the city, so it stays off locked cards. */}
+      {cashDeal && !locked && <CashDealStrip deal={cashDeal} city={d.city} />}
     </article>
   );
 }
