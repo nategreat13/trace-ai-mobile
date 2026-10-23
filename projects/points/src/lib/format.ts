@@ -16,3 +16,12 @@ export function todayIso(): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/** "today", "yesterday", "3 days ago" or "Oct 21" for a YYYY-MM-DD date. */
+export function relativeDay(iso: string): string {
+  const days = Math.round((Date.parse(`${todayIso()}T12:00:00`) - Date.parse(`${iso}T12:00:00`)) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return shortDate(iso);
+}

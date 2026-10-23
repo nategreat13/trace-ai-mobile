@@ -37,7 +37,7 @@ Everything lives in `src/engine/data.ts`. Each value is labeled in the UI as typ
 2. **Card offers** (`CARD_OFFERS`): update bonus, spend, fee and tag, then bump `CARD_OFFERS_AS_OF`. The date shows next to every offer.
 3. **Transfer partners** (`PARTNERS`): add a source or change a ratio. Ratios are before bonuses.
 4. **Trips** (`tripDefs`): per-person typical saver prices. The first 16 come from the Oct 21 research (`source: "brief"`). The other 36 are Trace estimates from published award charts (`source: "estimate"`), labeled that way in the app; verify them and flip `source` when they're checked. Use `byOrigin` for inland or Northwest pricing, `until` for promos that end, and `notFrom` for routes a program doesn't serve. Mark anything shaky with a `note`; it shows in the fine print.
-5. Bump `DATA_AS_OF`, then run `yarn workspace @trace/points test`. The tests pin the three cases from the brief, so a data change that breaks them is worth a second look.
+5. Bump `DATA_AS_OF` (it drives the "Live · Prices updated 2 days ago" label on the results page, so the refresh job should set it), then run `yarn workspace @trace/points test`. The tests pin the three cases from the brief, so a data change that breaks them is worth a second look.
 
 Still to verify: the inland price adjustments, Virgin's ANA pricing (last confirmed 2024), and Bilt's current card bonus.
 

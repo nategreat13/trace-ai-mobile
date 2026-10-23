@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { DATA_AS_OF } from "@/engine/data";
+import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations, type Destination } from "@/lib/destinations";
-import { money, plural } from "@/lib/format";
+import { money, plural, relativeDay } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { DestinationCard } from "./DestinationCard";
@@ -39,13 +42,15 @@ export function ResultsView({
   const [filter, setFilter] = useState<FilterId>("all");
   const [sort, setSort] = useState<SortId>("best");
   const [panel, setPanel] = useState(false);
+  const [query, setQuery] = useState("");
   const shown = useCountUp(values.flights, countUp);
 
   const all = useMemo(() => groupDestinations(deck), [deck]);
   const freeCities = useMemo(() => new Set(all.slice(0, FREE_DESTINATIONS).map((d) => d.city)), [all]);
   const isLocked = (city: string) => mode === "free" && !freeCities.has(city);
 
-  const shownDest = sortDestinations(filterDestinations(deck, filter), sort, state.picks);
+  const matches = (d: Destination) => matchesQuery(d, query);
+  const shownDest = sortDestinations(filterDestinations(deck, filter), sort, state.picks).filter(matches);
   const okDest = shownDest.filter((d) => d.ok);
   const nearDest = shownDest.filter((d) => !d.ok);
   const filterActive = filter !== "all" || sort !== "best";
@@ -104,11 +109,9 @@ export function ResultsView({
             Trips most people never find. We checked 11 airline programs from {state.airport}.{" "}
             {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
+          <Freshness />
         </div>
-      </header>
-
-      <div className="sticky top-0 z-20 flex items-center gap-2 bg-surface/90 px-5 py-3 backdrop-blur-md">
-        <div role="tablist" aria-label="View" className="relative grid flex-1 grid-cols-2 rounded-2xl bg-soft p-1">
+        <div role="tablist" aria-label="View" className="relative mt-4 grid grid-cols-2 rounded-2xl bg-soft p-1">
           <span
             aria-hidden="true"
             className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-surface shadow-sm transition-transform duration-300"
@@ -126,6 +129,32 @@ export function ResultsView({
               {v}
             </button>
           ))}
+        </div>
+      </header>
+
+      <div className="sticky top-0 z-20 flex items-center gap-2 bg-surface/90 px-5 py-3 backdrop-blur-md">
+        <div className="relative flex-1">
+          <label htmlFor="deal-search" className="sr-only">Search your deals</label>
+          <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"><Icon d={ICONS.search} size={18} /></span>
+          <input
+            id="deal-search"
+            type="search"
+            autoComplete="off"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${plural(all.length, "destination")}`}
+            className="min-h-[50px] w-full rounded-2xl bg-soft pr-10 pl-10 text-[15.5px] outline-none focus:bg-surface focus:ring-2 focus:ring-trace-pink [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              className="absolute top-1/2 right-2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-muted active:bg-line"
+            >
+              <Icon d={ICONS.close} size={14} stroke={2.6} />
+            </button>
+          )}
         </div>
         <button
           type="button"
@@ -147,7 +176,26 @@ export function ResultsView({
       <div className="flex flex-1 flex-col gap-4 px-4 pt-1 pb-8">
         {view === "list" ? (
           shownDest.length === 0 ? (
-            <p className="py-12 text-center text-[15px] text-muted">No trips match this filter yet.</p>
+            query ? (
+              <div className="rise flex flex-col items-center gap-3 px-4 py-12 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-soft text-muted"><Icon d={ICONS.search} size={22} /></span>
+                <div className="text-[18px] font-extrabold">No deals for &ldquo;{query}&rdquo; yet</div>
+                <p className="text-[14.5px] leading-snug text-muted">
+                  {mode === "member" ? "Search every airport in the world and we'll price it for you." : "Members can request any destination and we'll price it in their points."}
+                </p>
+                {mode === "member" ? (
+                  <Link href={`/plan?q=${encodeURIComponent(query)}`} className="bg-trace mt-1 rounded-2xl px-5 py-3 text-[15px] font-extrabold text-white">
+                    Search all airports for &ldquo;{query}&rdquo;
+                  </Link>
+                ) : (
+                  <button type="button" onClick={() => setQuery("")} className="mt-1 rounded-2xl bg-soft px-5 py-3 text-[15px] font-bold">
+                    Clear search
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="py-12 text-center text-[15px] text-muted">No trips match this filter yet.</p>
+            )
           ) : (
             <>
               {okDest.length > 0 && <SectionHead ok label="Ready to book" count={okDest.length} />}
@@ -163,8 +211,8 @@ export function ResultsView({
           )
         ) : (
           <SwipeDeck
-            key={`${filter}-${sort}`}
-            cards={mode === "free" ? all : shownDest}
+            key={`${filter}-${sort}-${query}`}
+            cards={mode === "free" ? all.filter(matches) : shownDest}
             freeCount={mode === "free" ? FREE_DESTINATIONS : null}
             origin={state.airport ?? ""}
             travelers={state.travelers}
@@ -268,6 +316,50 @@ function EmailListCard() {
           </form>
         </>
       )}
+    </div>
+  );
+}
+
+/** Matches a search against a destination's city, airport, region, kind and cabins. */
+function matchesQuery(d: Destination, query: string): boolean {
+  const q = query.toLowerCase().trim();
+  if (!q) return true;
+  const tokens = [
+    d.city,
+    d.code,
+    d.region,
+    d.kind === "beach" ? "beach beaches" : d.kind === "nature" ? "nature outdoors mountains" : "city cities",
+    d.international ? "international abroad" : "domestic usa",
+    ...d.options.map((o) => (o.isBusiness ? "business first lie-flat lieflat premium" : "economy")),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/[\s,&]+/);
+  return q
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/\s+/)
+    .every((w) => fuzzyIncludes(tokens, w));
+}
+
+/**
+ * Shows the data is alive: when prices were last refreshed, and that the math
+ * reruns against the user's balances and today's bonuses on every visit. The
+ * date comes from the data itself, so the refresh job updates it automatically.
+ */
+function Freshness() {
+  const updated = relativeDay(DATA_AS_OF);
+  return (
+    <div className="mt-3 flex items-center gap-2.5 self-start rounded-full bg-ok-bg py-1.5 pr-3.5 pl-2.5">
+      <span className="relative flex h-2.5 w-2.5">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-trace-green opacity-60" />
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-trace-green" />
+      </span>
+      <span className="text-[12.5px] leading-tight font-bold text-ok">
+        Live · Prices updated {updated}, recalculated for your points just now
+      </span>
     </div>
   );
 }

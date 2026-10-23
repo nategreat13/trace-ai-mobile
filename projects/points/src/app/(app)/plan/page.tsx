@@ -56,6 +56,14 @@ export default function PlanPage() {
 
   const [q, setQ] = useState("");
   const [focus, setFocus] = useState(false);
+  // Arriving from a Discover search with no match: start with that search open.
+  useEffect(() => {
+    const pre = new URLSearchParams(window.location.search).get("q");
+    if (pre) {
+      setQ(pre);
+      setFocus(true);
+    }
+  }, []);
   const [where, setWhere] = useState<Where | null>(null);
   const [depart, setDepart] = useState(addDays(todayIso(), 60));
   const [ret, setRet] = useState(addDays(todayIso(), 67));
