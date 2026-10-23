@@ -38,8 +38,8 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <span className="rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-muted shadow-sm">For your points and miles</span>
       </div>
 
-      <div className="relative mt-5">
-        <div className="relative h-[min(46dvh,420px)] min-h-[280px] overflow-hidden rounded-[36px] bg-midnight shadow-[0_24px_60px_rgba(15,23,48,0.22)] ring-[6px] ring-surface">
+      <div className="relative mt-5 flex max-h-[440px] min-h-[190px] flex-1 flex-col">
+        <div className="relative flex-1 overflow-hidden rounded-[36px] bg-midnight shadow-[0_24px_60px_rgba(15,23,48,0.22)] ring-[6px] ring-surface">
           {SLIDES.map((sl, k) => (
             <div
               key={sl.city}
@@ -57,6 +57,11 @@ export function Landing({ onStart }: { onStart: () => void }) {
             </div>
           ))}
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/40" />
+          {credit && (
+            <a href={credit.page} target="_blank" rel="noopener noreferrer" className="absolute top-12 left-5 text-[10px] text-white/75">
+              Photo: {credit.author}, {credit.license}
+            </a>
+          )}
           <div className="absolute top-4 right-4 left-4 flex items-center justify-between">
             <span key={s.city} className="fade rounded-full bg-black/30 px-3 py-1 text-[12.5px] font-bold text-white backdrop-blur-md">
               {s.city}
@@ -80,12 +85,15 @@ export function Landing({ onStart }: { onStart: () => void }) {
             <span className="nums text-[19px] font-extrabold">{s.points} points</span>
             <span className="truncate text-[13.5px] font-medium text-muted">{s.what}</span>
           </span>
-          <span className="nums rounded-lg bg-soft px-2 py-1 text-[12px] font-extrabold text-muted">{s.code}</span>
+          <span className="flex shrink-0 flex-col items-center gap-0.5">
+            <span className="nums rounded-lg bg-soft px-2 py-1 text-[12px] font-extrabold text-muted">{s.code}</span>
+            <span className="text-[10px] font-semibold text-muted">one way</span>
+          </span>
         </div>
       </div>
 
-      <div className="mt-14 flex flex-1 flex-col gap-3">
-        <h1 className="text-[40px] leading-[1.02] font-extrabold tracking-[-0.025em]">
+      <div className="mt-12 flex flex-col gap-2.5">
+        <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.025em]">
           You&apos;re sitting on a <span className="text-gradient">free flight.</span>
         </h1>
         <p className="text-[16.5px] leading-snug font-medium text-muted">
@@ -102,22 +110,17 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <span className="h-1 w-1 rounded-full bg-muted/60" />
           <span>No logins</span>
         </div>
-        <p className="text-center text-[13.5px] text-muted">
-          Already a member?{" "}
-          <Link href="/signin" className="font-bold text-ink underline-offset-2 hover:underline">
-            Sign in
-          </Link>
-        </p>
-        <div className="flex justify-between text-[10.5px] text-muted/80">
+        <div className="flex items-center justify-between pt-0.5 text-[12.5px] text-muted">
           <span>
-            Typical saver prices, one way. <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link> ·{" "}
+            Already a member?{" "}
+            <Link href="/signin" className="font-bold text-ink underline-offset-2 hover:underline">
+              Sign in
+            </Link>
+          </span>
+          <span>
+            <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link> ·{" "}
             <Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link>
           </span>
-          {credit && (
-            <a href={credit.page} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
-              Photo: {credit.author}, {credit.license}
-            </a>
-          )}
         </div>
       </div>
     </div>

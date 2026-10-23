@@ -92,7 +92,9 @@ body {
   background: linear-gradient(135deg, #0F1730 0%, #1E2650 60%, #2A2160 100%);
 }
 
-.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 14px); }
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); }
+.pb-safe-lg { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); }
+.pt-safe { padding-top: max(env(safe-area-inset-top, 0px), 10px); }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }

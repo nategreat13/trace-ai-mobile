@@ -61,13 +61,14 @@ Sign-in is passwordless. Firebase Auth (project `trace-ai-b9cba`) only emails th
 
 ## Payments (Stripe)
 
-Checkout lives at `/checkout`. With no Stripe keys it runs in **test mode**: the trial starts on the device only. With keys it uses Stripe Checkout (7-day trial, card up front). Setup steps are in [LAUNCH.md](LAUNCH.md).
+Checkout lives at `/checkout`, with payment on the page: Stripe's Express Checkout (Apple Pay, Google Pay) and Payment Element (card). `POST /api/checkout` starts a 7-day trial subscription and returns its setup-intent secret; the browser confirms the card with Stripe directly, then `/checkout/success?subscription=…` verifies it. With no Stripe keys it runs in **test mode** with stand-in fields and the trial starts on the device only. Backing out of checkout once offers the exit gift, annual at $59.99 (`STRIPE_PRICE_ANNUAL_GIFT`), still with the free week. Setup steps are in [LAUNCH.md](LAUNCH.md).
 
 The webhook (`/api/stripe/webhook`) keeps `pointsUsers` in step with Stripe:
 
-- `checkout.session.completed`: records the member (covers buyers who close the tab), sends Meta CAPI `StartTrial` with the session id as the event id (the browser sends the same id), and posts the new trial to Slack.
 - `customer.subscription.trial_will_end`: emails the trial reminder (set Stripe's "Trial ending events" to 2 days so it matches checkout). Without email set up, it asks the team in Slack to send it.
-- `customer.subscription.updated` / `.deleted`: turns access on or off. `trialing`, `active` and `past_due` keep access.
+- `customer.subscription.updated` / `.deleted`: turns access on or off. `trialing`, `active` and `past_due` keep access. Subscriptions without a card (abandoned checkouts) are ignored; a carded one the success page never saw is recorded here.
+
+The success-page verify records the member, sends Meta CAPI `StartTrial` with the subscription id as the event id (the browser sends the same id), and posts the new trial to Slack, once per subscription.
 
 The billing portal opens for the signed-in account's own Stripe customer only.
 

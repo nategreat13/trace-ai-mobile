@@ -10,6 +10,8 @@
     "test": "node --import tsx --test src/engine/*.test.ts src/lib/*.test.ts"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^3",
+    "@stripe/stripe-js": "^7",
     "@trace/shared": "1.0.0",
     "firebase": "^12.10.0",
     "firebase-admin": "^13.0.0",

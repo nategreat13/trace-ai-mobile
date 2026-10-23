@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { PROGRAMS } from "@/engine/data";
+import { OFFERED_IDS, PROGRAMS } from "@/engine/data";
 import { buildDeck, pointValues } from "@/engine/engine";
 import type { Balances, PointsInput, ProgramId, TripResult } from "@/engine/types";
 import { todayIso } from "./format";
@@ -50,6 +50,8 @@ export interface TripRequest {
  */
 export interface Membership {
   plan: "annual" | "monthly";
+  /** "gift" when they took the $59.99 annual exit offer. */
+  offer?: string;
   startedAt: string;
   /** When the free week ends and billing starts, ISO. */
   trialEndsAt: string;
@@ -79,6 +81,12 @@ export interface PointsState {
   planned: PlannedTrip[];
   requests: TripRequest[];
   plan: "annual" | "monthly";
+  /** Claimed the exit gift: annual at $59.99, still with the free week. */
+  gift: boolean;
+  /** The gift shows once; after that, leaving checkout just leaves. */
+  giftOffered: boolean;
+  /** Reached the payment page, so backing out of it can trigger the gift. */
+  checkoutVisited: boolean;
   member: null | Membership;
   alertsReadAt: string | null;
   /** The dollar value counts up only on the first look at results. */
@@ -101,6 +109,9 @@ export const INITIAL: PointsState = {
   planned: [],
   requests: [],
   plan: "annual",
+  gift: false,
+  giftOffered: false,
+  checkoutVisited: false,
   member: null,
   alertsReadAt: null,
   resultsSeen: false,
@@ -128,6 +139,8 @@ export function PointsProvider({ children }: { children: React.ReactNode }) {
         // Steps from older builds that no longer exist.
         if (saved.step === "trav") saved.step = "picks";
         if (saved.step === "email") saved.step = "results";
+        // Programs no longer offered (Wells Fargo, Marriott) drop out of the answers.
+        saved.progs = (saved.progs ?? []).filter((id) => OFFERED_IDS.includes(id));
         setState(saved);
       }
     } catch {

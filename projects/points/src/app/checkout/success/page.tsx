@@ -8,7 +8,7 @@ import { sendSignInLink, useAccount } from "@/lib/account";
 import { verifyCheckout } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 
-/** Stripe sends people here after Checkout. Verify the session, then unlock. */
+/** Checkout lands here once the card is on the trial (or after a bank check redirect). Verify, then unlock. */
 export default function CheckoutSuccessPage() {
   return (
     <Suspense fallback={<div className="min-h-dvh" />}>
@@ -21,16 +21,16 @@ function Confirm() {
   const { update, ready } = usePoints();
   const { refresh } = useAccount();
   const router = useRouter();
-  const sessionId = useSearchParams().get("session_id");
+  const subscription = useSearchParams().get("subscription");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!ready) return;
-    if (!sessionId) {
+    if (!subscription) {
       setError("We couldn't find your checkout.");
       return;
     }
-    verifyCheckout(sessionId)
+    verifyCheckout(subscription)
       .then(async ({ member, email, signedIn }) => {
         update({ member, step: "done", ...(email ? { email } : {}) });
         // New accounts are signed in already. An existing account gets an
@@ -40,7 +40,7 @@ function Confirm() {
         router.replace("/");
       })
       .catch((e: Error) => setError(e.message));
-  }, [ready, sessionId, update, router, refresh]);
+  }, [ready, subscription, update, router, refresh]);
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-8 text-center">

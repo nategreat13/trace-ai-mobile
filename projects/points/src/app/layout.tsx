@@ -28,7 +28,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
   },
   twitter: { card: "summary_large_image", title: "You're sitting on a free flight", description: DESCRIPTION },
-  icons: { icon: "/favicon.png" },
+  icons: { icon: "/favicon.png", apple: "/apple-touch-icon.png" },
   appleWebApp: { capable: true, title: "Trace", statusBarStyle: "default" },
 };
 

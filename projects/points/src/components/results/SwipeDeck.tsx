@@ -109,8 +109,9 @@ export function SwipeDeck({
   // The card underneath grows into place as the top one is dragged away.
   const lift = Math.min(1, Math.abs(dx) / (THRESHOLD * 1.6));
   return (
-    <div className="flex flex-1 flex-col gap-5">
-      <div className="relative h-[min(64dvh,560px)] min-h-[440px]">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 pb-1">
+      {/* Fills whatever the screen leaves after the top bar and buttons. */}
+      <div className="relative min-h-[300px] flex-1">
         {next && (
           <div
             key={`under-${next.city}`}

@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AirportSearch } from "@/components/funnel/AirportSearch";
 import { BalancesEditor } from "@/components/app/BalancesEditor";
-import { PRICES } from "@/components/Paywall";
 import { Card, Chip, cx, Eyebrow, Icon, ICONS, SecondaryButton } from "@/components/ui";
 import { AIRLINE_IDS, BANK_IDS, PROGRAMS } from "@/engine/data";
 import { airportByCode } from "@/lib/airports";
 import { useAccount } from "@/lib/account";
-import { openBillingPortal } from "@/lib/payments";
+import { openBillingPortal, planPrice } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 import { useTheme } from "@/lib/theme";
 
@@ -40,7 +39,7 @@ export default function AccountPage() {
       <section className="flex flex-col gap-2">
         <Eyebrow>Plan</Eyebrow>
         <Card className="flex flex-col gap-1 p-4">
-          <div className="text-[16px] font-extrabold">{PRICES[member.plan].label}{trialing ? " · free trial" : ""}</div>
+          <div className="text-[16px] font-extrabold">{planPrice(member.plan, member.offer === "gift").label}{trialing ? " · free trial" : ""}</div>
           <div className="text-[14px] text-muted">
             {trialing ? <>Started {fmt(started)}. Trial ends {fmt(trialEnds)}.</> : <>Member since {fmt(started)}.</>}
             {member.status === "past_due" && <span className="block pt-1 font-semibold text-trace-red">Your last payment didn&apos;t go through. Update your card to keep access.</span>}

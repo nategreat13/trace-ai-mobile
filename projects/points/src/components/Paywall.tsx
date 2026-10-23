@@ -6,15 +6,12 @@ import { PROGRAMS } from "@/engine/data";
 import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { money, plural, shortDate } from "@/lib/format";
+import { planPrice } from "@/lib/payments";
 import { useDeck, usePoints } from "@/lib/store";
+import { PlanPicker } from "./PlanPicker";
 import type { PayReason } from "./results/ResultsView";
 import { TripThumb } from "./TripThumb";
 import { Check, cx, Icon, ICONS, PrimaryButton, stagger } from "./ui";
-
-export const PRICES = {
-  annual: { label: "Yearly · $99", sub: "Just $1.90 a week", week: "$1.90" },
-  monthly: { label: "Monthly · $12", sub: "Cancel anytime", week: "$2.77" },
-} as const;
 
 /**
  * One urgency line, only when it's real for this user: a live transfer bonus
@@ -46,24 +43,24 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The headline follows why they're here: a locked deal, the filters, or the main button.
+  // The headline follows why they're here: a locked deal, filters, search, or the main button.
   const head =
     reason === "filters"
       ? "Filter every deal your way"
+      : reason === "search"
+        ? "Search every deal"
       : saved && reason === "cta"
         ? `Get alerts for your ${plural(saved, "saved trip")}`
         : `Unlock all ${plural(destinations.length, "destination")}`;
   const sub =
     reason === "filters"
       ? "Beaches, business class, fewest points, closest to booking."
+      : reason === "search"
+        ? `Find any city in your ${plural(destinations.length, "destination")} in a second, and request places we don't price yet.`
       : okDest
         ? `${okDest} you can book with points you already have${best ? `, like ${best.trip.city}` : ""}.`
         : "See exactly how close you are to each one.";
 
-  const pick = (plan: "annual" | "monthly") => {
-    track("plan_selected", { plan });
-    update({ plan });
-  };
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -105,7 +102,7 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-extrabold text-white/70">vs</span>
           <div className="flex flex-col text-right">
             <span className="text-[12px] font-semibold text-white/60">Trace</span>
-            <span className="nums text-[32px] leading-tight font-extrabold text-gold">{PRICES[state.plan].week}</span>
+            <span className="nums text-[32px] leading-tight font-extrabold text-gold">{planPrice(state.plan, state.gift).week}</span>
             <span className="text-[12px] text-white/60">a week</span>
           </div>
         </div>
@@ -136,25 +133,8 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
         <div className="flex-1" />
 
-        <div className="grid grid-cols-2 gap-2.5 pt-2">
-          {(["annual", "monthly"] as const).map((plan) => (
-            <button
-              key={plan}
-              type="button"
-              aria-pressed={state.plan === plan}
-              onClick={() => pick(plan)}
-              className={cx(
-                "relative flex min-h-[76px] flex-col items-start justify-center rounded-2xl px-4 text-left transition active:scale-[0.98]",
-                state.plan === plan ? "bg-surface shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.15)]" : "bg-soft",
-              )}
-            >
-              {plan === "annual" && (
-                <span className="bg-trace absolute -top-2.5 right-3 rounded-full px-2 py-0.5 text-[11px] font-extrabold text-white">SAVE 31%</span>
-              )}
-              <span className="text-[15.5px] font-extrabold">{PRICES[plan].label}</span>
-              <span className="text-[12.5px] text-muted">{PRICES[plan].sub}</span>
-            </button>
-          ))}
+        <div className="pt-2">
+          <PlanPicker />
         </div>
 
         <PrimaryButton className="text-[18px]" onClick={onStart}>

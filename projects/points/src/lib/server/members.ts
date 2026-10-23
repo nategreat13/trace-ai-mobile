@@ -42,6 +42,7 @@ export async function saveState(email: string, state: SyncedState) {
 export interface StripeMembership {
   email: string;
   plan: Membership["plan"];
+  offer?: string;
   status: string;
   trialEnd: number | null;
   customer: string;
@@ -56,6 +57,7 @@ export async function recordSubscription(s: StripeMembership) {
   const member: Membership | null = active
     ? {
         plan: s.plan,
+        ...(s.offer ? { offer: s.offer } : {}),
         startedAt: prev?.member?.startedAt ?? new Date().toISOString(),
         trialEndsAt: new Date((s.trialEnd ?? Date.now() / 1000) * 1000).toISOString(),
         testMode: false,

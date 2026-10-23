@@ -11,6 +11,7 @@ import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
 import { kShort, num, plural } from "@/lib/format";
 import { effectiveBalances, type FunnelStep, usePoints, useDeck } from "@/lib/store";
+import { GiftOffer } from "../GiftOffer";
 import { Paywall } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
@@ -94,6 +95,10 @@ export function Funnel() {
       )}
       {step === "pay" && <Paywall reason={payReason} onClose={() => go("results")} onStart={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
+      {/* Came back from the payment page without starting (browser back included): offer the gift once. */}
+      {(step === "results" || step === "pay") && state.checkoutVisited && !state.giftOffered && !state.member && (
+        <GiftOffer where="results" onClaim={() => router.push("/checkout")} onDecline={() => {}} />
+      )}
     </div>
   );
 }
@@ -175,10 +180,14 @@ function Programs({ onNext }: { onNext: () => void }) {
       <div className="grid grid-cols-3 gap-2.5">{BANK_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i} />)}</div>
       <Eyebrow className="pt-6 pb-3">Airline miles</Eyebrow>
       <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length} />)}</div>
-      <Eyebrow className="pt-6 pb-3">Hotel points</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">
-        {HOTEL_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length + AIRLINE_IDS.length} />)}
-      </div>
+      {HOTEL_IDS.length > 0 && (
+        <>
+          <Eyebrow className="pt-6 pb-3">Hotel points</Eyebrow>
+          <div className="grid grid-cols-3 gap-2.5">
+            {HOTEL_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length + AIRLINE_IDS.length} />)}
+          </div>
+        </>
+      )}
     </Screen>
   );
 }
@@ -435,7 +444,7 @@ function EditAnswers({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col justify-end" role="dialog" aria-modal="true" aria-label="Edit your answers">
       <button type="button" aria-label="Close" onClick={onClose} className="fade absolute inset-0 bg-midnight/50" />
-      <div className="sheet-up pb-safe relative flex flex-col gap-2 rounded-t-[32px] bg-surface px-5 pt-3">
+      <div className="sheet-up pb-safe-lg relative flex flex-col gap-2 rounded-t-[32px] bg-surface px-5 pt-3">
         <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
         <div className="pb-1 text-[20px] font-extrabold">Edit your answers</div>
         {rows.map((r) => (

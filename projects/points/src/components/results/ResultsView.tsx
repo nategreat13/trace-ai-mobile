@@ -19,7 +19,7 @@ import { SwipeDeck } from "./SwipeDeck";
 export const FREE_DESTINATIONS = 3;
 
 /** Why the paywall opened, so its headline can match. */
-export type PayReason = "locked" | "filters" | "cta";
+export type PayReason = "locked" | "filters" | "search" | "cta";
 
 /**
  * The results experience, shared by the free funnel and the member Discover
@@ -147,6 +147,19 @@ export function ResultsView({
       </header>
 
       <div className="sticky top-0 z-20 flex items-center gap-2 bg-surface/90 px-5 py-3 backdrop-blur-md">
+        {mode === "free" ? (
+          <button
+            type="button"
+            onClick={() => onPaywall("search")}
+            className="relative flex min-h-[50px] flex-1 items-center gap-2.5 rounded-2xl bg-soft pr-10 pl-3.5 text-left text-[15.5px] text-muted active:scale-[0.99]"
+          >
+            <Icon d={ICONS.search} size={18} />
+            <span className="truncate">Search {plural(all.length, "destination")}</span>
+            <span className="bg-trace absolute top-1/2 right-2.5 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-white">
+              <LockIcon size={11} />
+            </span>
+          </button>
+        ) : (
         <div className="relative flex-1">
           <label htmlFor="deal-search" className="sr-only">Search your deals</label>
           <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-muted"><Icon d={ICONS.search} size={18} /></span>
@@ -170,6 +183,7 @@ export function ResultsView({
             </button>
           )}
         </div>
+        )}
         <button
           type="button"
           aria-label="Filter and sort"
@@ -188,8 +202,7 @@ export function ResultsView({
       </div>
 
       <div className="flex flex-1 flex-col gap-4 px-4 pt-1 pb-8">
-        {view === "list" ? (
-          shownDest.length === 0 ? (
+        {shownDest.length === 0 ? (
             query ? (
               <div className="rise flex flex-col items-center gap-3 px-4 py-12 text-center">
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-soft text-muted"><Icon d={ICONS.search} size={22} /></span>
@@ -223,8 +236,11 @@ export function ResultsView({
               {nearDest.length > 0 && <SectionHead ok={false} label="Almost there" count={nearDest.length} />}
               {nearDest.map((d, i) => card(d, i + okDest.length))}
             </>
-          )
-        ) : (
+          )}
+      </div>
+
+      {view === "swipe" && (
+        <SwipeLayer count={all.length} onClose={() => setView("list")}>
           <SwipeDeck
             key={`${filter}-${sort}-${query}`}
             cards={mode === "free" ? all.filter(matches) : shownDest}
@@ -240,8 +256,8 @@ export function ResultsView({
             onLocked={() => onPaywall("locked")}
             onDone={() => setView("list")}
           />
-        )}
-      </div>
+        </SwipeLayer>
+      )}
 
       {mode === "free" && (
         <div className="pb-safe sticky bottom-0 z-20 bg-gradient-to-t from-surface from-60% to-surface/0 px-5 pt-6">
@@ -481,4 +497,32 @@ function useCountUp(target: number, enabled: boolean): number {
     return () => cancelAnimationFrame(raf);
   }, [target, enabled]);
   return v;
+}
+
+/**
+ * Swipe mode takes the whole screen: cards sized to the phone, buttons
+ * underneath, nothing to scroll past, and a clear way back to the list.
+ */
+function SwipeLayer({ count, onClose, children }: { count: number; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = overflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Swipe through destinations" className="fade fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col bg-surface">
+      <div className="pt-safe flex items-center justify-between px-4 pb-2">
+        <button type="button" onClick={onClose} className="flex min-h-[44px] items-center gap-1.5 rounded-xl px-2 text-[15px] font-bold active:bg-soft">
+          <Icon d={ICONS.back} size={18} stroke={2.6} /> List
+        </button>
+        <span className="text-[13.5px] font-semibold text-muted">{plural(count, "destination")}</span>
+      </div>
+      <div className="pb-safe flex min-h-0 flex-1 flex-col px-4">{children}</div>
+    </div>
+  );
 }

@@ -51,9 +51,13 @@ export const PROGRAMS: Record<ProgramId, Program> = {
   sw: { id: "sw", name: "Southwest Rapid Rewards", short: "Southwest", kind: "airline", badge: "WN", badgeColor: "#8A6A1F", earnedOn: "Rapid Rewards Plus, Priority", typical: 30000, sliderMax: 250000, flightCents: 1.4, awardProgram: "sw", transferUrl: "https://www.southwest.com", logo: "/logos/sw.png" },
 };
 
-export const BANK_IDS: ProgramId[] = ["amex", "chase", "c1", "citi", "bilt", "wells"];
+// What people can pick. Wells Fargo and Marriott stay in PROGRAMS so the
+// engine can still price them, but aren't offered while Points is
+// flights-first with the major transfer banks.
+export const BANK_IDS: ProgramId[] = ["amex", "chase", "c1", "citi", "bilt"];
 export const AIRLINE_IDS: ProgramId[] = ["delta", "united", "atmos", "aa", "sw", "aeroplan", "avios", "flyingblue", "virgin"];
-export const HOTEL_IDS: ProgramId[] = ["marriott"];
+export const HOTEL_IDS: ProgramId[] = [];
+export const OFFERED_IDS: ProgramId[] = [...BANK_IDS, ...AIRLINE_IDS, ...HOTEL_IDS];
 
 /**
  * Marriott Bonvoy moves to most airlines at 3:1 (United 3:1.1), plus a bonus
@@ -98,7 +102,6 @@ export const CARD_OFFERS: CardOffer[] = [
   // Added Oct 22, 2026 from current public reporting; confirm on the issuer page before promoting.
   { id: "venture-x", name: "Capital One Venture X", currency: "c1", bonus: 75000, spend: "$4,000 in 3 months", fee: "$395/yr", applyUrl: "https://www.capitalone.com/credit-cards/venture-x/" },
   { id: "amex-plat", name: "Amex Platinum", currency: "amex", bonus: 175000, upTo: true, spend: "$12,000 in 6 months", fee: "$895/yr", tag: "Personalized offer", applyUrl: "https://www.americanexpress.com/us/credit-cards/card/platinum/" },
-  { id: "wf-journey", name: "Wells Fargo Autograph Journey", currency: "wells", bonus: 60000, spend: "$4,000 in 3 months", fee: "$95/yr", applyUrl: "https://creditcards.wellsfargo.com/autograph-journey-visa-credit-card/" },
   { id: "sw-plus", name: "Southwest Rapid Rewards Plus", currency: "sw", bonus: 50000, spend: "$1,000 in 3 months", fee: "$99/yr", applyUrl: "https://creditcards.chase.com/travel-credit-cards/southwest/plus" },
 ];
 

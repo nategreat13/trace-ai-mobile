@@ -27,7 +27,7 @@ export default function TermsPage() {
       <ul>
         <li>Membership starts with a 7-day free trial. You add a card at checkout; you aren&apos;t charged during the trial.</li>
         <li>
-          <strong>Unless you cancel before the trial ends, your membership renews automatically</strong> and your card is charged $99 per year (annual plan) or $12 per month (monthly plan), plus any applicable tax, at the start of each period until you cancel.
+          <strong>Unless you cancel before the trial ends, your membership renews automatically</strong> and your card is charged $99 per year (annual plan), $12 per month (monthly plan), or the discounted yearly price shown at checkout if you claimed an offer, plus any applicable tax, at the start of each period until you cancel.
         </li>
         <li>We&apos;ll email you a reminder before your trial ends.</li>
         <li>Cancel anytime in the app under Account. Cancelling stops future charges; you keep access until the end of the period you&apos;ve paid for.</li>

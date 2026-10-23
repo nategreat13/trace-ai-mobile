@@ -5,10 +5,16 @@
  */
 const API = "https://api.stripe.com/v1";
 
-export const stripeEnabled = () => !!process.env.STRIPE_SECRET_KEY;
+/** Real payments need both keys: the secret one here and the publishable one for the card fields. */
+export const stripeEnabled = () => !!(process.env.STRIPE_SECRET_KEY && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
-export const priceFor = (plan: "annual" | "monthly") =>
-  plan === "annual" ? process.env.STRIPE_PRICE_ANNUAL : process.env.STRIPE_PRICE_MONTHLY;
+/** The exit gift is annual at $59.99 (its own Stripe price), still with the free week. */
+export const priceFor = (plan: "annual" | "monthly", offer?: string) =>
+  plan === "monthly"
+    ? process.env.STRIPE_PRICE_MONTHLY
+    : offer === "gift"
+      ? process.env.STRIPE_PRICE_ANNUAL_GIFT
+      : process.env.STRIPE_PRICE_ANNUAL;
 
 /** Stripe wants form encoding with bracketed keys for nested fields. */
 function form(params: Record<string, string | number | boolean | undefined>): string {

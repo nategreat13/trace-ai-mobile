@@ -1,40 +1,41 @@
 "use client";
 
+import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe, type Appearance, type Stripe, type StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { PRICES } from "@/components/Paywall";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { GiftOffer } from "@/components/GiftOffer";
+import { PlanPicker } from "@/components/PlanPicker";
 import { Check, cx, Icon, ICONS, PrimaryButton, stagger } from "@/components/ui";
-import { paymentsMode, REMINDER_DAYS_BEFORE, startCheckout, TRIAL_DAYS } from "@/lib/payments";
-import { usePoints } from "@/lib/store";
+import { groupDestinations } from "@/lib/destinations";
+import { money, plural } from "@/lib/format";
+import { createTrial, paymentsMode, planPrice, REMINDER_DAYS_BEFORE, startTestTrial, TRIAL_DAYS, type PaymentsMode, type PlanPrice } from "@/lib/payments";
+import { useDeck, usePoints } from "@/lib/store";
 
 const day = (offset: number) => {
   const d = new Date();
   d.setDate(d.getDate() + offset);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
+const validEmail = (e: string) => /.+@.+\..+/.test(e.trim());
+
+let stripePromise: Promise<Stripe | null> | null = null;
+const getStripe = (key: string) => (stripePromise ??= loadStripe(key));
 
 /**
- * Checkout: confirm the plan, see exactly when billing starts, give the email
- * the account needs, then hand off to Stripe (or start a test-mode trial when
- * no Stripe keys are set).
+ * The last step before the trial: what they're unlocking (their own numbers),
+ * the plan, when billing would start, and payment on the page itself (Apple
+ * Pay, Google Pay or card through Stripe's fields). $0 today. Backing out
+ * once offers the $59.99 annual gift.
  */
 export default function CheckoutPage() {
-  return (
-    <Suspense fallback={<div className="min-h-dvh" />}>
-      <Checkout />
-    </Suspense>
-  );
-}
-
-function Checkout() {
   const { state, update, ready } = usePoints();
+  const { deck, values } = useDeck();
   const router = useRouter();
-  const canceled = useSearchParams().get("canceled") === "1";
-  const [mode, setMode] = useState<"stripe" | "test" | null>(null);
+  const [mode, setMode] = useState<PaymentsMode | null>(null);
   const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [gift, setGift] = useState(false);
   // Set once this page starts a trial, so the "already a member" redirect doesn't race the welcome screen.
   const [finishing, setFinishing] = useState(false);
 
@@ -45,135 +46,295 @@ function Checkout() {
     if (!ready) return;
     if (state.member && !finishing) router.replace("/discover");
     setEmail((e) => e || state.email);
-  }, [ready, state.member, state.email, router, finishing]);
+    if (!state.checkoutVisited) update({ checkoutVisited: true });
+  }, [ready, state.member, state.email, state.checkoutVisited, router, finishing, update]);
 
-  const plan = state.plan;
-  const price = plan === "annual" ? "$99 a year" : "$12 a month";
-  const valid = /.+@.+\..+/.test(email);
+  const destinations = groupDestinations(deck);
+  const okCount = destinations.filter((d) => d.ok).length;
+  const price = planPrice(state.plan, state.gift);
 
-  const submit = async () => {
-    if (!valid || busy) return;
+  const leave = () => (window.history.length > 1 ? router.back() : router.push("/"));
+  const back = () => {
+    if (!state.giftOffered && !state.member) setGift(true);
+    else leave();
+  };
+
+  const started = (subscription: string | null) => {
+    setFinishing(true);
+    if (subscription) router.replace(`/checkout/success?subscription=${subscription}`);
+    else router.replace("/");
+  };
+
+  return (
+    <div className="flex min-h-dvh flex-col px-5 pt-4 pb-safe">
+      <button type="button" aria-label="Back" onClick={back} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-soft active:scale-95">
+        <Icon d={ICONS.back} size={18} stroke={2.4} />
+      </button>
+
+      <div className="rise flex flex-col gap-2 pt-4 pb-5">
+        <span className="bg-trace self-start rounded-full px-2.5 py-1 text-[12px] font-extrabold tracking-[0.04em] text-white">$0 TODAY</span>
+        <h1 className="text-[32px] leading-[1.05] font-extrabold tracking-[-0.02em]">Start your free week</h1>
+        <p className="text-[16px] leading-snug font-medium text-muted">
+          {destinations.length ? (
+            <>
+              Unlock all <span className="font-extrabold text-ink">{plural(destinations.length, "destination")}</span>
+              {okCount ? <> ({okCount} you can book today)</> : null}, worth <span className="text-gradient font-extrabold">{money(values.flights)}</span> in flights.
+            </>
+          ) : (
+            <>Every deal your points can book, with exact dates and seat alerts.</>
+          )}
+        </p>
+      </div>
+
+      <PlanPicker />
+
+      <ul className="mt-5 flex flex-col gap-2">
+        {["Exact dates and seat counts for every trip", "Alerts the moment seats or bonuses open", "Our team checks seats for you within 24 hours"].map((t, i) => (
+          <li key={t} className="rise flex items-center gap-2.5 text-[14.5px] font-bold" style={stagger(i, 60)}>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-trace-green text-white">
+              <Check size={11} />
+            </span>
+            {t}
+          </li>
+        ))}
+      </ul>
+
+      <Timeline price={price} />
+
+      <label htmlFor="checkout-email" className="mt-5 pb-2 text-[13px] font-bold text-muted">
+        Email for your account and receipts
+      </label>
+      <input
+        id="checkout-email"
+        type="email"
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@example.com"
+        className="min-h-[56px] rounded-2xl bg-soft px-4 text-[17px] outline-none focus:bg-surface focus:ring-2 focus:ring-trace-pink"
+      />
+
+      <div className="mt-5">
+        {!mode ? (
+          <div className="h-[220px] animate-pulse rounded-2xl bg-soft" />
+        ) : mode.mode === "stripe" ? (
+          <StripeCheckout publishableKey={mode.publishableKey} email={email} price={price} onStarted={started} />
+        ) : (
+          <TestCheckout
+            email={email}
+            onStart={() => {
+              update({ email: email.trim(), member: startTestTrial(state.plan, state.gift), step: "done" });
+              started(null);
+            }}
+          />
+        )}
+      </div>
+
+      <p className="pt-3 text-center text-[12px] leading-snug text-muted">
+        After your free week, renews automatically at {price.full} until you cancel. Cancel anytime in Account. By starting your trial you agree to the{" "}
+        <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.
+      </p>
+
+      {gift && (
+        <GiftOffer
+          where="checkout"
+          onClaim={() => setGift(false)}
+          onDecline={() => {
+            setGift(false);
+            leave();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function Timeline({ price }: { price: PlanPrice }) {
+  const steps = [
+    { when: "Today", what: "Free week starts", icon: null },
+    { when: day(TRIAL_DAYS - REMINDER_DAYS_BEFORE), what: "Reminder email", icon: ICONS.bell },
+    { when: day(TRIAL_DAYS), what: `${price.amount} if you stay`, icon: ICONS.card },
+  ];
+  return (
+    <ol className="mt-5 grid grid-cols-3 gap-2 rounded-3xl bg-soft p-3">
+      {steps.map((s, i) => (
+        <li key={s.what} className="flex flex-col items-center gap-1.5 text-center">
+          <span className={cx("flex h-8 w-8 items-center justify-center rounded-full", i === 0 ? "bg-trace text-white" : "bg-surface text-muted")}>
+            {s.icon ? <Icon d={s.icon} size={15} /> : <Check size={14} />}
+          </span>
+          <span className="text-[11px] font-extrabold tracking-[0.05em] text-muted uppercase">{s.when}</span>
+          <span className="text-[13px] leading-tight font-bold">{s.what}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+const Reassure = () => (
+  <div className="flex items-center justify-center gap-3 text-[12.5px] font-semibold text-muted">
+    <span className="flex items-center gap-1"><Icon d={ICONS.shield} size={13} /> Secured by Stripe</span>
+    <span className="h-1 w-1 rounded-full bg-muted/60" />
+    <span>Cancel in 2 taps</span>
+  </div>
+);
+
+/** Real payment: Apple Pay / Google Pay buttons, then Stripe's card fields. */
+function StripeCheckout({ publishableKey, ...rest }: { publishableKey: string; email: string; price: PlanPrice; onStarted: (sub: string) => void }) {
+  const dark = typeof document !== "undefined" && document.documentElement.dataset.theme === "dark";
+  const appearance: Appearance = useMemo(
+    () => ({
+      theme: dark ? "night" : "stripe",
+      variables: { colorPrimary: "#FD297B", borderRadius: "16px", fontFamily: '"Plus Jakarta Sans", system-ui, sans-serif', fontSizeBase: "16px" },
+    }),
+    [dark],
+  );
+  return (
+    <Elements
+      stripe={getStripe(publishableKey)}
+      options={{
+        mode: "setup",
+        currency: "usd",
+        paymentMethodTypes: ["card"],
+        appearance,
+        fonts: [{ cssSrc: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&display=swap" }],
+      }}
+    >
+      <StripeForm {...rest} />
+    </Elements>
+  );
+}
+
+function StripeForm({ email, price, onStarted }: { email: string; price: PlanPrice; onStarted: (sub: string) => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { state, update } = usePoints();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [cardReady, setCardReady] = useState(false);
+  const [hasWallet, setHasWallet] = useState(true);
+
+  /** Creates the trial and confirms the card on it. Wallets pass their own email if the field is empty. */
+  const confirm = async (address: string): Promise<string | null> => {
+    if (!stripe || !elements) return "Payment is still loading.";
+    if (!validEmail(address)) return "Add your email above first.";
+    const { error: submitError } = await elements.submit();
+    if (submitError) return submitError.message ?? "Check your card details.";
+    try {
+      update({ email: address.trim() });
+      const { clientSecret, subscription } = await createTrial(state.plan, address.trim(), state.gift);
+      const { error: confirmError } = await stripe.confirmSetup({
+        elements,
+        clientSecret,
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/success?subscription=${subscription}`,
+          payment_method_data: { billing_details: { email: address.trim() } },
+        },
+        redirect: "if_required",
+      });
+      if (confirmError) return confirmError.message ?? "Your card was declined. Try another one.";
+      onStarted(subscription);
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+
+  const payWithCard = async () => {
+    if (busy) return;
     setBusy(true);
     setError("");
-    update({ email });
-    try {
-      const m = await startCheckout(plan, email);
-      if (m) {
-        setFinishing(true);
-        update({ member: m, step: "done" });
-        router.replace("/");
-      }
-      // Stripe mode navigates away; nothing else to do here.
-    } catch (e) {
-      setError((e as Error).message || "Something went wrong. Nothing was charged.");
+    const err = await confirm(email);
+    if (err) {
+      setError(err);
       setBusy(false);
     }
   };
 
-  const steps = [
-    { when: `Today, ${day(0)}`, what: "Your free week starts", sub: "Every destination, exact dates, seat alerts", tone: "now" },
-    { when: day(TRIAL_DAYS - REMINDER_DAYS_BEFORE), what: "We email you a reminder", sub: "Two days before anything is charged", tone: "later" },
-    { when: day(TRIAL_DAYS), what: `${price} begins`, sub: "Cancel before then and you pay nothing", tone: "later" },
-  ];
+  const payWithWallet = async (event: StripeExpressCheckoutElementConfirmEvent) => {
+    setError("");
+    const err = await confirm(validEmail(email) ? email : (event.billingDetails?.email ?? ""));
+    if (err) {
+      event.paymentFailed({ reason: "fail" });
+      setError(err);
+    }
+  };
 
   return (
-    <div className="flex min-h-dvh flex-col px-5 pt-4 pb-safe">
+    <div className="flex flex-col gap-3">
+      <ExpressCheckoutElement
+        onReady={({ availablePaymentMethods }) => setHasWallet(!!availablePaymentMethods)}
+        onClick={(event) =>
+          event.resolve({
+            emailRequired: !validEmail(email),
+            applePay: {
+              recurringPaymentRequest: {
+                paymentDescription: `Trace Points ${state.plan === "annual" ? "yearly" : "monthly"} membership`,
+                managementURL: `${window.location.origin}/account`,
+                regularBilling: {
+                  amount: price.cents,
+                  label: `Trace Points, ${price.full}`,
+                  recurringPaymentStartDate: new Date(Date.now() + TRIAL_DAYS * 86400000),
+                  recurringPaymentIntervalUnit: price.interval,
+                },
+                trialBilling: { amount: 0, label: `Free for ${TRIAL_DAYS} days` },
+              },
+            },
+          })
+        }
+        onConfirm={payWithWallet}
+        options={{ buttonType: { applePay: "subscribe", googlePay: "subscribe" }, buttonHeight: 52 }}
+      />
+      {hasWallet && (
+        <div className="flex items-center gap-3 text-[12.5px] font-semibold text-muted">
+          <span className="h-px flex-1 bg-line" /> or pay with card <span className="h-px flex-1 bg-line" />
+        </div>
+      )}
+      <PaymentElement
+        onReady={() => setCardReady(true)}
+        options={{ layout: "tabs", wallets: { applePay: "never", googlePay: "never" }, fields: { billingDetails: { email: "never" } }, terms: { card: "never" } }}
+      />
+      {error && <div role="alert" className="rounded-2xl bg-near-bg px-4 py-3 text-[14px] font-semibold text-near">{error}</div>}
+      <PrimaryButton onClick={payWithCard} disabled={!stripe || !cardReady || busy || !validEmail(email)}>
+        {busy ? "Starting your free week…" : "Start my free week · $0 today"}
+      </PrimaryButton>
+      <Reassure />
+    </div>
+  );
+}
+
+/**
+ * Test mode (no Stripe keys yet): the same layout with stand-in payment
+ * fields, so the page can be reviewed. Nothing here accepts card details.
+ */
+function TestCheckout({ email, onStart }: { email: string; onStart: () => void }) {
+  const field = "flex min-h-[52px] items-center rounded-2xl border border-line bg-surface px-4 text-[16px] text-muted/70";
+  return (
+    <div className="flex flex-col gap-3">
       <button
         type="button"
-        aria-label="Back"
-        onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-        className="flex h-11 w-11 items-center justify-center rounded-2xl bg-soft active:scale-95"
+        onClick={onStart}
+        disabled={!validEmail(email)}
+        className="flex min-h-[52px] items-center justify-center gap-1.5 rounded-2xl bg-black text-[17px] font-semibold text-white disabled:opacity-40"
       >
-        <Icon d={ICONS.back} size={18} stroke={2.4} />
+        Subscribe with <span className="text-[19px] font-bold tracking-tight"> Pay</span>
       </button>
-
-      <div className="rise flex flex-col gap-1.5 pt-4 pb-5">
-        <h1 className="text-[32px] leading-[1.05] font-extrabold tracking-[-0.02em]">Start your free week</h1>
-        <p className="text-[16px] font-medium text-muted">Full access for {TRIAL_DAYS} days. You won&apos;t be charged today.</p>
+      <div className="flex items-center gap-3 text-[12.5px] font-semibold text-muted">
+        <span className="h-px flex-1 bg-line" /> or pay with card <span className="h-px flex-1 bg-line" />
       </div>
-
-      {canceled && (
-        <div className="mb-4 rounded-2xl bg-near-bg px-4 py-3 text-[14px] font-semibold text-near">Checkout was canceled. Nothing was charged.</div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2.5">
-        {(["annual", "monthly"] as const).map((p) => (
-          <button
-            key={p}
-            type="button"
-            aria-pressed={plan === p}
-            onClick={() => update({ plan: p })}
-            className={cx(
-              "relative flex min-h-[76px] flex-col items-start justify-center rounded-2xl px-4 text-left transition active:scale-[0.98]",
-              plan === p ? "bg-surface shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.15)]" : "bg-soft",
-            )}
-          >
-            {p === "annual" && <span className="bg-trace absolute -top-2.5 right-3 rounded-full px-2 py-0.5 text-[11px] font-extrabold text-white">SAVE 31%</span>}
-            <span className="text-[15.5px] font-extrabold">{PRICES[p].label}</span>
-            <span className="text-[12.5px] text-muted">{PRICES[p].sub}</span>
-          </button>
-        ))}
+      <div aria-hidden="true" className="flex flex-col gap-2">
+        <div className={field}>Card number</div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className={field}>MM / YY</div>
+          <div className={field}>CVC</div>
+        </div>
       </div>
-
-      <ol className="mt-6 flex flex-col rounded-3xl bg-soft p-5">
-        {steps.map((s, i) => (
-          <li key={s.what} className="rise flex gap-3.5" style={stagger(i, 80)}>
-            <span className="flex flex-col items-center">
-              <span className={cx("flex h-8 w-8 shrink-0 items-center justify-center rounded-full", s.tone === "now" ? "bg-trace text-white" : "bg-surface text-muted")}>
-                {s.tone === "now" ? <Check size={14} /> : <Icon d={i === 1 ? ICONS.bell : ICONS.card} size={15} />}
-              </span>
-              {i < steps.length - 1 && <span className="my-1 w-0.5 flex-1 bg-line" />}
-            </span>
-            <span className="flex flex-col pb-4">
-              <span className="text-[12px] font-extrabold tracking-[0.06em] text-muted uppercase">{s.when}</span>
-              <span className="text-[16px] font-extrabold">{s.what}</span>
-              <span className="text-[13.5px] text-muted">{s.sub}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
-
-      <form
-        className="mt-5 flex flex-col gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit();
-        }}
-      >
-        <label htmlFor="checkout-email" className="text-[13px] font-bold text-muted">Email for your account and receipts</label>
-        <input
-          id="checkout-email"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="min-h-[56px] rounded-2xl bg-soft px-4 text-[17px] outline-none focus:bg-surface focus:ring-2 focus:ring-trace-pink"
-        />
-      </form>
-
-      <div className="flex-1" />
-
-      <div className="flex flex-col gap-2.5 pt-6">
-        {error && <div className="rounded-2xl bg-near-bg px-4 py-3 text-[14px] font-semibold text-near">{error}</div>}
-        <PrimaryButton onClick={submit} disabled={!valid || busy || !mode}>
-          {busy ? "One moment…" : mode === "stripe" ? "Continue to secure payment" : "Start my free week"}
-        </PrimaryButton>
-        {mode === "stripe" ? (
-          <p className="flex items-center justify-center gap-1.5 text-center text-[12.5px] font-medium text-muted">
-            <Icon d={ICONS.shield} size={14} /> Secure checkout by Stripe · Card, Apple Pay, Google Pay
-          </p>
-        ) : (
-          <p className="rounded-xl border border-dashed border-line px-3 py-2 text-center text-[11.5px] text-muted">
-            Test mode: no card is collected. Add Stripe keys to take real payments.
-          </p>
-        )}
-        <p className="text-center text-[12px] leading-snug text-muted">
-          After your free week, renews automatically at {price} until you cancel. Cancel anytime in Account. By starting your trial you agree to the{" "}
-          <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.
-        </p>
-      </div>
+      <p className="rounded-xl border border-dashed border-line px-3 py-2 text-center text-[11.5px] text-muted">
+        Test mode: these are stand-in fields and no card is collected. Add Stripe keys for real Apple Pay, Google Pay and cards.
+      </p>
+      <PrimaryButton onClick={onStart} disabled={!validEmail(email)}>
+        Start my free week · $0 today
+      </PrimaryButton>
+      <Reassure />
     </div>
   );
 }

@@ -8,10 +8,10 @@ Going live means three steps in order: test-mode keys on a preview deploy, run t
 
 Use test mode first. Repeat in live mode when the smoke test passes.
 
-1. **Products:** create "Trace Points" with two recurring prices, **$99.00 / year** and **$12.00 / month**. Copy both price ids (`price_…`).
-2. **Developers → API keys:** copy the secret key (`sk_test_…`, later `sk_live_…`).
+1. **Products:** create "Trace Points" with three recurring prices: **$99.00 / year**, **$12.00 / month**, and the exit gift, **$59.99 / year**. Copy all three price ids (`price_…`).
+2. **Developers → API keys:** copy the secret key (`sk_test_…`, later `sk_live_…`) and the publishable key (`pk_test_…` / `pk_live_…`). Real payments switch on only when both are set.
+   **Settings → Payment methods → Payment method domains:** add `points.tracetravel.co` (and the preview domain while testing). Apple Pay doesn't show without it.
 3. **Developers → Webhooks → Add endpoint:** `https://points.tracetravel.co/api/stripe/webhook` (use the preview URL while testing). Events:
-   - `checkout.session.completed`
    - `customer.subscription.updated`
    - `customer.subscription.deleted`
    - `customer.subscription.trial_will_end`
@@ -68,7 +68,7 @@ A new project, `trace-points`, in the **Trace Travel** team. It's separate from 
 2. Production env vars (Vercel → trace-points → Settings → Environment Variables):
    - `TRACE_ENV=prod` (production only; previews stay on staging data)
    - `NEXT_PUBLIC_SITE_URL=https://points.tracetravel.co`
-   - `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_MONTHLY`, `STRIPE_WEBHOOK_SECRET`
+   - `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL_GIFT`, `STRIPE_WEBHOOK_SECRET`
    - `FIREBASE_PROJECT_ID=trace-ai-b9cba`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
    - `POINTS_SESSION_SECRET`: a long random string (`openssl rand -base64 32`)
    - `POINTS_SLACK_WEBHOOK_URL`
@@ -89,7 +89,7 @@ A new project, `trace-points`, in the **Trace Travel** team. It's separate from 
 
 ## 7. Smoke test (with Stripe test keys, on the preview)
 
-1. Fresh phone browser: landing → funnel → results → paywall → checkout with card `4242 4242 4242 4242`.
+1. Fresh phone browser: landing → funnel → results → paywall → checkout with card `4242 4242 4242 4242`. Also try Apple Pay on an iPhone, and back out of checkout once: the $59.99 gift should appear, and claiming it should show $59.99 at checkout and in Stripe.
 2. Lands in the app as a member. Slack shows "New Trace Points trial". In Firestore, `pointsUsers` (prod, or `staging_pointsUsers` on a preview) has the member.
 3. Second browser: `/signin` → email link → same trips and membership.
 4. Tap Find my seats, request a trip, add a dated watch, send a contact message: all four reach Slack.
