@@ -40,7 +40,7 @@ export function TripThumb({
         />
       ) : (
         showCode && (
-          <span className={cx("font-mono text-[13px] font-bold text-white", blur && "blur-sm")}>
+          <span className={cx("nums text-[13px] font-bold text-white", blur && "blur-sm")}>
             {code}
           </span>
         )

@@ -3,19 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
+import { groupDestinations, type Destination } from "@/lib/destinations";
 import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Chip, cx, Eyebrow, Icon, ICONS } from "../ui";
-import { FILTERS, SORTS, sortTrips, type FilterId, type SortId } from "./filters";
+import { DestinationCard } from "./DestinationCard";
+import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
 import { SwipeDeck } from "./SwipeDeck";
-import { TripList } from "./TripList";
 
-export const FREE_TRIPS = 3;
+export const FREE_DESTINATIONS = 3;
 
 /**
  * The results experience, shared by the free funnel and the member Discover
- * page. Free mode locks everything past the top three trips; member mode
- * unlocks it all and adds hearts.
+ * page. One card per destination, economy and business inside it. Free mode
+ * locks everything past the top three destinations; member mode unlocks it
+ * all and adds hearts.
  */
 export function ResultsView({
   mode,
@@ -29,56 +31,85 @@ export function ResultsView({
   countUp?: boolean;
 }) {
   const { state, update } = usePoints();
-  const { deck, ok, near, values } = useDeck();
+  const { deck, values } = useDeck();
   const [view, setView] = useState<"list" | "swipe">("list");
   const [filter, setFilter] = useState<FilterId>("all");
   const [sort, setSort] = useState<SortId>("best");
   const [panel, setPanel] = useState(false);
   const shown = useCountUp(values.flights, countUp);
 
-  const freeIds = useMemo(() => new Set(deck.slice(0, FREE_TRIPS).map((r) => r.trip.id)), [deck]);
-  const isLocked = (r: TripResult) => mode === "free" && !freeIds.has(r.trip.id);
+  const all = useMemo(() => groupDestinations(deck), [deck]);
+  const freeCities = useMemo(() => new Set(all.slice(0, FREE_DESTINATIONS).map((d) => d.city)), [all]);
+  const isLocked = (city: string) => mode === "free" && !freeCities.has(city);
 
-  const active = FILTERS.find((f) => f.id === filter)!;
-  const filtered = sortTrips(deck.filter(active.test), sort, state.picks);
+  const shownDest = sortDestinations(filterDestinations(deck, filter), sort, state.picks);
+  const okDest = shownDest.filter((d) => d.ok);
+  const nearDest = shownDest.filter((d) => !d.ok);
   const filterActive = filter !== "all" || sort !== "best";
+  const allOk = all.filter((d) => d.ok).length;
+  const allNear = all.length - allOk;
 
-  const toggleSave = (r: TripResult) => {
-    if (isLocked(r)) return onPaywall(r);
+  const isSaved = (d: Destination) => d.options.some((o) => state.saved.includes(o.trip.id));
+  const toggleSave = (d: Destination) => {
+    if (isLocked(d.city)) return onPaywall(d.lead);
+    const ids = d.options.map((o) => o.trip.id);
     update((s) => ({
-      saved: s.saved.includes(r.trip.id) ? s.saved.filter((x) => x !== r.trip.id) : [...s.saved, r.trip.id],
+      saved: ids.some((id) => s.saved.includes(id)) ? s.saved.filter((x) => !ids.includes(x)) : [...s.saved, d.lead.trip.id],
     }));
   };
   const open = (r: TripResult) => {
-    if (isLocked(r)) {
+    if (isLocked(r.trip.city)) {
       track("locked_row_tap", { trip: r.trip.id });
       return onPaywall(r);
     }
     onOpen(r);
   };
 
-  const travelers = plural(state.travelers, "traveler");
   const savedCount = state.saved.length;
+  const card = (d: Destination, i: number) => (
+    <DestinationCard
+      key={d.city}
+      d={d}
+      i={i}
+      origin={state.airport ?? ""}
+      picked={state.picks.includes(d.city)}
+      locked={isLocked(d.city)}
+      saved={isSaved(d)}
+      showHeart={mode === "member"}
+      onOpen={open}
+      onToggleSave={toggleSave}
+    />
+  );
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-col gap-0.5 px-5 pt-4">
-        <div className="text-[14px] font-semibold text-muted">Your points are worth</div>
-        <div className="bg-gradient-to-r from-trace-red to-trace-pink bg-clip-text text-[48px] leading-none font-black tracking-tight text-transparent">
-          {money(countUp ? shown : values.flights)}
+      <header className="relative overflow-hidden px-5 pt-3 pb-5">
+        <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
+        <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
+        <div className="relative flex flex-col gap-1">
+          <Eyebrow className="text-trace-pink">Hidden in your points</Eyebrow>
+          <div className="flex items-baseline gap-2">
+            <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
+            <span className="text-[15px] font-bold text-muted">in flights</span>
+          </div>
+          <p className="pt-2 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
+            {allOk
+              ? <>You can book <span className="text-ok">{plural(allOk, "destination")}</span> right now{allNear ? <>, and you&apos;re close to <span className="text-near">{allNear} more</span>.</> : "."}</>
+              : <>You&apos;re close to <span className="text-near">{plural(allNear, "destination")}</span>.</>}
+          </p>
+          <p className="text-[13.5px] leading-snug text-muted">
+            Trips most people never find. We checked 11 airline programs from {state.airport} for {plural(state.travelers, "traveler")}. Values are estimates.
+          </p>
         </div>
-        <div className="text-[13px] text-muted">in flights · estimate</div>
-        <div className="mt-2 text-[17px] font-extrabold">
-          {ok.length ? `Your points can book ${plural(ok.length, "trip")}` : `You're close to ${plural(near.length, "trip")}`}
-        </div>
-        <div className="text-[13px] text-muted">
-          From {state.airport} for {travelers}
-          {ok.length > 0 && near.length > 0 && ` · ${near.length} more almost in reach`}
-        </div>
-      </div>
+      </header>
 
-      <div className="sticky top-0 z-20 flex items-center gap-2 bg-white/95 px-5 py-3 backdrop-blur">
-        <div role="tablist" aria-label="View" className="grid flex-1 grid-cols-2 gap-1 rounded-xl bg-soft p-1">
+      <div className="sticky top-0 z-20 flex items-center gap-2 bg-white/90 px-5 py-3 backdrop-blur-md">
+        <div role="tablist" aria-label="View" className="relative grid flex-1 grid-cols-2 rounded-2xl bg-soft p-1">
+          <span
+            aria-hidden="true"
+            className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-xl bg-white shadow-sm transition-transform duration-300"
+            style={{ transform: view === "swipe" ? "translateX(100%)" : "none" }}
+          />
           {(["list", "swipe"] as const).map((v) => (
             <button
               key={v}
@@ -86,7 +117,7 @@ export function ResultsView({
               role="tab"
               aria-selected={view === v}
               onClick={() => setView(v)}
-              className={cx("min-h-[40px] rounded-[10px] text-[15px] font-bold capitalize", view === v ? "bg-white text-ink shadow-sm" : "text-muted")}
+              className={cx("relative min-h-[42px] text-[15px] font-bold capitalize transition-colors", view === v ? "text-ink" : "text-muted")}
             >
               {v}
             </button>
@@ -97,37 +128,37 @@ export function ResultsView({
           aria-label="Filter and sort"
           aria-expanded={panel}
           onClick={() => setPanel(true)}
-          className={cx("relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-white", filterActive ? "border-trace-red text-trace-red" : "border-line text-ink")}
+          className={cx("relative flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-2xl transition active:scale-95", filterActive ? "bg-ink text-white" : "bg-soft text-ink")}
         >
-          <Icon d={ICONS.filter} size={20} stroke={2.2} />
-          {filterActive && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-trace-red" />}
+          <Icon d={ICONS.filter} size={20} stroke={2.4} />
+          {filterActive && <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full border-2 border-ink bg-trace-pink" />}
         </button>
       </div>
 
-      <div className="flex flex-1 flex-col px-5 pb-6">
+      <div className="flex flex-1 flex-col gap-4 px-4 pt-1 pb-8">
         {view === "list" ? (
-          <TripList
-            ok={filtered.filter((r) => r.ok)}
-            near={filtered.filter((r) => !r.ok)}
-            picks={state.picks}
-            isLocked={isLocked}
-            saved={state.saved}
-            showHearts={mode === "member"}
-            onOpen={open}
-            onToggleSave={toggleSave}
-          />
+          shownDest.length === 0 ? (
+            <p className="py-12 text-center text-[15px] text-muted">No trips match this filter yet.</p>
+          ) : (
+            <>
+              {okDest.length > 0 && <SectionHead ok label="Ready to book" count={okDest.length} />}
+              {okDest.map((d, i) => card(d, i))}
+              {nearDest.length > 0 && <SectionHead ok={false} label="Almost there" count={nearDest.length} />}
+              {nearDest.map((d, i) => card(d, i + okDest.length))}
+            </>
+          )
         ) : (
           <SwipeDeck
             key={`${filter}-${sort}`}
-            cards={mode === "free" ? deck : filtered}
-            freeCount={mode === "free" ? FREE_TRIPS : null}
+            cards={mode === "free" ? all : shownDest}
+            freeCount={mode === "free" ? FREE_DESTINATIONS : null}
             origin={state.airport ?? ""}
             travelers={state.travelers}
-            onSave={(r) => {
-              track("swipe_save", { trip: r.trip.id });
-              update((s) => ({ saved: s.saved.includes(r.trip.id) ? s.saved : [...s.saved, r.trip.id] }));
+            onSave={(d) => {
+              track("swipe_save", { trip: d.lead.trip.id });
+              if (!isSaved(d)) update((s) => ({ saved: [...s.saved, d.lead.trip.id] }));
             }}
-            onSkip={(r) => track("swipe_skip", { trip: r.trip.id })}
+            onSkip={(d) => track("swipe_skip", { trip: d.lead.trip.id })}
             onInfo={open}
             onLocked={() => onPaywall()}
             onDone={() => setView("list")}
@@ -136,15 +167,15 @@ export function ResultsView({
       </div>
 
       {mode === "free" && (
-        <div className="pb-safe sticky bottom-0 z-20 border-t border-line bg-white/95 px-5 pt-3 backdrop-blur">
+        <div className="pb-safe sticky bottom-0 z-20 bg-gradient-to-t from-white from-60% to-white/0 px-5 pt-6">
           <button
             type="button"
             onClick={() => onPaywall()}
-            className="min-h-[54px] w-full rounded-[14px] bg-gradient-to-r from-trace-red to-trace-pink px-4 text-[16px] font-extrabold text-white shadow-[0_8px_24px_rgba(253,41,123,0.25)]"
+            className="bg-trace shimmer min-h-[58px] w-full rounded-2xl px-4 text-[16.5px] font-extrabold text-white shadow-[0_10px_28px_rgba(253,41,123,0.32)] active:scale-[0.98]"
           >
-            Unlock dates {savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(deck.length, "trip")}`}
+            Unlock dates {savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(all.length, "destination")}`}
           </button>
-          <div className="pt-1.5 text-center text-[12px] text-muted">Free for 7 days · Exact dates, seat alerts, booking steps</div>
+          <div className="pt-2 text-center text-[12.5px] font-medium text-muted">Free for 7 days · Exact dates, seat alerts, booking steps</div>
         </div>
       )}
 
@@ -153,7 +184,7 @@ export function ResultsView({
           deck={deck}
           filter={filter}
           sort={sort}
-          resultCount={filtered.length}
+          resultCount={shownDest.length}
           onFilter={setFilter}
           onSort={setSort}
           onReset={() => {
@@ -163,6 +194,21 @@ export function ResultsView({
           onClose={() => setPanel(false)}
         />
       )}
+    </div>
+  );
+}
+
+function SectionHead({ ok, label, count }: { ok: boolean; label: string; count: number }) {
+  return (
+    <div className="flex items-center justify-between px-1 pt-3">
+      <span className={cx("flex items-center gap-2 text-[13px] font-extrabold tracking-[0.06em] uppercase", ok ? "text-ok" : "text-near")}>
+        <span className={cx("relative flex h-2.5 w-2.5")}>
+          <span className={cx("absolute inline-flex h-full w-full animate-ping rounded-full opacity-60", ok ? "bg-trace-green" : "bg-[#F59E0B]")} />
+          <span className={cx("relative inline-flex h-2.5 w-2.5 rounded-full", ok ? "bg-trace-green" : "bg-[#F59E0B]")} />
+        </span>
+        {label}
+      </span>
+      <span className="nums rounded-full bg-soft px-2.5 py-0.5 text-[12px] font-bold text-muted">{count}</span>
     </div>
   );
 }
@@ -187,24 +233,27 @@ function FilterSheet({
   onClose: () => void;
 }) {
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col justify-end" role="dialog" aria-modal="true" aria-label="Filter and sort">
-      <button type="button" aria-label="Close filters" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="rise pb-safe relative flex flex-col gap-4 rounded-t-3xl bg-white px-5 pt-5">
-        <div className="mx-auto h-1 w-10 rounded-full bg-line" />
+      <button type="button" aria-label="Close filters" onClick={onClose} className="fade absolute inset-0 bg-midnight/50" />
+      <div className="sheet-up pb-safe relative flex flex-col gap-4 rounded-t-[32px] bg-white px-5 pt-3">
+        <div className="mx-auto h-1.5 w-10 rounded-full bg-line" />
+        <div className="text-[20px] font-extrabold">Filter and sort</div>
         <Eyebrow>Show</Eyebrow>
         <div className="-mt-1 flex flex-wrap gap-2">
           {FILTERS.map((f) => {
-            const n = deck.filter(f.test).length;
+            const n = filterDestinations(deck, f.id).length;
             if (!n && f.id !== "all") return null;
             return (
               <Chip key={f.id} on={filter === f.id} onClick={() => onFilter(f.id)}>
-                {f.label} <span className="opacity-70">{n}</span>
+                {f.label} <span className="nums opacity-60">{n}</span>
               </Chip>
             );
           })}
@@ -217,16 +266,12 @@ function FilterSheet({
             </Chip>
           ))}
         </div>
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <button type="button" onClick={onReset} className="min-h-[48px] px-2 text-[15px] font-bold text-muted">
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <button type="button" onClick={onReset} className="min-h-[52px] px-3 text-[15px] font-bold text-muted">
             Reset
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="min-h-[48px] flex-1 rounded-[14px] bg-ink px-4 text-[15px] font-extrabold text-white"
-          >
-            Show {plural(resultCount, "trip")}
+          <button type="button" onClick={onClose} className="bg-trace min-h-[54px] flex-1 rounded-2xl px-4 text-[16px] font-extrabold text-white">
+            Show {plural(resultCount, "destination")}
           </button>
         </div>
       </div>
@@ -234,7 +279,7 @@ function FilterSheet({
   );
 }
 
-/** Eases a number up from zero once, for the first look at the dollar value. */
+/** Eases a number up from zero, for the first look at the dollar value. */
 function useCountUp(target: number, enabled: boolean): number {
   const [v, setV] = useState(enabled ? 0 : target);
   useEffect(() => {
@@ -245,7 +290,7 @@ function useCountUp(target: number, enabled: boolean): number {
     const start = performance.now();
     let raf = 0;
     const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / 1200);
+      const p = Math.min(1, (t - start) / 1400);
       setV(Math.round(target * (1 - Math.pow(1 - p, 3))));
       if (p < 1) raf = requestAnimationFrame(tick);
     };

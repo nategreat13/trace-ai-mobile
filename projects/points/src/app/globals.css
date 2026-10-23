@@ -4,22 +4,36 @@
   --color-trace-red: #FF655B;
   --color-trace-pink: #FD297B;
   --color-trace-green: #00D665;
-  --color-ok: #15803D;
+  /* Supporting palette: sky and sea for beaches, violet for cities, gold for premium cabins. */
+  --color-sky: #0EA5E9;
+  --color-sea: #14B8A6;
+  --color-violet: #7C3AED;
+  --color-sunset: #F97316;
+  --color-gold: #F5B83D;
+  --color-midnight: #0F1730;
+  --color-ok: #0F8A45;
   --color-ok-bg: #DCFCE7;
   --color-near: #B45309;
   --color-near-bg: #FEF3C7;
-  --color-ink: #1A1A1A;
-  --color-muted: #6B6B6B;
-  --color-line: #E5E5E5;
-  --color-soft: #F5F5F5;
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --color-ink: #14161F;
+  --color-muted: #646B7A;
+  --color-line: #E7E8EE;
+  --color-soft: #F4F5F8;
+  --font-sans: var(--font-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 html,
 body {
-  background: #F5F5F5;
+  background: #EEF0F5;
   color: var(--color-ink);
   -webkit-tap-highlight-color: transparent;
+  font-feature-settings: "ss01" 0;
+}
+
+/* Every number lines up and reads cleanly: proportional design, fixed widths. */
+.nums {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* The app column: phone width, centered on desktop. */
@@ -29,35 +43,128 @@ body {
   min-height: 100dvh;
   background: #FFFFFF;
   position: relative;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.04), 0 10px 40px rgba(0, 0, 0, 0.06);
+  overflow-x: clip;
+  box-shadow: 0 0 0 1px rgba(15, 23, 48, 0.04), 0 20px 60px rgba(15, 23, 48, 0.08);
 }
 
-/* Same soft wash as the mobile app's landing screen. */
 .trace-wash {
-  background: linear-gradient(180deg, rgba(220, 38, 38, 0.06) 0%, transparent 45%, rgba(99, 102, 241, 0.04) 100%);
+  background:
+    radial-gradient(120% 60% at 100% 0%, rgba(253, 41, 123, 0.10), transparent 60%),
+    radial-gradient(100% 50% at 0% 10%, rgba(14, 165, 233, 0.10), transparent 60%),
+    #FFFFFF;
 }
 
-.{ padding-top: max(env(safe-area-inset-top), 0px); }
-.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+.text-gradient {
+  background: linear-gradient(90deg, #FF655B, #FD297B 55%, #7C3AED);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.bg-trace {
+  background: linear-gradient(100deg, #FF655B 0%, #FD297B 60%, #E0218A 100%);
+}
+
+/* Premium cabins: midnight with a gold edge. */
+.bg-premium {
+  background: linear-gradient(135deg, #0F1730 0%, #1E2650 60%, #2A2160 100%);
+}
+
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 14px); }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
 
-input[type="range"] { accent-color: #FF655B; }
-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+input[type="range"] { accent-color: #FD297B; }
+
+/* ---------- Motion ---------- */
 
 @keyframes rise {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
 }
-.rise { animation: rise 0.35s ease both; }
+.rise { animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.fade { animation: fade 0.5s ease both; }
+
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.94); }
+  70% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+.pop { animation: pop 0.35s ease; }
+
+@keyframes check-in {
+  from { opacity: 0; transform: scale(0.3) rotate(-30deg); }
+  to { opacity: 1; transform: none; }
+}
+.check-in { animation: check-in 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+@keyframes kenburns {
+  from { transform: scale(1.02) translate3d(0, 0, 0); }
+  to { transform: scale(1.14) translate3d(-2%, -2%, 0); }
+}
+.kenburns { animation: kenburns 9s ease-out both; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float { animation: float 3.2s ease-in-out infinite; }
+
+@keyframes shimmer {
+  from { transform: translateX(-120%) skewX(-20deg); }
+  to { transform: translateX(220%) skewX(-20deg); }
+}
+.shimmer { position: relative; overflow: hidden; }
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: shimmer 2.8s ease-in-out infinite 1s;
+}
+
+@keyframes fly {
+  0% { offset-distance: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { offset-distance: 100%; opacity: 0; }
+}
+
+@keyframes dash { to { stroke-dashoffset: -40; } }
+.dash-move { animation: dash 1.4s linear infinite; }
 
 @keyframes pulse-soft {
-  0%, 100% { opacity: 0.4; transform: scale(0.96); }
+  0%, 100% { opacity: 0.5; transform: scale(0.96); }
   50% { opacity: 1; transform: scale(1); }
 }
-.pulse-soft { animation: pulse-soft 1.2s ease infinite; }
+.pulse-soft { animation: pulse-soft 1.4s ease infinite; }
+
+@keyframes confetti-fall {
+  0% { transform: translate3d(0, -20px, 0) rotate(0); opacity: 1; }
+  100% { transform: translate3d(var(--dx), 105dvh, 0) rotate(var(--rot)); opacity: 0.9; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+.slide-in-right { animation: slide-in-right 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+.sheet-up { animation: sheet-up 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise, .pulse-soft { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -25,9 +25,9 @@ export function BalanceCard({ id }: { id: ProgramId }) {
   };
 
   return (
-    <div className={cx("flex flex-col gap-3 rounded-2xl border bg-white p-4", est ? "border-trace-red" : "border-line")}>
+    <div className={cx("flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-[0_6px_20px_rgba(15,23,48,0.07)] transition-shadow", est ? "ring-2 ring-trace-pink" : "ring-1 ring-line")}>
       <div className="flex items-center gap-3">
-        <ProgramBadge id={id} size={36} />
+        <ProgramBadge id={id} size={40} />
         <label htmlFor={`bal-${id}`} className="flex-1 text-[15px] leading-tight font-bold">
           {p.name}
         </label>
@@ -37,7 +37,7 @@ export function BalanceCard({ id }: { id: ProgramId }) {
           onClick={() => update((s) => ({ estimated: { ...s.estimated, [id]: !est } }))}
           className={cx(
             "min-h-[34px] shrink-0 rounded-full px-3 text-[12.5px] font-bold",
-            est ? "bg-trace-red text-white" : "border border-line text-muted",
+            est ? "bg-trace text-white" : "bg-soft text-muted",
           )}
         >
           {est ? "Estimated" : "Not sure"}
@@ -52,7 +52,7 @@ export function BalanceCard({ id }: { id: ProgramId }) {
           placeholder="0"
           value={value === "" ? "" : num(Number(value))}
           onChange={(e) => set(e.target.value)}
-          className="min-h-[50px] min-w-0 flex-1 rounded-xl border border-line bg-soft px-3 font-mono text-[20px] font-bold outline-none focus:border-trace-red"
+          className="nums min-h-[54px] min-w-0 flex-1 rounded-2xl bg-soft px-4 text-[22px] font-extrabold outline-none focus:bg-white focus:ring-2 focus:ring-trace-pink"
         />
         <span className="text-[13px] text-muted">{unit}</span>
       </div>

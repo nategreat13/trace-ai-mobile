@@ -60,7 +60,7 @@ export default function AccountPage() {
         ) : (
           <Card className="flex items-center justify-between gap-3 p-4">
             <span className="flex items-center gap-3">
-              <span className="font-mono text-[17px] font-bold text-trace-red">{state.airport}</span>
+              <span className="nums text-[17px] font-bold text-trace-red">{state.airport}</span>
               <span className="font-bold">{home?.city}</span>
             </span>
             <button type="button" onClick={() => setAirport(true)} className="min-h-[40px] rounded-xl bg-soft px-3 text-[14px] font-bold">

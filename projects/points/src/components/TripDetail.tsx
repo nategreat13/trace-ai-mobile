@@ -5,9 +5,12 @@ import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { money, num } from "@/lib/format";
 import { usePoints } from "@/lib/store";
-import { AFFILIATE, finePrint, offerLine, tripLabel } from "@/lib/tripText";
+import { creditFor } from "@/lib/images";
+import { finePrint } from "@/lib/tripText";
+import { CardOfferLink } from "./CardOffer";
+import { cabinLabel } from "./results/DestinationCard";
 import { TripThumb } from "./TripThumb";
-import { Card, Check, cx, Eyebrow, Icon, ICONS, LockIcon } from "./ui";
+import { CabinBadge, Card, Check, cx, Eyebrow, Icon, ICONS, LockIcon, StatusPill } from "./ui";
 
 interface Step {
   title: string;
@@ -60,26 +63,39 @@ export function TripDetail({
   const watching = state.watching[id] ?? state.saved.includes(id);
   const requested = !!state.checks[`${id}:seats-requested`];
   const have = r.best.capacity;
+  const credit = creditFor(r.trip.city);
 
   return (
     <div className="flex flex-col">
-      <div className="relative h-60 text-white">
-        <TripThumb city={r.trip.city} code={r.trip.code} className="absolute inset-0" showCode={false} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/20" />
+      <div className="relative h-[330px] overflow-hidden text-white">
+        <TripThumb city={r.trip.city} code={r.trip.code} className="kenburns absolute inset-0" showCode={false} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-black/30" />
         <button
           type="button"
           aria-label="Back"
           onClick={onBack}
-          className="absolute top-3 left-4 mt-1 flex h-11 w-11 items-center justify-center rounded-xl bg-black/30 backdrop-blur"
+          className="absolute top-4 left-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-black/30 backdrop-blur-md active:scale-95"
         >
-          <Icon d={ICONS.back} size={20} />
+          <Icon d={ICONS.back} size={20} stroke={2.4} />
         </button>
-        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1 px-5 pb-5">
-          <div className="font-mono text-[15px] font-bold opacity-90">{origin} → {r.trip.code}</div>
-          <h1 className="text-[38px] leading-none font-black">{r.trip.city}</h1>
-          <div className="text-[14px] opacity-95">
-            {tripLabel(r)} · {num(r.need)} points + ~{money(r.taxesTotal)} taxes
+        <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 px-5 pb-6">
+          <div className="flex items-center gap-2">
+            <CabinBadge business={r.isBusiness} label={cabinLabel(r)} />
+            <span className="nums text-[14px] font-bold opacity-90">{origin} → {r.trip.code} · {r.trip.route}</span>
           </div>
+          <h1 className="rise text-[44px] leading-none font-extrabold tracking-[-0.02em]">{r.trip.city}</h1>
+          <div className="flex items-end justify-between gap-3">
+            <div className="flex flex-col">
+              <span className="nums text-[26px] leading-tight font-extrabold">{num(r.need)} <span className="text-[15px] font-semibold opacity-80">points</span></span>
+              <span className="text-[13px] opacity-85">+ about {money(r.taxesTotal)} taxes{n > 1 ? ` for ${n}` : ""} · <span className="line-through">{money(r.cashTotal)}</span> cash</span>
+            </div>
+            <StatusPill ok={r.ok} className="bg-white">{r.ok ? "You can book this" : `${num(r.gap)} short`}</StatusPill>
+          </div>
+          {credit && (
+            <a href={credit.page} target="_blank" rel="noopener noreferrer" className="text-[10.5px] opacity-60">
+              Photo: {credit.author}, {credit.license}
+            </a>
+          )}
         </div>
       </div>
 
@@ -92,20 +108,20 @@ export function TripDetail({
                 {p.direct
                   ? `Your ${PROGRAMS[p.from].short} miles`
                   : `${num(p.spend)} ${PROGRAMS[p.from].short} → ${r.best.partner.short}`}
-                {p.bonus && <span className="ml-1 rounded bg-ok-bg px-1.5 py-0.5 text-[11px] font-bold text-ok">+{p.bonus.pct}% bonus</span>}
+                {p.bonus && <span className="ml-1 rounded bg-ok-bg px-1.5 py-0.5 text-[11px] font-bold whitespace-nowrap text-ok">+{p.bonus.pct}% bonus</span>}
               </span>
-              <span className="font-mono font-bold">{num(p.miles)}</span>
+              <span className="nums font-bold">{num(p.miles)}</span>
             </div>
           ))}
           {!r.ok && (
             <div className="flex justify-between gap-3 text-[15px]">
               <span>You have</span>
-              <span className="font-mono font-bold">{num(have)}</span>
+              <span className="nums font-bold">{num(have)}</span>
             </div>
           )}
           <div className="flex justify-between gap-3 border-t border-line pt-2 text-[15px] font-bold">
             <span>Needed{n > 1 ? ` for ${n}` : ""}</span>
-            <span className="font-mono">{num(r.need)}</span>
+            <span className="nums">{num(r.need)}</span>
           </div>
           <p className="text-[12.5px] text-muted">
             {r.best.parts.length > 1
@@ -114,15 +130,14 @@ export function TripDetail({
           </p>
         </Card>
 
-        {!r.ok && (
-          <div className="flex flex-col gap-1 rounded-2xl bg-near-bg p-4 text-[#5A3A00]">
-            <div className="text-[15px] font-extrabold">You&apos;re {num(r.gap)} points short</div>
-            <div className="text-[14px] leading-snug">
-              {r.suggestion ? offerLine(r.suggestion) : "Keep earning and we'll tell you the day you can book it."}
+        {!r.ok &&
+          (r.suggestion ? (
+            <CardOfferLink suggestion={r.suggestion} gap={r.gap} trip={r.trip.id} where="detail" />
+          ) : (
+            <div className="rounded-3xl bg-near-bg p-4 text-[14px] font-semibold text-[#5A3A00]">
+              You&apos;re {num(r.gap)} points short. Keep earning and we&apos;ll tell you the day you can book it.
             </div>
-            {r.suggestion && <div className="pt-1 text-[11.5px] opacity-80">{AFFILIATE}</div>}
-          </div>
-        )}
+          ))}
 
         <section className="flex flex-col gap-2.5">
           <h2 className="text-[18px] font-extrabold">Seats</h2>

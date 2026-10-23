@@ -1,129 +1,125 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo } from "react";
 import { evalAll } from "@/engine/engine";
 import type { TripResult } from "@/engine/types";
-import { num } from "@/lib/format";
-import { useDeck, usePoints } from "@/lib/store";
-import { tripLabel } from "@/lib/tripText";
+import { CardOfferLink } from "@/components/CardOffer";
+import { cabinLabel } from "@/components/results/DestinationCard";
 import { TripThumb } from "@/components/TripThumb";
-import { cx, Icon, ICONS, PrimaryButton } from "@/components/ui";
+import { CabinBadge, cx, Eyebrow, Icon, ICONS, stagger } from "@/components/ui";
+import { num, plural, shortDate } from "@/lib/format";
+import { useDeck, usePoints, type PlannedTrip } from "@/lib/store";
 
-function tripStatus(r: TripResult, requested: boolean): { label: string; cls: string } {
+function savedStatus(r: TripResult, requested: boolean): { label: string; cls: string } {
   if (!r.ok) return { label: `Saving up · ${num(r.gap)} to go`, cls: "bg-near-bg text-near" };
-  if (requested) return { label: "Checking seats", cls: "bg-[#DBEAFE] text-[#1E40AF]" };
+  if (requested) return { label: "Checking seats", cls: "bg-sky/10 text-sky" };
   return { label: "Watching for seats", cls: "bg-ok-bg text-ok" };
 }
 
-/** The next twelve months, as "Mar 2027" style choices. */
-function months(): string[] {
-  const out: string[] = [];
-  const d = new Date();
-  d.setDate(1);
-  for (let i = 1; i <= 12; i++) {
-    const m = new Date(d.getFullYear(), d.getMonth() + i, 1);
-    out.push(m.toLocaleString("en-US", { month: "short", year: "numeric" }));
-  }
-  return out;
-}
+const dates = (p: PlannedTrip) =>
+  `${shortDate(p.depart)}${p.ret ? ` – ${shortDate(p.ret)}` : " · one way"}${p.flexible ? " ± 3 days" : ""}`;
 
 export default function TripsPage() {
   const { state, update } = usePoints();
   const { input } = useDeck();
-  const all = evalAll(input);
+  const all = useMemo(() => evalAll(input), [input]);
   const saved = state.saved.map((id) => all.find((r) => r.trip.id === id)).filter((r): r is TripResult => !!r);
-  const [planning, setPlanning] = useState(false);
-  const cities = [...new Set(all.map((r) => r.trip.city))];
-  const [city, setCity] = useState(cities[0]);
-  const [when, setWhen] = useState(months()[2]);
+  const watching = state.planned
+    .map((p) => ({ p, r: evalAll({ ...input, travelers: p.travelers }).find((x) => x.trip.id === p.tripId) }))
+    .filter((x): x is { p: PlannedTrip; r: TripResult } => !!x.r);
 
   return (
-    <div className="flex flex-col gap-4 px-5 pt-5 pb-10">
-      <div>
-        <h1 className="text-[28px] font-black">My trips</h1>
-        <p className="text-[14.5px] text-muted">We watch these and tell you when seats open or a bonus makes them cheaper.</p>
+    <div className="flex flex-col gap-5 px-4 pt-5 pb-12">
+      <div className="px-1">
+        <h1 className="text-[30px] leading-tight font-extrabold tracking-[-0.02em]">My trips</h1>
+        <p className="text-[15px] leading-snug text-muted">We watch these and tell you when seats open or a bonus makes them cheaper.</p>
       </div>
 
-      {saved.length === 0 && (
-        <div className="rounded-2xl bg-soft p-5 text-[15px]">
-          Nothing saved yet. Tap the heart on any trip in{" "}
-          <Link href="/discover" className="font-bold text-trace-red">Discover</Link>.
-        </div>
-      )}
+      <Link
+        href="/plan"
+        className="rise relative flex min-h-[132px] flex-col justify-end overflow-hidden rounded-[28px] p-5 text-white shadow-[0_12px_30px_rgba(124,58,237,0.25)] active:scale-[0.99]"
+      >
+        <TripThumb city="Santorini" code="" className="kenburns absolute inset-0" showCode={false} />
+        <span className="absolute inset-0 bg-gradient-to-tr from-violet/90 via-trace-pink/60 to-transparent" />
+        <span className="relative flex items-center gap-2 text-[22px] font-extrabold">
+          <Icon d={ICONS.search} size={22} stroke={2.4} /> Plan a trip
+        </span>
+        <span className="relative text-[14px] font-medium text-white/90">Search a place and dates. We&apos;ll price it in your points and watch for seats.</span>
+      </Link>
 
-      {saved.map((r) => {
-        const st = tripStatus(r, !!state.checks[`${r.trip.id}:seats-requested`]);
-        return (
-          <Link key={r.trip.id} href={`/trip/${r.trip.id}`} className="flex min-h-[84px] items-center gap-3.5 rounded-2xl border border-line p-3">
-            <TripThumb city={r.trip.city} code={r.trip.code} className="h-16 w-16 shrink-0 rounded-xl" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="text-[16px] font-extrabold">{r.trip.city}</div>
-              <div className="truncate text-[13px] text-muted">{tripLabel(r)} · {num(r.need)} pts</div>
-              <span className={cx("self-start rounded-full px-2.5 py-0.5 text-[12px] font-bold", st.cls)}>{st.label}</span>
-            </div>
-            <span className="text-muted"><Icon d={ICONS.chevron} size={18} /></span>
-          </Link>
-        );
-      })}
-
-      {state.planned.length > 0 && (
-        <>
-          <h2 className="pt-2 text-[18px] font-extrabold">Planned</h2>
-          {state.planned.map((p) => (
-            <div key={p.id} className="flex items-center gap-3.5 rounded-2xl border border-line p-3">
-              <TripThumb city={p.city} code={all.find((r) => r.trip.city === p.city)?.trip.code ?? ""} className="h-12 w-12 shrink-0 rounded-xl" />
-              <div className="flex flex-1 flex-col">
-                <span className="font-extrabold">{p.city}</span>
-                <span className="text-[13px] text-muted">Around {p.when} · Watching for seats</span>
+      {watching.length > 0 && (
+        <section className="flex flex-col gap-2.5">
+          <Eyebrow className="px-1">Watching · {watching.length}</Eyebrow>
+          {watching.map(({ p, r }, i) => (
+            <article key={p.id} className="rise overflow-hidden rounded-[24px] bg-white shadow-[0_8px_24px_rgba(15,23,48,0.08)]" style={stagger(i)}>
+              <div className="flex items-center gap-3 p-3">
+                <Link href={`/trip/${r.trip.id}`} className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl">
+                  <TripThumb city={r.trip.city} code={r.trip.code} className="absolute inset-0" showCode={false} />
+                </Link>
+                <Link href={`/trip/${r.trip.id}`} className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-[16.5px] font-extrabold">{r.trip.city}</span>
+                    <CabinBadge business={r.isBusiness} label={cabinLabel(r)} />
+                  </span>
+                  <span className="nums flex items-center gap-1.5 text-[13px] font-semibold text-muted">
+                    <Icon d={ICONS.calendar} size={14} /> {dates(p)}
+                  </span>
+                  <span className={cx("text-[12.5px] font-bold", r.ok ? "text-ok" : "text-near")}>
+                    {num(r.need)} pts for {plural(p.travelers, "traveler")} · {r.ok ? "covered" : `${num(r.gap)} short`}
+                  </span>
+                </Link>
+                <button
+                  type="button"
+                  aria-label={`Stop watching ${r.trip.city}`}
+                  onClick={() => update((s) => ({ planned: s.planned.filter((x) => x.id !== p.id) }))}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted active:bg-soft"
+                >
+                  <Icon d={ICONS.close} size={16} stroke={2.4} />
+                </button>
               </div>
-              <button
-                type="button"
-                aria-label={`Remove ${p.city} plan`}
-                onClick={() => update((s) => ({ planned: s.planned.filter((x) => x.id !== p.id) }))}
-                className="flex h-10 w-10 items-center justify-center rounded-xl text-muted"
-              >
-                <Icon d={ICONS.close} size={16} />
-              </button>
-            </div>
+              <div className="flex items-center gap-2 border-t border-line px-4 py-2.5 text-[12.5px] font-semibold text-muted">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-sky" />
+                </span>
+                Watching for seats on your dates
+              </div>
+              {!r.ok && r.suggestion && <CardOfferLink compact suggestion={r.suggestion} gap={r.gap} trip={r.trip.id} where="trips" />}
+            </article>
           ))}
-        </>
+        </section>
       )}
 
-      {planning ? (
-        <form
-          className="flex flex-col gap-3 rounded-2xl border border-line p-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            update((s) => ({ planned: [...s.planned, { id: `${city}-${when}-${Date.now()}`, city, when }] }));
-            setPlanning(false);
-          }}
-        >
-          <div className="font-extrabold">Plan a specific trip</div>
-          <label className="flex flex-col gap-1 text-[13px] font-bold text-muted">
-            Where
-            <select value={city} onChange={(e) => setCity(e.target.value)} className="min-h-[48px] rounded-xl border border-line bg-white px-3 text-[16px] font-semibold text-ink">
-              {cities.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-[13px] font-bold text-muted">
-            Roughly when
-            <select value={when} onChange={(e) => setWhen(e.target.value)} className="min-h-[48px] rounded-xl border border-line bg-white px-3 text-[16px] font-semibold text-ink">
-              {months().map((m) => <option key={m}>{m}</option>)}
-            </select>
-          </label>
-          <PrimaryButton type="submit">Watch this trip</PrimaryButton>
-        </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setPlanning(true)}
-          className="flex flex-col gap-1 rounded-2xl border border-dashed border-line p-4 text-left"
-        >
-          <span className="flex items-center gap-2 font-extrabold"><Icon d={ICONS.plus} size={18} /> Plan a specific trip</span>
-          <span className="text-[14px] text-muted">Tell us where and roughly when. We&apos;ll price it in your points and watch for seats.</span>
-        </button>
-      )}
+      <section className="flex flex-col gap-2.5">
+        <Eyebrow className="px-1">Saved · {saved.length}</Eyebrow>
+        {saved.length === 0 && (
+          <div className="rounded-3xl bg-soft p-5 text-[15px] leading-snug">
+            Nothing saved yet. Tap the heart on any destination in{" "}
+            <Link href="/discover" className="font-bold text-trace-pink">Discover</Link>.
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2.5">
+          {saved.map((r, i) => {
+            const st = savedStatus(r, !!state.checks[`${r.trip.id}:seats-requested`]);
+            return (
+              <Link
+                key={r.trip.id}
+                href={`/trip/${r.trip.id}`}
+                className="rise relative flex aspect-[4/5] flex-col justify-end overflow-hidden rounded-[24px] p-3 text-white active:scale-[0.98]"
+                style={stagger(i)}
+              >
+                <TripThumb city={r.trip.city} code={r.trip.code} className="absolute inset-0" showCode={false} />
+                <span className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+                <span className="absolute top-2.5 left-2.5"><CabinBadge business={r.isBusiness} label={cabinLabel(r)} /></span>
+                <span className="relative text-[18px] leading-tight font-extrabold">{r.trip.city}</span>
+                <span className="nums relative text-[12.5px] text-white/85">{num(r.need)} pts · {r.trip.route}</span>
+                <span className={cx("relative mt-1.5 self-start rounded-full px-2 py-0.5 text-[11px] font-extrabold", st.cls)}>{st.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

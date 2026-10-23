@@ -2,19 +2,21 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AIRLINE_IDS, BANK_IDS, PROGRAMS } from "@/engine/data";
+import { AIRLINE_IDS, BANK_IDS, PROGRAMS, hopFor } from "@/engine/data";
 import { cityStatuses } from "@/engine/engine";
 import type { ProgramId, TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
+import { groupDestinations } from "@/lib/destinations";
 import { kShort, num, plural } from "@/lib/format";
 import { type FunnelStep, usePoints, useDeck } from "@/lib/store";
 import { Paywall } from "../Paywall";
 import { ResultsView } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
 import { TripThumb } from "../TripThumb";
-import { Check, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, SecondaryButton } from "../ui";
+import { Check, Confetti, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, SecondaryButton, stagger } from "../ui";
 import { AirportSearch } from "./AirportSearch";
 import { BalanceCard } from "./BalanceCard";
+import { Landing } from "./Landing";
 
 const QUESTIONS: FunnelStep[] = ["progs", "bal", "air", "trav", "picks"];
 const PREV: Partial<Record<FunnelStep, FunnelStep>> = { progs: "land", bal: "progs", air: "bal", trav: "air", picks: "trav" };
@@ -46,25 +48,28 @@ export function Funnel() {
     window.scrollTo(0, 0);
   }, [step]);
 
-  if (!ready) return <div className="min-h-dvh" />;
+  if (!ready) return <div className="min-h-dvh bg-midnight" />;
 
   const q = QUESTIONS.indexOf(step);
   return (
     <div className="flex min-h-dvh flex-col">
       {q >= 0 && (
-        <div className="sticky top-0 z-30 flex items-center gap-3.5 bg-white px-5 pt-4 pb-2">
+        <div className="sticky top-0 z-30 flex items-center gap-3.5 bg-white/90 px-5 pt-4 pb-3 backdrop-blur">
           <button
             type="button"
             aria-label="Back"
             onClick={() => go(PREV[step] ?? "land")}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-line"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-soft active:scale-95"
           >
-            <Icon d={ICONS.back} size={18} />
+            <Icon d={ICONS.back} size={18} stroke={2.4} />
           </button>
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-soft" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={q + 1}>
-            <div className="h-full rounded-full bg-gradient-to-r from-trace-red to-trace-pink transition-[width] duration-300" style={{ width: `${((q + 1) / 5) * 100}%` }} />
+          <div className="flex flex-1 gap-1.5" role="progressbar" aria-valuemin={0} aria-valuemax={5} aria-valuenow={q + 1} aria-label={`Step ${q + 1} of 5`}>
+            {QUESTIONS.map((s, k) => (
+              <span key={s} className="h-1.5 flex-1 overflow-hidden rounded-full bg-soft">
+                <span className={cx("block h-full rounded-full bg-trace transition-[width] duration-500", k <= q ? "w-full" : "w-0")} />
+              </span>
+            ))}
           </div>
-          <div className="w-10 text-right text-[13px] text-muted">{q + 1} of 5</div>
         </div>
       )}
       {step === "land" && <Landing onStart={() => go("progs")} />}
@@ -97,53 +102,19 @@ function Screen({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className={cx("rise flex flex-1 flex-col px-5", icon ? "pt-14" : "pt-3")}>
-      <div className="flex flex-col gap-1.5 pb-4">
+    <div className={cx("flex flex-1 flex-col px-5", icon ? "pt-14" : "pt-2")}>
+      <div className="rise flex flex-col gap-2 pb-5">
         {icon && <div className="pb-3">{icon}</div>}
-        <h1 className="text-[30px] leading-[1.1] font-black">{title}</h1>
-        {sub && <p className="text-[15.5px] text-muted">{sub}</p>}
+        <h1 className="text-[31px] leading-[1.08] font-extrabold tracking-[-0.02em]">{title}</h1>
+        {sub && <p className="text-[16px] leading-snug text-muted">{sub}</p>}
       </div>
       <div className="flex flex-1 flex-col">{children}</div>
-      <div className="pb-safe sticky bottom-0 flex flex-col gap-2 bg-gradient-to-t from-white via-white to-white/0 pt-4">{footer}</div>
+      {footer && <div className="pb-safe sticky bottom-0 flex flex-col gap-2 bg-gradient-to-t from-white from-70% to-white/0 pt-6">{footer}</div>}
     </div>
   );
 }
 
-function Landing({ onStart }: { onStart: () => void }) {
-  useEffect(() => {
-    track("landing_view");
-  }, []);
-  return (
-    <div className="trace-wash flex min-h-dvh flex-col justify-between px-6 pt-8 pb-8">
-      <Logo className="h-6 self-start" />
-      <div className="rise flex flex-col gap-4 py-10">
-        <h1 className="text-[46px] leading-[1.0] font-black tracking-tight">You&apos;re sitting on a free flight.</h1>
-        <p className="text-[17px] leading-relaxed text-[#4A4A4A]">
-          Tell us your cards and balances. We&apos;ll do the math across every airline partner and show you exactly what you can book from your airport.
-        </p>
-        <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-white/80 p-4 shadow-sm">
-          <Eyebrow>What points book, one way, typical</Eyebrow>
-          {[
-            ["12,500", "Hawaii in economy"],
-            ["22,500", "New York in lie-flat"],
-            ["52,500", "Tokyo in ANA business"],
-          ].map(([p, t]) => (
-            <div key={t} className="flex items-center justify-between gap-3 text-[15px]">
-              <span className="font-mono font-bold text-trace-red">{p}</span>
-              <span className="text-right font-semibold">{t}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-col gap-2.5">
-        <PrimaryButton onClick={onStart}>See what my points can book</PrimaryButton>
-        <div className="text-center text-[13px] text-muted">60 seconds · No card needed · No logins</div>
-      </div>
-    </div>
-  );
-}
-
-function ProgramTile({ id }: { id: ProgramId }) {
+function ProgramTile({ id, i }: { id: ProgramId; i: number }) {
   const { state, update } = usePoints();
   const on = state.progs.includes(id);
   return (
@@ -151,16 +122,19 @@ function ProgramTile({ id }: { id: ProgramId }) {
       type="button"
       aria-pressed={on}
       onClick={() => update((s) => ({ progs: on ? s.progs.filter((x) => x !== id) : [...s.progs, id] }))}
+      style={stagger(i)}
       className={cx(
-        "relative flex min-h-[104px] flex-col items-center justify-center gap-2 rounded-2xl px-1.5 py-3 text-center transition",
-        on ? "border-2 border-trace-red bg-trace-red/[0.07]" : "border border-line bg-white",
+        "rise relative flex min-h-[112px] flex-col items-center justify-center gap-2.5 rounded-3xl px-1.5 py-3 text-center transition-all duration-200 active:scale-95",
+        on ? "bg-white shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.18)]" : "bg-soft",
       )}
     >
-      <ProgramBadge id={id} />
-      <span className="text-[14px] leading-tight font-bold">{PROGRAMS[id].short}</span>
+      <span className={cx("transition-transform duration-200", on && "scale-110")}>
+        <ProgramBadge id={id} size={48} />
+      </span>
+      <span className="text-[13.5px] leading-tight font-bold">{PROGRAMS[id].short}</span>
       {on && (
-        <span className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-trace-red text-white">
-          <Check size={11} />
+        <span className="check-in bg-trace absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full text-white">
+          <Check size={12} />
         </span>
       )}
     </button>
@@ -173,7 +147,7 @@ function Programs({ onNext }: { onNext: () => void }) {
   return (
     <Screen
       title="Which points do you have?"
-      sub="Pick everything you've got. We'll combine them."
+      sub="Pick every card and airline. We'll combine them."
       footer={
         <PrimaryButton
           disabled={!n}
@@ -186,10 +160,10 @@ function Programs({ onNext }: { onNext: () => void }) {
         </PrimaryButton>
       }
     >
-      <Eyebrow className="pb-2.5">Credit card points</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">{BANK_IDS.map((id) => <ProgramTile key={id} id={id} />)}</div>
-      <Eyebrow className="pt-5 pb-2.5">Airline miles</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id) => <ProgramTile key={id} id={id} />)}</div>
+      <Eyebrow className="pb-3">Credit card points</Eyebrow>
+      <div className="grid grid-cols-3 gap-2.5">{BANK_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i} />)}</div>
+      <Eyebrow className="pt-6 pb-3">Airline miles</Eyebrow>
+      <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + 5} />)}</div>
     </Screen>
   );
 }
@@ -204,9 +178,9 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
       sub={`Check your card's app, or tap "Not sure" and we'll estimate.`}
       footer={
         <>
-          <div className="flex items-center justify-between rounded-[14px] bg-soft px-4 py-3">
-            <span className="text-[14px] font-semibold text-muted">Total points</span>
-            <span className="font-mono text-[20px] font-bold">{num(values.total)}</span>
+          <div className="flex items-center justify-between rounded-2xl bg-midnight px-5 py-3.5 text-white">
+            <span className="text-[14px] font-semibold text-white/70">Total points</span>
+            <span className="nums text-[22px] font-extrabold">{num(values.total)}</span>
           </div>
           <PrimaryButton
             disabled={!ok}
@@ -220,7 +194,13 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
         </>
       }
     >
-      <div className="flex flex-col gap-3">{state.progs.map((id) => <BalanceCard key={id} id={id} />)}</div>
+      <div className="flex flex-col gap-3">
+        {state.progs.map((id, i) => (
+          <div key={id} className="rise" style={stagger(i, 70)}>
+            <BalanceCard id={id} />
+          </div>
+        ))}
+      </div>
     </Screen>
   );
 }
@@ -233,7 +213,7 @@ function AirportStep({ onNext }: { onNext: () => void }) {
         onPick={(a) => {
           update({ airport: a.code });
           track("airport_selected", { airport: a.code });
-          window.setTimeout(onNext, 200);
+          window.setTimeout(onNext, 220);
         }}
       />
     </Screen>
@@ -259,22 +239,22 @@ function Travelers({ onNext }: { onNext: () => void }) {
         </PrimaryButton>
       }
     >
-      <div className="flex flex-col items-center gap-5 rounded-3xl bg-soft px-5 py-7">
+      <div className="rise flex flex-col items-center gap-6 rounded-[28px] bg-gradient-to-br from-[#FFF1F3] via-[#FDF2FF] to-[#EEF6FF] px-5 py-8">
         <div className="flex w-full items-center justify-between">
-          <button type="button" aria-label="Fewer travelers" disabled={n <= 1} onClick={() => set(n - 1)} className="flex h-16 w-16 items-center justify-center rounded-full border border-line bg-white disabled:opacity-40">
+          <button type="button" aria-label="Fewer travelers" disabled={n <= 1} onClick={() => set(n - 1)} className="flex h-16 w-16 items-center justify-center rounded-full bg-white shadow-sm active:scale-90 disabled:opacity-40">
             <Icon d={ICONS.minus} size={26} stroke={2.6} />
           </button>
           <div className="flex flex-col items-center" aria-live="polite">
-            <span className="bg-gradient-to-r from-trace-red to-trace-pink bg-clip-text text-[68px] leading-none font-black text-transparent">{n}</span>
-            <span className="text-[14px] text-muted">{n === 1 ? "traveler" : "travelers"}</span>
+            <span key={n} className="pop text-gradient nums text-[76px] leading-none font-extrabold">{n}</span>
+            <span className="text-[14px] font-semibold text-muted">{n === 1 ? "traveler" : "travelers"}</span>
           </div>
-          <button type="button" aria-label="More travelers" disabled={n >= 6} onClick={() => set(n + 1)} className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-trace-red to-trace-pink text-white disabled:opacity-40">
+          <button type="button" aria-label="More travelers" disabled={n >= 6} onClick={() => set(n + 1)} className="bg-trace flex h-16 w-16 items-center justify-center rounded-full text-white shadow-[0_8px_20px_rgba(253,41,123,0.35)] active:scale-90 disabled:opacity-40">
             <Icon d={ICONS.plus} size={26} stroke={2.6} />
           </button>
         </div>
         <div className="flex gap-1.5" aria-hidden="true">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <span key={i} className={i < n ? "text-trace-red" : "text-[#D4D4D4]"}>
+          {[0, 1, 2, 3, 4, 5].map((k) => (
+            <span key={k} className={cx("transition-all duration-300", k < n ? "scale-100 text-trace-pink" : "scale-90 text-[#D5D8E0]")}>
               <Icon d={ICONS.person} size={30} />
             </span>
           ))}
@@ -292,7 +272,7 @@ function Travelers({ onNext }: { onNext: () => void }) {
             type="button"
             aria-pressed={n === v}
             onClick={() => set(v as number)}
-            className={cx("min-h-[44px] rounded-full border px-4 text-[15px] font-bold", n === v ? "border-trace-red bg-trace-red text-white" : "border-line")}
+            className={cx("min-h-[46px] rounded-full border px-4 text-[15px] font-bold transition active:scale-95", n === v ? "border-ink bg-ink text-white" : "border-line")}
           >
             {label}
           </button>
@@ -302,10 +282,15 @@ function Travelers({ onNext }: { onNext: () => void }) {
   );
 }
 
+/** The cities shown on the picks screen: the brief's list, two more favorites, and the weekend hop. */
+const FEATURED = ["Tokyo", "Paris", "Rome", "Maui", "Honolulu", "Cancún", "Los Cabos", "Costa Rica", "New York", "Seoul", "Sydney", "Bali", "London", "Santorini"];
+
 function Picks({ onNext }: { onNext: () => void }) {
   const { state, update } = usePoints();
   const { input } = useDeck();
-  const tiles = cityStatuses(input);
+  const all = cityStatuses(input);
+  const hop = hopFor(input.origin).city;
+  const tiles = [...FEATURED, hop].map((c) => all.find((x) => x.city === c)).filter((x): x is NonNullable<typeof x> => !!x);
   const picks = state.picks;
   const finish = (p: string[]) => {
     update({ picks: p });
@@ -319,14 +304,18 @@ function Picks({ onNext }: { onNext: () => void }) {
       footer={
         <>
           <PrimaryButton disabled={!picks.length} onClick={() => finish(picks)}>
-            {picks.length ? "Find my trips" : "Pick up to 3"}
+            {picks.length ? `Find my trips (${picks.length})` : "Pick up to 3"}
           </PrimaryButton>
           <SecondaryButton onClick={() => finish([])}>I&apos;m flexible, show me everything</SecondaryButton>
         </>
       }
     >
+      <div className="flex items-center gap-4 pb-3 text-[12.5px] font-semibold text-muted">
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-trace-green" /> Your points cover it</span>
+        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#FBBF24]" /> Points short</span>
+      </div>
       <div className="grid grid-cols-3 gap-2.5">
-        {tiles.map((c) => {
+        {tiles.map((c, i) => {
           const on = picks.includes(c.city);
           return (
             <button
@@ -339,23 +328,24 @@ function Picks({ onNext }: { onNext: () => void }) {
                   picks: on ? s.picks.filter((x) => x !== c.city) : s.picks.length >= 3 ? s.picks : [...s.picks, c.city],
                 }))
               }
+              style={stagger(i, 35)}
               className={cx(
-                "relative aspect-[4/5] overflow-hidden rounded-2xl text-left text-white",
-                on && "ring-[3px] ring-trace-red ring-offset-2",
+                "rise relative aspect-[3/4] overflow-hidden rounded-3xl text-left text-white transition-transform duration-200 active:scale-95",
+                on && "ring-[3px] ring-trace-pink ring-offset-2",
               )}
             >
-              <TripThumb city={c.city} code={c.code} className="absolute inset-0" showCode={false} />
-              <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/10" />
+              <TripThumb city={c.city} code={c.code} className={cx("absolute inset-0 transition-transform duration-500", on && "scale-110")} showCode={false} />
+              <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
               <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2.5">
-                <span className="text-[15px] leading-tight font-black">{c.city}</span>
+                <span className="text-[15px] leading-tight font-extrabold">{c.city}</span>
                 <span className="flex items-center gap-1.5 text-[11px] font-bold">
                   <span className={cx("h-2 w-2 rounded-full", c.ok ? "bg-trace-green" : "bg-[#FBBF24]")} />
                   {c.ok ? "Can book" : `${kShort(c.gap)} short`}
                 </span>
               </span>
               {on && (
-                <span className="absolute top-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-trace-red">
-                  <Check size={11} />
+                <span className="check-in bg-trace absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full">
+                  <Check size={12} />
                 </span>
               )}
             </button>
@@ -386,15 +376,32 @@ function Loading({ onDone }: { onDone: () => void }) {
     `Pricing trips from ${state.airport} for ${state.travelers === 1 ? "you" : plural(state.travelers, "traveler")}`,
     "Finding the cheapest way to book each one",
   ];
+  const path = "M 24 150 C 110 20, 250 20, 336 120";
   return (
-    <div className="flex min-h-dvh flex-col justify-center gap-7 px-8">
-      <span className="pulse-soft text-trace-red"><Icon d={ICONS.plane} size={56} stroke={1.8} /></span>
-      <h1 className="text-[30px] leading-[1.1] font-black">Doing the math on {num(values.total)} points…</h1>
+    <div className="trace-wash flex min-h-dvh flex-col justify-center gap-7 px-7">
+      <div className="relative h-[170px]" aria-hidden="true">
+        <svg viewBox="0 0 360 170" className="absolute inset-0 h-full w-full">
+          <path d={path} fill="none" stroke="#FD297B" strokeOpacity="0.35" strokeWidth="2.5" strokeDasharray="6 8" className="dash-move" />
+          <circle cx="24" cy="150" r="6" fill="#FF655B" />
+          <circle cx="336" cy="120" r="6" fill="#7C3AED" />
+        </svg>
+        <span
+          className="absolute top-0 left-0 text-trace-pink"
+          style={{ offsetPath: `path("${path}")`, offsetRotate: "auto 90deg", animation: "fly 2.4s ease-in-out infinite" } as React.CSSProperties}
+        >
+          <Icon d={ICONS.plane} size={30} stroke={1.5} />
+        </span>
+        <span className="nums absolute bottom-0 left-0 text-[13px] font-extrabold text-trace-red">{state.airport}</span>
+        <span className="absolute right-0 bottom-6 text-[13px] font-extrabold text-violet">Anywhere</span>
+      </div>
+      <h1 className="text-[30px] leading-[1.1] font-extrabold tracking-[-0.02em]">
+        Doing the math on <span className="text-gradient nums">{num(values.total)}</span> points…
+      </h1>
       <ul className="flex flex-col gap-3.5" aria-live="polite">
         {lines.map((l, k) => (
-          <li key={l} className={cx("flex items-center gap-3 text-[15.5px] transition-colors", k < i ? "text-ink" : "text-[#B3B3B3]")}>
-            <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full", k < i ? "bg-trace-green text-white" : "border-2 border-line")}>
-              {k < i && <Check size={12} />}
+          <li key={l} className={cx("flex items-center gap-3 text-[15.5px] font-medium transition-colors duration-300", k < i ? "text-ink" : "text-[#B3B8C4]")}>
+            <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all duration-300", k < i ? "bg-trace-green text-white" : "border-2 border-line")}>
+              {k < i && <span className="check-in"><Check size={12} /></span>}
             </span>
             {l}
           </li>
@@ -406,30 +413,32 @@ function Loading({ onDone }: { onDone: () => void }) {
 
 function EmailStep({ onNext }: { onNext: () => void }) {
   const { state, update } = usePoints();
-  const { ok, near } = useDeck();
+  const { deck } = useDeck();
+  const dests = groupDestinations(deck);
+  const ok = dests.filter((d) => d.ok);
+  const near = dests.filter((d) => !d.ok);
   const [email, setEmail] = useState(state.email);
   const valid = /.+@.+\..+/.test(email);
-  const head = ok.length ? `We found ${plural(ok.length, "trip")} you can book today.` : `We found ${plural(near.length, "trip")} you're close to.`;
+  const head = ok.length ? `We found ${plural(ok.length, "destination")} you can book today.` : `We found ${plural(near.length, "destination")} you're close to.`;
   const sub = ok.length && near.length ? `Plus ${near.length} you're close to. Where should we send your list?` : "Where should we send your list?";
+  const submit = () => {
+    if (!valid) return;
+    update({ email });
+    track("email_captured", { trips: ok.length + near.length });
+    onNext();
+  };
   return (
     <Screen
       title={head}
       sub={sub}
       icon={
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-trace-green text-white">
-          <Check size={26} />
+        <span className="check-in bg-trace flex h-16 w-16 items-center justify-center rounded-3xl text-white shadow-[0_10px_28px_rgba(253,41,123,0.35)]">
+          <Icon d={ICONS.sparkle} size={30} stroke={2.2} />
         </span>
       }
       footer={
         <>
-          <PrimaryButton
-            disabled={!valid}
-            onClick={() => {
-              update({ email });
-              track("email_captured", { trips: ok.length + near.length });
-              onNext();
-            }}
-          >
+          <PrimaryButton disabled={!valid} onClick={submit}>
             See my trips
           </PrimaryButton>
           <button type="button" onClick={onNext} className="min-h-[44px] text-[14px] font-semibold text-muted">
@@ -441,12 +450,9 @@ function EmailStep({ onNext }: { onNext: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!valid) return;
-          update({ email });
-          track("email_captured", { trips: ok.length + near.length });
-          onNext();
+          submit();
         }}
-        className="flex flex-col gap-2 pt-2"
+        className="flex flex-col gap-2 pt-1"
       >
         <label htmlFor="email" className="text-[13px] font-bold text-muted">Email</label>
         <input
@@ -456,7 +462,7 @@ function EmailStep({ onNext }: { onNext: () => void }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="min-h-[56px] rounded-[14px] border border-line bg-soft px-4 text-[17px] outline-none focus:border-trace-red focus:bg-white"
+          className="min-h-[58px] rounded-2xl border border-line bg-soft px-4 text-[17px] outline-none focus:border-trace-pink focus:bg-white"
         />
       </form>
     </Screen>
@@ -475,14 +481,15 @@ function FreeResults({ onPaywall }: { onPaywall: () => void }) {
 
   if (detail) {
     return (
-      <div className="rise">
+      <div className="slide-in-right">
         <TripDetail r={detail} mode="free" onBack={() => setDetail(null)} onUnlock={onPaywall} />
       </div>
     );
   }
   return (
     <div className="flex min-h-dvh flex-col">
-      <div className="flex items-center px-5 pt-4">
+      {first && <Confetti />}
+      <div className="flex items-center px-5 pt-5">
         <Logo className="h-5" />
       </div>
       <ResultsView
@@ -502,22 +509,27 @@ function FreeResults({ onPaywall }: { onPaywall: () => void }) {
 function Done({ onOpen }: { onOpen: () => void }) {
   const { state } = usePoints();
   const { deck } = useDeck();
-  const first = deck.find((r) => state.saved.includes(r.trip.id)) ?? deck.find((r) => state.picks.includes(r.trip.city));
+  const first = deck.find((r) => state.saved.includes(r.trip.id)) ?? deck.find((r) => state.picks.includes(r.trip.city)) ?? deck[0];
   return (
-    <div className="rise flex min-h-dvh flex-col justify-center gap-5 px-7">
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-trace-green text-white">
-        <Check size={30} />
-      </span>
-      <h1 className="text-[38px] leading-[1.05] font-black">You&apos;re in.</h1>
-      <p className="text-[16px] leading-relaxed text-[#4A4A4A]">
-        {first
-          ? `${first.trip.city} is first on your list. All ${plural(deck.length, "trip")} are unlocked, with booking steps.`
-          : `All ${plural(deck.length, "trip")} are unlocked, with booking steps.`}
-      </p>
-      <div className="rounded-2xl bg-soft p-4 text-[14px] leading-snug">
-        <span className="font-bold">On iPhone?</span> Tap Share, then &ldquo;Add to Home Screen&rdquo; so seat and bonus alerts can reach you.
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-midnight text-white">
+      <Confetti count={80} />
+      {first && <TripThumb city={first.trip.city} code={first.trip.code} className="kenburns absolute inset-0 opacity-70" showCode={false} />}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/30 to-black/90" />
+      <div className="relative mt-auto flex flex-col gap-5 px-7 pb-safe">
+        <span className="check-in flex h-16 w-16 items-center justify-center rounded-3xl bg-trace-green text-white">
+          <Check size={30} />
+        </span>
+        <h1 className="rise text-[42px] leading-[1.02] font-extrabold tracking-[-0.02em]">You&apos;re in.</h1>
+        <p className="rise text-[17px] leading-relaxed text-white/90" style={stagger(2)}>
+          {first
+            ? `${first.trip.city} is first on your list. All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`
+            : `All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`}
+        </p>
+        <div className="rise rounded-2xl border border-white/20 bg-white/10 p-4 text-[14px] leading-snug backdrop-blur" style={stagger(3)}>
+          <span className="font-bold">On iPhone?</span> Tap Share, then &ldquo;Add to Home Screen&rdquo; so seat and bonus alerts can reach you.
+        </div>
+        <PrimaryButton onClick={onOpen}>Open Trace</PrimaryButton>
       </div>
-      <PrimaryButton onClick={onOpen}>Open Trace</PrimaryButton>
     </div>
   );
 }

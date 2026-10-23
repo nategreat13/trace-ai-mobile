@@ -9,10 +9,20 @@ import { todayIso } from "./format";
 export type FunnelStep =
   | "land" | "progs" | "bal" | "air" | "trav" | "picks" | "load" | "email" | "results" | "pay" | "done";
 
+/** A trip the user searched for and asked us to watch. */
 export interface PlannedTrip {
   id: string;
+  /** The priced trip being watched. */
+  tripId: string;
   city: string;
-  when: string;
+  /** YYYY-MM-DD. */
+  depart: string;
+  /** YYYY-MM-DD, or "" for one way. */
+  ret: string;
+  flexible: boolean;
+  travelers: number;
+  cabin: "any" | "economy" | "business";
+  addedAt: string;
 }
 
 export interface PointsState {
@@ -75,6 +85,8 @@ export function PointsProvider({ children }: { children: React.ReactNode }) {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const saved = { ...INITIAL, ...JSON.parse(raw) } as PointsState;
+        // Plans from the first build had no dates; drop them rather than show broken rows.
+        saved.planned = (saved.planned ?? []).filter((p) => p.tripId && p.depart);
         // A reload mid-animation picks up where the animation would have ended.
         if (saved.step === "load") saved.step = "email";
         setState(saved);

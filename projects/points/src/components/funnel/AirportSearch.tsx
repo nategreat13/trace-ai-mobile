@@ -30,12 +30,12 @@ export function AirportSearch({ onPick }: { onPick: (a: LaunchAirport) => void }
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="City, state, zip or airport code"
-          className="min-h-[58px] w-full rounded-[14px] border border-line bg-soft pr-4 pl-12 text-[17px] outline-none focus:border-trace-red focus:bg-white"
+          className="min-h-[60px] w-full rounded-2xl bg-soft pr-4 pl-12 text-[17px] outline-none focus:bg-white focus:ring-2 focus:ring-trace-pink"
         />
       </div>
 
       {matches.length > 0 && (
-        <ul className="overflow-hidden rounded-[14px] border border-line" role="listbox" aria-label="Airports">
+        <ul className="rise overflow-hidden rounded-3xl bg-white shadow-[0_10px_30px_rgba(15,23,48,0.10)]" role="listbox" aria-label="Airports">
           {matches.map(({ airport: a, detail }) => (
             <li key={a.code} className="border-b border-line last:border-b-0">
               <button
@@ -45,7 +45,7 @@ export function AirportSearch({ onPick }: { onPick: (a: LaunchAirport) => void }
                 onClick={() => onPick(a)}
                 className="flex min-h-[60px] w-full items-center gap-4 px-4 text-left active:bg-soft"
               >
-                <span className="w-12 font-mono text-[17px] font-bold text-trace-red">{a.code}</span>
+                <span className="bg-trace nums flex h-11 w-14 items-center justify-center rounded-xl text-[15px] font-extrabold text-white">{a.code}</span>
                 <span className="flex flex-col">
                   <span className="text-[16px] font-bold">{a.city}</span>
                   <span className="text-[12.5px] text-muted">{detail}</span>

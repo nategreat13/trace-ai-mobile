@@ -46,6 +46,8 @@ export interface Program {
   awardProgram?: AwardProgramId;
   /** Where to move points out, or manage miles. */
   transferUrl: string;
+  /** Square logo under /public/logos. Development placeholder until licensed marks arrive. */
+  logo: string;
 }
 
 export interface TransferPartner {
@@ -84,6 +86,17 @@ export interface AwardOption {
   note?: string;
 }
 
+export type Region =
+  | "USA"
+  | "Hawaii"
+  | "Canada"
+  | "Mexico & Caribbean"
+  | "Central & South America"
+  | "Europe"
+  | "Asia"
+  | "Oceania"
+  | "Middle East";
+
 export interface TripDef {
   id: string;
   city: string;
@@ -94,9 +107,15 @@ export interface TripDef {
   cash: number;
   /** Typical award taxes and fees per person, USD. */
   taxes: number;
-  kind: "beach" | "city";
+  kind: "beach" | "city" | "nature";
+  region: Region;
   international: boolean;
   options: AwardOption[];
+  /**
+   * "brief": researched Oct 21, 2026. "estimate": Trace's estimate from
+   * published award charts, not yet verified. Both are labeled in the UI.
+   */
+  source: "brief" | "estimate";
 }
 
 export interface CardOffer {
@@ -109,6 +128,8 @@ export interface CardOffer {
   spend: string;
   fee: string;
   tag?: string;
+  /** The issuer's card page. Swap for the affiliate link once approved. */
+  applyUrl: string;
 }
 
 export type Balances = Partial<Record<ProgramId, number>>;

@@ -16,7 +16,11 @@ export function payLine(r: TripResult): string {
 
 /** Labels every price as typical and flags dynamic programs and caveats. */
 export function finePrint(r: TripResult): string {
-  const bits = ["Typical saver price, estimated."];
+  const bits = [
+    r.trip.source === "estimate"
+      ? "Trace estimate from published award charts, not yet checked against live searches."
+      : "Typical saver price, estimated.",
+  ];
   if (r.best.partner.dynamic) bits.push(`${r.best.partner.short} prices change daily.`);
   if (r.best.option.note) bits.push(r.best.option.note);
   return bits.join(" ");
