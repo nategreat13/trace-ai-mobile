@@ -392,7 +392,10 @@ function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) 
   const [first] = useState(() => !state.resultsSeen);
   useEffect(() => {
     track("results_view");
-    if (first) update({ resultsSeen: true });
+    if (first) {
+      track("funnel_complete");
+      update({ resultsSeen: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
