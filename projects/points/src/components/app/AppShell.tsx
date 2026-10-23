@@ -34,9 +34,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [path]);
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Keep the page behind the drawer from scrolling on phones.
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
   }, [open]);
 
   if (!ready || !state.member) return <div className="min-h-dvh" />;
@@ -83,6 +91,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   key={n.href}
                   href={n.href}
                   aria-current={on ? "page" : undefined}
+                  // The path effect only fires when the route changes; tapping the current page must close too.
+                  onClick={() => setOpen(false)}
                   className={cx("flex min-h-[52px] items-center gap-3.5 rounded-xl px-3 text-[16px] font-bold", on ? "bg-trace text-white shadow-[0_8px_20px_rgba(253,41,123,0.25)]" : "text-ink active:bg-soft")}
                 >
                   <Icon d={n.icon} size={22} />
