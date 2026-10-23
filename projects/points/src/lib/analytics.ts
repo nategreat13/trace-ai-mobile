@@ -1,7 +1,8 @@
 /**
- * Funnel analytics. No backend yet, so events go to the console and to
- * `window.dataLayer`; wiring a real sink (and Meta Pixel + CAPI) later only
- * touches this file.
+ * Funnel analytics. Every event goes to `window.dataLayer`; the key funnel
+ * steps also go to the Meta Pixel (loaded in MetaPixel.tsx when
+ * NEXT_PUBLIC_META_PIXEL_ID is set). Trial starts are also sent server-side
+ * from the Stripe webhook with the same event id.
  */
 export type PointsEvent =
   | "landing_view"
@@ -31,18 +32,20 @@ export type PointsEvent =
 
 /** Meta standard events the brief maps onto our funnel. */
 const META: Partial<Record<PointsEvent, string>> = {
+  results_view: "ViewContent",
   email_captured: "CompleteRegistration",
   paywall_view: "InitiateCheckout",
   trial_started: "StartTrial",
+  contact_sent: "Contact",
 };
 
 type Props = Record<string, string | number | boolean | undefined>;
 
-export function track(event: PointsEvent, props: Props = {}): void {
+export function track(event: PointsEvent, props: Props = {}, eventId?: string): void {
   if (typeof window === "undefined") return;
   const w = window as unknown as { dataLayer?: unknown[]; fbq?: (...a: unknown[]) => void };
   (w.dataLayer ??= []).push({ event, ...props, at: Date.now() });
   const meta = META[event];
-  if (meta && w.fbq) w.fbq("track", meta, props);
+  if (meta && w.fbq) w.fbq("track", meta, props, eventId ? { eventID: eventId } : undefined);
   if (process.env.NODE_ENV !== "production") console.debug("[track]", event, props);
 }

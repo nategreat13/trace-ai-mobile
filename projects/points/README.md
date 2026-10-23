@@ -1,6 +1,6 @@
 # Trace Points
 
-A mobile-first web app that turns credit card points and airline miles into trips people can book from their home airport. It is a standalone product: it shares Trace's look and a few helpers with the mobile app, but none of its data, users or subscriptions.
+A mobile-first web app that turns credit card points and airline miles into trips people can book from their home airport. It is a standalone product: it shares Trace's look, a few helpers and the Firebase project with the mobile app, but keeps its own collections (`pointsUsers`, `pointsRequests`), sign-in and subscriptions (Stripe, not RevenueCat). Going live: see [LAUNCH.md](LAUNCH.md).
 
 ```bash
 yarn workspace @trace/points dev     # http://localhost:3003
@@ -24,7 +24,11 @@ NEXT_DIST_DIR=.next-build yarn workspace @trace/points build   # while dev is ru
 | `src/lib/worldSearch.ts` | Searches that list, plus famous places with no airport (Kyoto → KIX/ITM). |
 | `src/lib/payments.ts`, `src/app/api/` | Checkout, trial start, billing portal and the Stripe webhook. |
 | `src/app/api/cash-deals/`, `src/lib/cashDeals.ts` | Cash fares for trips they're short on, from the Trace prod deals feed (`/deals/{airport}`). Smaller airports use a nearby hub's feed. Cached for an hour. |
-| `src/app/contact/`, `src/app/api/contact/` | Contact us form (menu, Account, and the free results sheet). Email is prefilled; messages go to Slack via `CONTACT_SLACK_WEBHOOK_URL`, or to the server log without it. |
+| `src/app/contact/`, `src/app/api/contact/` | Contact us form (menu, Account, and the free results sheet). Email is prefilled; messages go to Slack via `POINTS_SLACK_WEBHOOK_URL`, or to the server log without it. |
+| `src/lib/account.tsx`, `src/app/signin/`, `src/app/api/me`, `src/app/api/session` | Accounts: sign-in by emailed link, state sync across devices, membership from Stripe. |
+| `src/lib/server/` | Server-only helpers: Firebase Admin (env-aware `colRef`), the session cookie, members, Stripe, Slack, email, Meta CAPI. |
+| `src/app/api/requests/` | Seat checks, trip requests and dated watches, to Slack and `pointsRequests` for the team to answer. |
+| `src/app/privacy/`, `src/app/terms/` | Privacy policy and terms. |
 | `src/lib/value.ts` | Cents per point for a trip (cash fare minus taxes, over points). |
 | `src/lib/store.tsx` | App state, saved in the browser (`localStorage`) until there's a backend. |
 | `src/lib/analytics.ts` | `track()`; logs funnel events and maps them to Meta events. No sink yet. |
@@ -46,24 +50,31 @@ Marriott Bonvoy transfers at 3:1 (United 3:1.1); the 5,000-point bonus on 60,000
 
 Still to verify: the inland price adjustments, Virgin's ANA pricing (last confirmed 2024), and Bilt's current card bonus.
 
+## Accounts
+
+Sign-in is passwordless. Firebase Auth (project `trace-ai-b9cba`) only emails the link and proves the person owns the address; Points then sets its own signed, httpOnly cookie (`POINTS_SESSION_SECRET`). That keeps a Points sign-in from ever becoming a session for the mobile app account with the same email.
+
+- **After checkout:** `/api/checkout/verify` records the membership and signs the buyer in on that device, but only for a new account (or one already signed in there). An existing account with saved data gets an emailed link instead, so paying with someone else's email never opens their trips.
+- **Other devices:** `/signin` emails a link to `/signin/finish`, which trades the Firebase ID token for the cookie.
+- **Sync:** `AccountProvider` loads the account on start (the account wins over the device) and saves changes back a moment later. Only the fields in `SYNC_KEYS` (`src/lib/sync.ts`) sync; membership is never taken from the client.
+- **Data:** `pointsUsers/{sha256(email)}` and `pointsRequests`, through the env-aware `colRef`. Local dev and previews use the `staging_` collections; production sets `TRACE_ENV=prod`. Both are server-only (Admin SDK); `firestore.rules` denies clients.
+
 ## Payments (Stripe)
 
-Checkout lives at `/checkout`. With no Stripe keys it runs in **test mode**: the trial starts on the device and the page says so. Add keys and it switches to Stripe Checkout with no code changes:
+Checkout lives at `/checkout`. With no Stripe keys it runs in **test mode**: the trial starts on the device only. With keys it uses Stripe Checkout (7-day trial, card up front). Setup steps are in [LAUNCH.md](LAUNCH.md).
 
-1. In Stripe (test mode first), create a product "Trace Points" with two recurring prices: **$99/year** and **$12/month**.
-2. Copy `.env.example` to `.env.local` in this folder and fill in `STRIPE_SECRET_KEY` and the two price IDs. Never commit it or paste keys in chat.
-3. Add a webhook endpoint pointing at `https://<site>/api/stripe/webhook` for `customer.subscription.created`, `.updated`, `.deleted`, `.trial_will_end` and `invoice.payment_failed`, and put its signing secret in `STRIPE_WEBHOOK_SECRET`. Locally: `stripe listen --forward-to localhost:3003/api/stripe/webhook`.
-4. Turn on the customer portal in Stripe settings (cancel and switch plans).
+The webhook (`/api/stripe/webhook`) keeps `pointsUsers` in step with Stripe:
 
-The trial is 7 days with the card collected up front; Stripe bills at the end unless the user cancels. Every trial start, test or real, goes through `onTrialStarted` in `src/lib/payments.ts` (analytics and Meta StartTrial today; welcome email later). The webhook marks where server-side work goes once there's a database: saving the member, the trial-ending reminder (Stripe sends `trial_will_end` 3 days out; send ours 2 days out), and cancellations.
+- `checkout.session.completed`: records the member (covers buyers who close the tab), sends Meta CAPI `StartTrial` with the session id as the event id (the browser sends the same id), and posts the new trial to Slack.
+- `customer.subscription.trial_will_end`: emails the trial reminder (set Stripe's "Trial ending events" to 2 days so it matches checkout). Without email set up, it asks the team in Slack to send it.
+- `customer.subscription.updated` / `.deleted`: turns access on or off. `trialing`, `active` and `past_due` keep access.
+
+The billing portal opens for the signed-in account's own Stripe customer only.
 
 ## Not built yet
-- **Accounts and a database.** No sign-in; everything is per-browser. Magic-link auth, saved trips, watches and the verification queue need a backend.
-- **Real seat dates.** "Find my seats" records the request locally. Phase 1 is a manual verification queue in an admin page.
-- **Contact delivery.** Create a Slack incoming webhook for the support channel and set `CONTACT_SLACK_WEBHOOK_URL` where the app is hosted. Email delivery can be added to the same route.
-- **Email and SMS** (abandoned-paywall sequence, trial reminder, alerts). Email is now optional during the funnel (an inline "email me this list" card) and required at checkout.
+- **Real seat dates.** "Find my seats", trip requests and dated watches go to Slack; the team answers by email. An admin queue would replace Slack later.
+- **Email beyond trial reminders** (welcome, abandoned-paywall sequence, alerts) and SMS.
 - **Admin tables** for editing the seed data without a deploy.
-- **Analytics sink, Meta Pixel and CAPI.** `track()` already fires every funnel event.
 - **"New today" badges** on Discover, which need the nightly refresh.
 - **Licensed logos.** `public/logos/` holds the programs' own site icons and Wikimedia Commons marks, for development only. Replace them with affiliate-network and press-kit assets before launch; `ProgramBadge` falls back to a letter code if a file is missing.
 - **Affiliate links.** Card offers link to each issuer's public card page (`applyUrl`). Swap in affiliate links once approved.

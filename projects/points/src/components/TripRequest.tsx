@@ -4,6 +4,7 @@ import Link from "next/link";
 import { track } from "@/lib/analytics";
 import { plural, shortDate } from "@/lib/format";
 import { usePoints, type TripRequest } from "@/lib/store";
+import { sendToTeam } from "@/lib/teamRequests";
 import { Check, cx, Icon, ICONS } from "./ui";
 
 export type RequestDraft = Omit<TripRequest, "id" | "note" | "createdAt">;
@@ -16,8 +17,8 @@ export const requestDates = (r: Pick<TripRequest, "depart" | "ret" | "flexible">
 
 /**
  * Saves a request for a trip Trace doesn't price yet (or not in that cabin).
- * Requests feed the Phase 1 manual verification queue; for now they're saved
- * on the device and fired as a `trip_request` event.
+ * Saved on the device and sent to the team (Slack + pointsRequests), who
+ * price it and reply by email.
  */
 export function useSubmitRequest() {
   const { state, update } = usePoints();
@@ -28,6 +29,12 @@ export function useSubmitRequest() {
   const submit = (d: RequestDraft, note: string, reason: "unpriced" | "cabin" | "more"): TripRequest => {
     const req: TripRequest = { ...d, id: `req-${Date.now()}`, note: note.trim(), createdAt: new Date().toISOString() };
     track("trip_request", { destination: req.destination, depart: req.depart, ret: req.ret, flexible: req.flexible, travelers: req.travelers, cabin: req.cabin, reason });
+    sendToTeam("trip", req.destination, [
+      requestDates(req),
+      `${plural(req.travelers, "traveler")} · ${capFirst(cabinText(req.cabin))}`,
+      reason === "unpriced" ? "We don't price this place yet" : reason === "cabin" ? "Not priced in this cabin" : "Wants more options",
+      req.note && `Note: "${req.note}"`,
+    ].filter(Boolean), state);
     update((s) => ({ requests: [req, ...s.requests] }));
     return req;
   };
@@ -39,7 +46,7 @@ export function RequestStatus({ r, fresh, bare, onRemove }: { r: TripRequest; fr
   const steps = [
     { label: "Requested", sub: new Date(r.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }), state: "done" as const },
     { label: "Trace prices it in your points", sub: "Usually within 24 hours", state: "active" as const },
-    { label: "We watch for seats on your dates", sub: "You'll get an alert when they open", state: "next" as const },
+    { label: "We watch for seats on your dates", sub: "We'll email you when they open", state: "next" as const },
   ];
   return (
     <div className={cx("flex flex-col gap-4", !bare && "rounded-[24px] bg-surface p-4 shadow-[0_8px_24px_rgba(15,23,48,0.08)]", fresh && "rise")}>

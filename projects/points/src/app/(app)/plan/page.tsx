@@ -10,6 +10,7 @@ import { cabinLabel } from "@/components/results/DestinationCard";
 import { TripThumb } from "@/components/TripThumb";
 import { CabinBadge, Check, cx, Eyebrow, Icon, ICONS, PrimaryButton, stagger } from "@/components/ui";
 import { track } from "@/lib/analytics";
+import { sendToTeam } from "@/lib/teamRequests";
 import { REGION_COLOR } from "@/lib/destinations";
 import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { WorldAirport } from "@/lib/worldAirports";
@@ -173,6 +174,11 @@ export default function PlanPage() {
       addedAt: new Date().toISOString(),
     };
     track("watch_added", { trip: r.trip.id, depart, flexible });
+    sendToTeam("watch", `${r.trip.city}, ${state.airport} → ${r.trip.code}`, [
+      `${shortDate(plan.depart)}${plan.ret ? ` – ${shortDate(plan.ret)}` : " · one way"}${plan.flexible ? " ± 3 days" : ""}`,
+      `${plural(plan.travelers, "traveler")} · ${plan.cabin === "any" ? "any cabin" : plan.cabin}`,
+      `${num(r.need)} points · ${r.ok ? "they have enough" : `short ${num(r.gap)}`}`,
+    ], state);
     update((s) => ({ planned: [...s.planned, plan] }));
   };
 

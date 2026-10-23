@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
 import { creditFor, photoFor } from "@/lib/images";
@@ -101,8 +102,17 @@ export function Landing({ onStart }: { onStart: () => void }) {
           <span className="h-1 w-1 rounded-full bg-muted/60" />
           <span>No logins</span>
         </div>
+        <p className="text-center text-[13.5px] text-muted">
+          Already a member?{" "}
+          <Link href="/signin" className="font-bold text-ink underline-offset-2 hover:underline">
+            Sign in
+          </Link>
+        </p>
         <div className="flex justify-between text-[10.5px] text-muted/80">
-          <span>Typical saver prices, one way.</span>
+          <span>
+            Typical saver prices, one way. <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link> ·{" "}
+            <Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link>
+          </span>
           {credit && (
             <a href={credit.page} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">
               Photo: {credit.author}, {credit.license}

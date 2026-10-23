@@ -54,6 +54,8 @@ export interface Membership {
   /** When the free week ends and billing starts, ISO. */
   trialEndsAt: string;
   testMode: boolean;
+  /** Stripe subscription status (trialing, active, past_due). */
+  status?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { PRICES } from "@/components/Paywall";
@@ -168,7 +169,10 @@ function Checkout() {
             Test mode: no card is collected. Add Stripe keys to take real payments.
           </p>
         )}
-        <p className="text-center text-[12px] text-muted">Cancel anytime in Account. Money-back guarantee.</p>
+        <p className="text-center text-[12px] leading-snug text-muted">
+          After your free week, renews automatically at {price} until you cancel. Cancel anytime in Account. By starting your trial you agree to the{" "}
+          <Link href="/terms" className="underline">Terms</Link> and <Link href="/privacy" className="underline">Privacy policy</Link>.
+        </p>
       </div>
     </div>
   );

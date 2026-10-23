@@ -9,6 +9,7 @@ import { PRICES } from "@/components/Paywall";
 import { Card, Chip, cx, Eyebrow, Icon, ICONS, SecondaryButton } from "@/components/ui";
 import { AIRLINE_IDS, BANK_IDS, PROGRAMS } from "@/engine/data";
 import { airportByCode } from "@/lib/airports";
+import { useAccount } from "@/lib/account";
 import { openBillingPortal } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 import { useTheme } from "@/lib/theme";
@@ -17,6 +18,7 @@ const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "n
 
 export default function AccountPage() {
   const { state, update, reset } = usePoints();
+  const { email: account, signOut } = useAccount();
   const router = useRouter();
   const [airport, setAirport] = useState(false);
   const [theme, setTheme] = useTheme();
@@ -24,6 +26,12 @@ export default function AccountPage() {
   const started = new Date(member.startedAt);
   const trialEnds = new Date(member.trialEndsAt ?? started.getTime() + 7 * 86400000);
   const home = state.airport ? airportByCode(state.airport) : undefined;
+  const trialing = member.testMode || !member.status || member.status === "trialing";
+  const billing = async () => {
+    const r = await openBillingPortal();
+    if (r === "signin") router.push(`/signin?email=${encodeURIComponent(state.email)}`);
+    return r;
+  };
 
   return (
     <div className="flex flex-col gap-5 px-5 pt-5 pb-12">
@@ -32,16 +40,17 @@ export default function AccountPage() {
       <section className="flex flex-col gap-2">
         <Eyebrow>Plan</Eyebrow>
         <Card className="flex flex-col gap-1 p-4">
-          <div className="text-[16px] font-extrabold">{PRICES[member.plan].label} · free trial</div>
+          <div className="text-[16px] font-extrabold">{PRICES[member.plan].label}{trialing ? " · free trial" : ""}</div>
           <div className="text-[14px] text-muted">
-            Started {fmt(started)}. Trial ends {fmt(trialEnds)}.
+            {trialing ? <>Started {fmt(started)}. Trial ends {fmt(trialEnds)}.</> : <>Member since {fmt(started)}.</>}
+            {member.status === "past_due" && <span className="block pt-1 font-semibold text-trace-red">Your last payment didn&apos;t go through. Update your card to keep access.</span>}
           </div>
           {member.testMode ? (
             <div className="pt-1 text-[12px] text-muted">Test mode: no card on file. Billing connects when Stripe keys are added.</div>
           ) : (
             <button
               type="button"
-              onClick={() => openBillingPortal(member.stripeCustomerId)}
+              onClick={billing}
               className="mt-2 flex min-h-[44px] items-center justify-center rounded-xl bg-soft text-[14px] font-bold"
             >
               Manage billing
@@ -70,15 +79,30 @@ export default function AccountPage() {
       </section>
 
       <section className="flex flex-col gap-2">
-        <Eyebrow>Email</Eyebrow>
-        <input
-          type="email"
-          aria-label="Email"
-          value={state.email}
-          onChange={(e) => update({ email: e.target.value })}
-          placeholder="you@example.com"
-          className="min-h-[50px] rounded-xl border border-line px-3.5 text-[16px] outline-none focus:border-trace-red"
-        />
+        <Eyebrow>Sign-in</Eyebrow>
+        {account ? (
+          <Card className="flex items-center gap-3 p-4">
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <span className="truncate text-[15.5px] font-bold">{account}</span>
+              <span className="text-[13px] text-muted">Your trips and points sync to every device</span>
+            </span>
+            <button type="button" onClick={signOut} className="min-h-[40px] shrink-0 rounded-xl bg-soft px-3 text-[13.5px] font-bold">
+              Sign out
+            </button>
+          </Card>
+        ) : (
+          <Link
+            href={`/signin?email=${encodeURIComponent(state.email)}`}
+            className="flex min-h-[60px] items-center gap-3 rounded-2xl border border-line px-4 active:bg-soft"
+          >
+            <span className="bg-trace flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"><Icon d={ICONS.person} size={17} /></span>
+            <span className="flex flex-1 flex-col leading-tight">
+              <span className="text-[15.5px] font-bold">Sign in to sync</span>
+              <span className="text-[13px] text-muted">Keep your trips and points on every device</span>
+            </span>
+            <Icon d={ICONS.chevron} size={16} stroke={2.4} className="text-muted" />
+          </Link>
+        )}
       </section>
 
       <section className="flex flex-col gap-2">
@@ -148,22 +172,25 @@ export default function AccountPage() {
         <SecondaryButton
           onClick={async () => {
             // Real subscriptions cancel in Stripe's portal; test trials just end here.
-            if (!member.testMode && (await openBillingPortal(member.stripeCustomerId))) return;
+            if (!member.testMode) {
+              if ((await billing()) !== "test") return;
+            }
             update({ member: null, step: "results" });
             router.replace("/");
           }}
         >
-          Cancel free trial
+          {trialing ? "Cancel free trial" : "Cancel membership"}
         </SecondaryButton>
         <button
           type="button"
-          onClick={() => {
+          onClick={async () => {
+            if (account) await signOut();
             reset();
             router.replace("/");
           }}
           className="min-h-[44px] text-[14px] font-semibold text-muted"
         >
-          Start over and clear my data
+          {account ? "Sign out and clear this device" : "Start over and clear my data"}
         </button>
       </section>
     </div>

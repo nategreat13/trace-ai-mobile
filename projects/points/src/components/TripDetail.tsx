@@ -7,6 +7,7 @@ import { track } from "@/lib/analytics";
 import { money, num } from "@/lib/format";
 import { creditFor } from "@/lib/images";
 import { usePoints } from "@/lib/store";
+import { sendToTeam } from "@/lib/teamRequests";
 import { finePrint } from "@/lib/tripText";
 import { useCashDeals } from "@/lib/cashDeals";
 import { centsPerPoint, cppLabel } from "@/lib/value";
@@ -238,7 +239,7 @@ export function TripDetail({
               </span>
               <span className="flex flex-col leading-tight">
                 <span className="text-[15px] font-extrabold">Checking real seats for you</span>
-                <span className="text-[13px] text-muted">Dates show up here, usually within 24 hours</span>
+                <span className="text-[13px] text-muted">We'll email you real dates, usually within 24 hours</span>
               </span>
             </div>
           ) : (
@@ -246,6 +247,11 @@ export function TripDetail({
               type="button"
               onClick={() => {
                 track("book_request", { trip: id });
+                sendToTeam("seats", `${r.trip.city}, ${origin} → ${r.trip.code}`, [
+                  `${r.isBusiness ? "Business" : "Economy"} · ${r.trip.route}`,
+                  `${num(r.need)} points via ${PROGRAMS[r.best.option.program as ProgramId]?.name ?? r.best.option.program} (flying ${r.best.option.on})`,
+                  r.ok ? "They have enough points" : `Short ${num(r.gap)} points`,
+                ], state);
                 update((s) => ({ checks: { ...s.checks, [`${id}:seats-requested`]: true } }));
               }}
               className="flex min-h-[68px] items-center gap-3 rounded-[24px] bg-gradient-to-r from-sky to-violet p-4 text-left text-white shadow-[0_10px_26px_rgba(14,165,233,0.3)] active:scale-[0.99]"
@@ -352,7 +358,7 @@ export function TripDetail({
             </span>
             <span className="flex flex-1 flex-col leading-tight">
               <span className="text-[15px] font-extrabold">Watch this trip</span>
-              <span className="text-[13px] text-muted">{watching ? "We'll ping you about dates and bonuses" : "Get pinged when dates open"}</span>
+              <span className="text-[13px] text-muted">{watching ? "On your watch list. Add dates in Plan a trip and we'll look for seats." : "Keep this trip on your watch list"}</span>
             </span>
             <button
               type="button"

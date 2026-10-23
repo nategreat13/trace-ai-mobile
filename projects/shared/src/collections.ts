@@ -57,6 +57,12 @@ export const COLLECTION_NAMES = [
   // for a city Trace doesn't serve and asked to be told when it launches.
   // Doubles as the demand signal for which origin to add next.
   "airportRequests",
+  // Trace Points (web): one doc per signed-in user (Firebase Auth uid) with
+  // their balances, saved trips and membership. Server-only.
+  "pointsUsers",
+  // Trace Points seat checks and trip requests for the team to answer.
+  // Server-only; each one is also posted to Slack.
+  "pointsRequests",
 ] as const;
 
 export type CollectionName = (typeof COLLECTION_NAMES)[number];

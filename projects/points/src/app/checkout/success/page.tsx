@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Icon, ICONS } from "@/components/ui";
+import { sendSignInLink, useAccount } from "@/lib/account";
 import { verifyCheckout } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 
@@ -18,6 +19,7 @@ export default function CheckoutSuccessPage() {
 
 function Confirm() {
   const { update, ready } = usePoints();
+  const { refresh } = useAccount();
   const router = useRouter();
   const sessionId = useSearchParams().get("session_id");
   const [error, setError] = useState("");
@@ -29,12 +31,16 @@ function Confirm() {
       return;
     }
     verifyCheckout(sessionId)
-      .then((m) => {
-        update({ member: m, step: "done" });
+      .then(async ({ member, email, signedIn }) => {
+        update({ member, step: "done", ...(email ? { email } : {}) });
+        // New accounts are signed in already. An existing account gets an
+        // email link so its saved trips sync here too.
+        if (signedIn) await refresh();
+        else if (email) await sendSignInLink(email).catch(() => {});
         router.replace("/");
       })
       .catch((e: Error) => setError(e.message));
-  }, [ready, sessionId, update, router]);
+  }, [ready, sessionId, update, router, refresh]);
 
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-8 text-center">

@@ -21,6 +21,9 @@ export async function POST(req: Request) {
   if (!price) return NextResponse.json({ error: `No Stripe price set for the ${plan} plan` }, { status: 500 });
 
   const origin = new URL(req.url).origin;
+  // Meta's browser ids, so the server-side StartTrial matches the ad click.
+  const cookie = req.headers.get("cookie") ?? "";
+  const metaId = (name: string) => cookie.match(new RegExp(`(?:^|; )${name}=([^;]+)`))?.[1];
   try {
     const session = await stripe<{ url: string }>("POST", "/checkout/sessions", {
       mode: "subscription",
@@ -31,6 +34,8 @@ export async function POST(req: Request) {
       "subscription_data[trial_settings][end_behavior][missing_payment_method]": "cancel",
       "subscription_data[metadata][plan]": plan,
       "metadata[plan]": plan,
+      "metadata[fbp]": metaId("_fbp"),
+      "metadata[fbc]": metaId("_fbc"),
       customer_email: email || undefined,
       allow_promotion_codes: true,
       success_url: `${origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,

@@ -51,10 +51,10 @@ export async function startCheckout(plan: Plan, email: string): Promise<Membersh
 }
 
 /** Confirms a finished Stripe Checkout and turns it into a membership. */
-export async function verifyCheckout(sessionId: string): Promise<Membership> {
+export async function verifyCheckout(sessionId: string): Promise<{ member: Membership; email: string; signedIn: boolean }> {
   const r = await fetch(`/api/checkout/verify?session_id=${encodeURIComponent(sessionId)}`);
   const j = (await r.json()) as
-    | { ok: true; plan: Plan; trialEndsAt: string; customer: string; subscription: string }
+    | { ok: true; plan: Plan; trialEndsAt: string; customer: string; subscription: string; status: string; email: string; signedIn: boolean }
     | { ok: false; error: string };
   if (!j.ok) throw new Error(j.error);
   const m: Membership = {
@@ -62,33 +62,34 @@ export async function verifyCheckout(sessionId: string): Promise<Membership> {
     startedAt: new Date().toISOString(),
     trialEndsAt: j.trialEndsAt,
     testMode: false,
+    status: j.status,
     stripeCustomerId: j.customer,
     stripeSubscriptionId: j.subscription,
   };
-  onTrialStarted(m);
-  return m;
+  onTrialStarted(m, sessionId);
+  return { member: m, email: j.email, signedIn: j.signedIn };
 }
 
-/** Opens Stripe's customer portal (2-tap cancel). Returns false in test mode. */
-export async function openBillingPortal(customer: string | undefined): Promise<boolean> {
-  if (!customer) return false;
-  const r = await fetch("/api/portal", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ customer }),
-  });
-  const j = (await r.json()) as { url?: string };
-  if (!j.url) return false;
+/**
+ * Opens Stripe's customer portal (2-tap cancel) for the signed-in account.
+ * Returns "test" in test mode, "signin" when they need to sign in first.
+ */
+export async function openBillingPortal(): Promise<"opened" | "test" | "signin" | "error"> {
+  const r = await fetch("/api/portal", { method: "POST" });
+  const j = (await r.json()) as { url?: string; mode?: "test"; signIn?: boolean };
+  if (j.mode === "test") return "test";
+  if (j.signIn) return "signin";
+  if (!j.url) return "error";
   window.location.assign(j.url);
-  return true;
+  return "opened";
 }
 
 /**
  * Everything that should happen the moment a trial starts, in one spot:
- * analytics (mapped to Meta's StartTrial). The trial-reminder email and
- * welcome email hook in here once email is connected; the Stripe webhook
- * covers the server side.
+ * analytics (mapped to Meta's StartTrial). The eventId is the Checkout
+ * session id, which the webhook also sends to Meta's Conversions API, so
+ * Meta counts the trial once.
  */
-function onTrialStarted(m: Membership) {
-  track("trial_started", { plan: m.plan, test_mode: m.testMode, trial_ends: m.trialEndsAt });
+function onTrialStarted(m: Membership, eventId?: string) {
+  track("trial_started", { plan: m.plan, test_mode: m.testMode, trial_ends: m.trialEndsAt, value: m.plan === "annual" ? 99 : 12, currency: "USD" }, eventId);
 }

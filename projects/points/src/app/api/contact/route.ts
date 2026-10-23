@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { CONTACT_TOPICS } from "@/lib/contact";
+import { postSlack } from "@/lib/server/slack";
 
 const MAX_MESSAGE = 4000;
 
-/**
- * Contact form. Sends each message to Slack when CONTACT_SLACK_WEBHOOK_URL is
- * set (an incoming webhook for the channel). Without it, the message is only
- * logged, so the form works locally before the channel exists. Email delivery
- * can be added here later the same way.
- */
+/** Contact form. Each message goes to the Trace Points Slack channel (see slack.ts). */
 export async function POST(req: Request) {
   let body: Record<string, unknown>;
   try {
@@ -34,19 +30,7 @@ export async function POST(req: Request) {
     str(ctx.page, 200) && `on ${str(ctx.page, 200)}`,
   ].filter(Boolean).join(" · ");
 
-  const hook = process.env.CONTACT_SLACK_WEBHOOK_URL;
-  if (!hook) {
-    console.log("[contact]", { email, topic, details, message });
-    return NextResponse.json({ ok: true, delivered: false });
-  }
-
   const text = `*Trace Points contact: ${topic}*\nFrom ${email}${details ? ` · ${details}` : ""}\n>>> ${message}`;
-  try {
-    const res = await fetch(hook, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
-    if (!res.ok) throw new Error(`Slack ${res.status}`);
-  } catch (e) {
-    console.error("[contact] Slack send failed", e);
-    return NextResponse.json({ error: "We couldn't send that. Try again in a minute." }, { status: 502 });
-  }
-  return NextResponse.json({ ok: true, delivered: true });
+  if (!(await postSlack(text))) return NextResponse.json({ error: "We couldn't send that. Try again in a minute." }, { status: 502 });
+  return NextResponse.json({ ok: true });
 }

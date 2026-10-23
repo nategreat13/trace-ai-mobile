@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { MetaPixel } from "@/components/MetaPixel";
+import { AccountProvider } from "@/lib/account";
 import { PointsProvider } from "@/lib/store";
 import { THEME_SCRIPT } from "@/lib/themeScript";
 import "./globals.css";
@@ -12,10 +14,20 @@ const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
+const DESCRIPTION =
+  "Tell us your cards and balances. Trace does the math across every airline partner and shows the trips you can book from your airport.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://points.tracetravel.co"),
   title: "Trace Points — You're sitting on a free flight",
-  description:
-    "Tell us your cards and balances. Trace does the math across every airline partner and shows the trips you can book from your airport.",
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "Trace Points",
+    title: "You're sitting on a free flight",
+    description: DESCRIPTION,
+  },
+  twitter: { card: "summary_large_image", title: "You're sitting on a free flight", description: DESCRIPTION },
   icons: { icon: "/favicon.png" },
   appleWebApp: { capable: true, title: "Trace", statusBarStyle: "default" },
 };
@@ -38,8 +50,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="font-sans antialiased">
         <PointsProvider>
-          <div className="app-col">{children}</div>
+          <AccountProvider>
+            <div className="app-col">{children}</div>
+          </AccountProvider>
         </PointsProvider>
+        <MetaPixel />
       </body>
     </html>
   );

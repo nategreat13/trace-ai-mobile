@@ -97,7 +97,7 @@ export function useAlerts(): { alerts: Alert[]; unread: number } {
         tone: "info",
         tag: "Requested",
         title: `We're pricing ${r.destination} for you`,
-        body: "A Trace analyst is checking it in your points. You'll hear back here, usually within 24 hours.",
+        body: "A Trace analyst is checking it in your points. We'll email you, usually within 24 hours.",
         action: { label: "See request", href: "/trips" },
       });
     }

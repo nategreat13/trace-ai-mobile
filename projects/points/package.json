@@ -10,6 +10,9 @@
     "test": "node --import tsx --test src/engine/*.test.ts src/lib/*.test.ts"
   },
   "dependencies": {
+    "@trace/shared": "1.0.0",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.0.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
