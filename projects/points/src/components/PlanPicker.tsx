@@ -1,14 +1,14 @@
 "use client";
 
 import { track } from "@/lib/analytics";
-import { annualSavings, giftDiscount, giftWeekly, planPrice } from "@/lib/payments";
+import { annualSavings, giftDiscount, giftMonthly, planPrice } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 import { GiftReminder } from "./GiftOffer";
 import { cx } from "./ui";
 
 /**
- * Yearly vs monthly. With the exit gift claimed, yearly shows $1.15/wk over the
- * struck-out $1.90/wk, billed yearly at $59.99; turned down earlier, it's
+ * Yearly vs monthly. With the exit gift claimed, yearly shows $5/mo over the
+ * struck-out $8.25/mo, billed yearly at $59.99; turned down earlier, it's
  * offered again underneath.
  */
 export function PlanPicker() {
@@ -42,7 +42,7 @@ export function PlanPicker() {
               )}
               <span className="nums text-[15.5px] font-extrabold whitespace-nowrap">{p.label}</span>
               <span className="text-[12.5px] text-muted">
-                {gift && <span className="mr-1 line-through">{giftWeekly().regular}/wk</span>}
+                {gift && <span className="mr-1 line-through">{giftMonthly().regular}/mo</span>}
                 {p.sub}
               </span>
             </button>

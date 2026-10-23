@@ -102,8 +102,8 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
           <span className="rounded-full bg-white/10 px-2.5 py-1 text-[12px] font-extrabold text-white/70">vs</span>
           <div className="flex flex-col text-right">
             <span className="text-[12px] font-semibold text-white/60">Trace</span>
-            <span className="nums text-[32px] leading-tight font-extrabold text-gold">{planPrice(state.plan, state.gift).week}</span>
-            <span className="text-[12px] text-white/60">a week</span>
+            <span className="nums text-[32px] leading-tight font-extrabold text-gold">{planPrice(state.plan, state.gift).month}</span>
+            <span className="text-[12px] text-white/60">a month</span>
           </div>
         </div>
 

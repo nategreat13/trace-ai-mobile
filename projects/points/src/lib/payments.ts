@@ -28,30 +28,32 @@ export interface PlanPrice {
   full: string;
   /** "Yearly · $99" */
   label: string;
-  /** "Just $1.90 a week" */
+  /** "Just $8.25 a month" */
   sub: string;
-  /** "$1.90" */
-  week: string;
+  /** Per month, rounded up to the cent: "$8.25" for $99 a year, "$12" for monthly. */
+  month: string;
   interval: "year" | "month";
 }
 
+const dollars = (cents: number) => `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
+
 const price = (cents: number, interval: "year" | "month", label: string, sub?: string): PlanPrice => {
-  const amount = `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
-  const week = `$${(cents / 100 / (interval === "year" ? 52 : 4.33)).toFixed(2)}`;
-  return { cents, amount, full: `${amount} a ${interval}`, label: `${label} · ${amount}`, sub: sub ?? `Just ${week} a week`, week, interval };
+  const amount = dollars(cents);
+  const month = interval === "year" ? dollars(Math.ceil(cents / 12)) : amount;
+  return { cents, amount, full: `${amount} a ${interval}`, label: `${label} · ${amount}`, sub: sub ?? `Just ${month} a month`, month, interval };
 };
 
 const GIFT = price(5999, "year", "Yearly");
 
 const PRICES = {
   annual: price(9900, "year", "Yearly"),
-  // Shown per week so it reads as tiny; it's still charged once a year.
-  gift: { ...GIFT, label: `Yearly · ${GIFT.week}/wk`, sub: "Billed yearly at $59.99" },
+  // Shown per month so it lines up against Monthly; it's still charged once a year.
+  gift: { ...GIFT, label: `Yearly · ${GIFT.month}/mo`, sub: "Billed yearly at $59.99" },
   monthly: price(1200, "month", "Monthly", "Cancel anytime"),
 };
 
-/** The gift as a weekly price ("$1.15") and the regular yearly one it beats ("$1.90"). */
-export const giftWeekly = () => ({ gift: PRICES.gift.week, regular: PRICES.annual.week });
+/** The gift as a monthly price ("$5") and the regular yearly one it beats ("$8.25"). */
+export const giftMonthly = () => ({ gift: PRICES.gift.month, regular: PRICES.annual.month });
 
 /** What a plan costs, with the exit gift ($59.99 a year) applied when they claimed it. */
 export const planPrice = (plan: Plan, gift?: boolean): PlanPrice => (plan === "annual" && gift ? PRICES.gift : PRICES[plan]);
