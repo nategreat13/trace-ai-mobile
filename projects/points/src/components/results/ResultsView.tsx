@@ -11,6 +11,7 @@ import { money, plural } from "@/lib/format";
 import { usePoints, useDeck } from "@/lib/store";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { useCashDeals } from "@/lib/cashDeals";
+import { GiftReminder } from "../GiftOffer";
 import { DestinationCard } from "./DestinationCard";
 import { BonusBanner } from "./Insights";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
@@ -124,6 +125,11 @@ export function ResultsView({
             {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
           </p>
           <Freshness />
+          {mode === "free" && (
+            <div className="pt-3">
+              <GiftReminder variant="banner" />
+            </div>
+          )}
         </div>
         <div role="tablist" aria-label="View" className="relative mt-4 grid grid-cols-2 rounded-2xl bg-soft p-1">
           <span

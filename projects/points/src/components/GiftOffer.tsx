@@ -1,15 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { track } from "@/lib/analytics";
 import { giftDiscount, planPrice, TRIAL_DAYS } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
-import { Confetti, Icon, ICONS, PrimaryButton } from "./ui";
+import { Confetti, cx, Icon, ICONS, PrimaryButton } from "./ui";
 
 /**
  * The one-time gift for people who reach the payment page and back out:
- * a year for $59.99 instead of $99, with the same free week. Once they
- * answer it (claim or no thanks), it doesn't show again.
+ * a year for $59.99 instead of $99, with the same free week. The popup shows
+ * once; after "No thanks" the offer stays reachable through GiftReminder.
  */
 export function GiftOffer({ where, onClaim, onDecline }: { where: "checkout" | "results"; onClaim: () => void; onDecline: () => void }) {
   const { update } = usePoints();
@@ -59,5 +60,45 @@ export function GiftOffer({ where, onClaim, onDecline }: { where: "checkout" | "
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * The gift after its popup was turned down, so it's never lost. "banner" sits
+ * on the free results and goes to checkout with the gift applied; "inline"
+ * sits under the plan picker and applies it in place.
+ */
+export function GiftReminder({ variant }: { variant: "banner" | "inline" }) {
+  const { state, update, ready } = usePoints();
+  const router = useRouter();
+  if (!ready || !state.giftOffered || state.gift || state.member) return null;
+  const gift = planPrice("annual", true);
+  const claim = () => {
+    track("gift_claimed", { where: variant === "banner" ? "results_banner" : "plan_picker" });
+    update({ gift: true, plan: "annual" });
+    if (variant === "banner") router.push("/checkout");
+  };
+  return (
+    <button
+      type="button"
+      onClick={claim}
+      className={cx(
+        "flex w-full items-center gap-3 rounded-2xl text-left active:scale-[0.98]",
+        variant === "banner" ? "bg-trace px-4 py-3 text-white shadow-[0_10px_24px_rgba(253,41,123,0.25)]" : "border-2 border-dashed border-trace-pink/50 bg-trace-pink/5 px-3.5 py-2.5",
+      )}
+    >
+      <span className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", variant === "banner" ? "bg-white/20" : "bg-trace text-white")}>
+        <Icon d={ICONS.gift} size={18} stroke={2} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="text-[14.5px] font-extrabold">Your gift is still here</span>
+        <span className={cx("text-[12.5px]", variant === "banner" ? "text-white/85" : "text-muted")}>
+          A full year for {gift.amount} <span className="line-through">$99</span>, still free for {TRIAL_DAYS} days
+        </span>
+      </span>
+      <span className={cx("shrink-0 rounded-full px-3 py-1.5 text-[13px] font-extrabold", variant === "banner" ? "bg-white text-trace-pink" : "bg-trace text-white")}>
+        {variant === "banner" ? "Claim" : "Use it"}
+      </span>
+    </button>
   );
 }
