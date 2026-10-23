@@ -23,7 +23,8 @@ export type PointsEvent =
   | "book_request"
   | "card_offer_click"
   | "watch_added"
-  | "plan_search";
+  | "plan_search"
+  | "trip_request";
 
 /** Meta standard events the brief maps onto our funnel. */
 const META: Partial<Record<PointsEvent, string>> = {

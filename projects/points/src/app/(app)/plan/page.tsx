@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { evalAll } from "@/engine/engine";
 import type { Region, TripResult } from "@/engine/types";
 import { CardOfferLink } from "@/components/CardOffer";
+import { RequestPanel, type RequestDraft } from "@/components/TripRequest";
 import { cabinLabel } from "@/components/results/DestinationCard";
 import { TripThumb } from "@/components/TripThumb";
 import { CabinBadge, Check, cx, Eyebrow, Icon, ICONS, PrimaryButton, stagger } from "@/components/ui";
@@ -18,10 +19,22 @@ type Where =
   | { kind: "city"; city: string; region: Region }
   | { kind: "region"; region: Region }
   | { kind: "beach" }
-  | { kind: "anywhere" };
+  | { kind: "anywhere" }
+  /** Somewhere Trace doesn't price yet; searching it leads to a request. */
+  | { kind: "custom"; text: string };
 
 const whereLabel = (w: Where) =>
-  w.kind === "city" ? w.city : w.kind === "region" ? w.region : w.kind === "beach" ? "Anywhere with a beach" : "Anywhere";
+  w.kind === "city"
+    ? w.city
+    : w.kind === "region"
+      ? w.region
+      : w.kind === "beach"
+        ? "Anywhere with a beach"
+        : w.kind === "custom"
+          ? w.text
+          : "Anywhere";
+
+const titleCase = (t: string) => t.replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
 const addDays = (iso: string, d: number) => {
   const t = new Date(`${iso}T12:00:00`);
@@ -69,7 +82,11 @@ export default function PlanPage() {
     }
     if ("beach".startsWith(t) || "beaches".startsWith(t)) out.push({ kind: "beach" });
     if ("anywhere".startsWith(t)) out.push({ kind: "anywhere" });
-    return out.slice(0, 8);
+    const exact = cities.some((c) => c.city.toLowerCase() === t);
+    const list = out.slice(0, 7);
+    // Anything we don't price can still be requested.
+    if (t.length >= 2 && !exact) list.push({ kind: "custom", text: titleCase(q.trim()) });
+    return list;
   }, [q, cities, regions]);
 
   const results: TripResult[] = useMemo(() => {
@@ -78,7 +95,13 @@ export default function PlanPage() {
     const n = searched.travelers;
     return evalAll({ ...input, travelers: n })
       .filter((r) =>
-        w.kind === "city" ? r.trip.city === w.city : w.kind === "region" ? r.trip.region === w.region : w.kind === "beach" ? r.trip.kind === "beach" : true,
+        w.kind === "city"
+          ? r.trip.city === w.city
+          : w.kind === "region"
+            ? r.trip.region === w.region
+            : w.kind === "beach"
+              ? r.trip.kind === "beach"
+              : w.kind === "anywhere",
       )
       .filter((r) => (searched.cabin === "any" ? true : searched.cabin === "business" ? r.isBusiness : !r.isBusiness))
       .sort((a, b) => Number(b.ok) - Number(a.ok) || (a.ok ? b.cashTotal - a.cashTotal : a.gap - b.gap));
@@ -108,6 +131,11 @@ export default function PlanPage() {
     update((s) => ({ planned: [...s.planned, plan] }));
   };
 
+  const [askMore, setAskMore] = useState(false);
+  const draft: RequestDraft | null = searched
+    ? { destination: whereLabel(searched.where), depart, ret: oneWay ? "" : ret, flexible, travelers: searched.travelers, cabin: searched.cabin }
+    : null;
+
   const datesOk = !!depart && (oneWay || (!!ret && ret >= depart));
   const canSearch = !!where && datesOk;
 
@@ -125,6 +153,7 @@ export default function PlanPage() {
           e.preventDefault();
           if (!canSearch || !where) return;
           setSearched({ where, travelers, cabin });
+          setAskMore(false);
           track("plan_search", { where: whereLabel(where), cabin, travelers, flexible });
         }}
       >
@@ -162,7 +191,6 @@ export default function PlanPage() {
               </div>
               {focus && (
                 <ul className="absolute inset-x-0 z-20 mt-2 max-h-[320px] overflow-auto rounded-2xl border border-line bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,48,0.16)]" role="listbox">
-                  {suggestions.length === 0 && <li className="px-3 py-3 text-[14px] text-muted">We don&apos;t price that destination yet.</li>}
                   {suggestions.map((s) => (
                     <li key={whereLabel(s)}>
                       <button
@@ -181,15 +209,21 @@ export default function PlanPage() {
                         ) : (
                           <span
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white"
-                            style={{ background: s.kind === "region" ? REGION_COLOR[s.region] : s.kind === "beach" ? "#14B8A6" : "#FD297B" }}
+                            style={{ background: s.kind === "region" ? REGION_COLOR[s.region] : s.kind === "beach" ? "#14B8A6" : s.kind === "custom" ? "#7C3AED" : "#FD297B" }}
                           >
-                            <Icon d={s.kind === "anywhere" ? ICONS.sparkle : ICONS.compass} size={17} />
+                            <Icon d={s.kind === "anywhere" ? ICONS.sparkle : s.kind === "custom" ? ICONS.plus : ICONS.compass} size={17} />
                           </span>
                         )}
                         <span className="flex flex-col leading-tight">
-                          <span className="text-[15px] font-bold">{whereLabel(s)}</span>
+                          <span className="text-[15px] font-bold">{s.kind === "custom" ? `Request “${s.text}”` : whereLabel(s)}</span>
                           <span className="text-[12px] text-muted">
-                            {s.kind === "city" ? s.region : s.kind === "region" ? `${plural(cities.filter((c) => c.region === s.region).length, "destination")}` : "Show me the best options"}
+                            {s.kind === "city"
+                              ? s.region
+                              : s.kind === "region"
+                                ? `${plural(cities.filter((c) => c.region === s.region).length, "destination")}`
+                                : s.kind === "custom"
+                                  ? "Not priced yet. Ask Trace to find it"
+                                  : "Show me the best options"}
                           </span>
                         </span>
                       </button>
@@ -275,16 +309,12 @@ export default function PlanPage() {
       {searched && (
         <section className="flex flex-col gap-3 px-4" aria-live="polite">
           <div className="flex items-baseline justify-between px-1">
-            <h2 className="text-[19px] font-extrabold">{plural(results.length, "option")}</h2>
+            <h2 className="text-[19px] font-extrabold">{results.length ? plural(results.length, "option") : whereLabel(searched.where)}</h2>
             <span className="text-[12.5px] font-semibold text-muted">
               {shortDate(depart)}{oneWay ? "" : ` – ${shortDate(ret)}`}{flexible ? " ± 3 days" : ""} · {plural(searched.travelers, "traveler")}
             </span>
           </div>
-          {results.length === 0 && (
-            <div className="rounded-3xl bg-soft p-5 text-[14.5px] text-muted">
-              Nothing in that cabin yet. Try &ldquo;Any cabin&rdquo;, or a nearby region.
-            </div>
-          )}
+          {results.length === 0 && <RequestPanel draft={draft!} reason={searched.where.kind === "custom" ? "unpriced" : "cabin"} />}
           {results.map((r, i) => {
             const on = !!watchingId(r.trip.id);
             return (
@@ -323,9 +353,22 @@ export default function PlanPage() {
             );
           })}
           {results.length > 0 && (
-            <p className="px-1 text-[12px] leading-snug text-muted">
-              Prices are typical saver awards, not live availability. Watching a trip asks Trace to check real seats on your dates.
-            </p>
+            <>
+              <p className="px-1 text-[12px] leading-snug text-muted">
+                Prices are typical saver awards, not live availability. Watching a trip asks Trace to check real seats on your dates.
+              </p>
+              {askMore ? (
+                <RequestPanel draft={draft!} reason="more" />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAskMore(true)}
+                  className="flex min-h-[56px] items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line text-[14.5px] font-bold text-muted active:bg-soft"
+                >
+                  <Icon d={ICONS.plus} size={16} stroke={2.4} /> Not what you wanted? Request a trip
+                </button>
+              )}
+            </>
           )}
         </section>
       )}

@@ -90,6 +90,18 @@ export function useAlerts(): { alerts: Alert[]; unread: number } {
       });
     }
 
+    for (const r of state.requests) {
+      out.push({
+        id: `request-${r.id}`,
+        icon: ICONS.pin,
+        tone: "info",
+        tag: "Requested",
+        title: `We're pricing ${r.destination} for you`,
+        body: "A Trace analyst is checking it in your points. You'll hear back here, usually within 24 hours.",
+        action: { label: "See request", href: "/trips" },
+      });
+    }
+
     if (values.bankCash > 0) {
       out.push({
         id: "dont-cash-out",
@@ -101,6 +113,9 @@ export function useAlerts(): { alerts: Alert[]; unread: number } {
       });
     }
 
-    return { alerts: out, unread: state.alertsReadAt ? 0 : out.length };
-  }, [state.progs, state.airport, state.alertsReadAt, deck, near, values, input.asOf]);
+    // After the first visit, only requests made since then count as new.
+    const readAt = state.alertsReadAt;
+    const unread = readAt ? state.requests.filter((r) => r.createdAt > readAt).length : out.length;
+    return { alerts: out, unread };
+  }, [state.progs, state.airport, state.alertsReadAt, state.requests, deck, near, values, input.asOf]);
 }

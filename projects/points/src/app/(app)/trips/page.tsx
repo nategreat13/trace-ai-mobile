@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { evalAll } from "@/engine/engine";
 import type { TripResult } from "@/engine/types";
 import { CardOfferLink } from "@/components/CardOffer";
+import { RequestStatus } from "@/components/TripRequest";
 import { cabinLabel } from "@/components/results/DestinationCard";
 import { TripThumb } from "@/components/TripThumb";
 import { CabinBadge, cx, Eyebrow, Icon, ICONS, stagger } from "@/components/ui";
@@ -47,6 +48,15 @@ export default function TripsPage() {
         </span>
         <span className="relative text-[14px] font-medium text-white/90">Search a place and dates. We&apos;ll price it in your points and watch for seats.</span>
       </Link>
+
+      {state.requests.length > 0 && (
+        <section className="flex flex-col gap-2.5">
+          <Eyebrow className="px-1">Requested · {state.requests.length}</Eyebrow>
+          {state.requests.map((r) => (
+            <RequestStatus key={r.id} r={r} onRemove={() => update((s) => ({ requests: s.requests.filter((x) => x.id !== r.id) }))} />
+          ))}
+        </section>
+      )}
 
       {watching.length > 0 && (
         <section className="flex flex-col gap-2.5">

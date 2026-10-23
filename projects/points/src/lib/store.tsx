@@ -25,6 +25,24 @@ export interface PlannedTrip {
   addedAt: string;
 }
 
+/**
+ * A trip the user asked for that Trace doesn't price yet (or not in that
+ * cabin). Phase 1 these feed the manual verification queue; until there's a
+ * backend they live on the device and fire a `trip_request` event.
+ */
+export interface TripRequest {
+  id: string;
+  /** What they typed or picked, e.g. "Lisbon" or "Iceland". */
+  destination: string;
+  depart: string;
+  ret: string;
+  flexible: boolean;
+  travelers: number;
+  cabin: "any" | "economy" | "business";
+  note: string;
+  createdAt: string;
+}
+
 export interface PointsState {
   step: FunnelStep;
   progs: ProgramId[];
@@ -42,6 +60,7 @@ export interface PointsState {
   checks: Record<string, boolean>;
   watching: Record<string, boolean>;
   planned: PlannedTrip[];
+  requests: TripRequest[];
   plan: "annual" | "monthly";
   /** Set by the paywall's test unlock until Stripe is connected. */
   member: null | { plan: "annual" | "monthly"; startedAt: string; testMode: true };
@@ -64,6 +83,7 @@ export const INITIAL: PointsState = {
   checks: {},
   watching: {},
   planned: [],
+  requests: [],
   plan: "annual",
   member: null,
   alertsReadAt: null,
