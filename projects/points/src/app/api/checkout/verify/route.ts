@@ -40,17 +40,25 @@ export async function GET(req: Request) {
 
     let signedIn = false;
     if (email) {
-      const before = await getUser(email);
-      const firstTime = before?.stripeSubscriptionId !== sub.id;
-      await recordSubscription({ email, plan, offer: sub.metadata.offer, status: sub.status, trialEnd: sub.trial_end, customer: sub.customer.id, subscription: sub.id });
-      if (firstTime) {
+      // Stripe already holds the trial, so a failed account write (Firestore
+      // down or not configured) mustn't block it: the webhook records it later.
+      let before: Awaited<ReturnType<typeof getUser>> = null;
+      let saved = false;
+      try {
+        before = await getUser(email);
+        await recordSubscription({ email, plan, offer: sub.metadata.offer, status: sub.status, trialEnd: sub.trial_end, customer: sub.customer.id, subscription: sub.id });
+        saved = true;
+      } catch (e) {
+        console.error("[checkout/verify] couldn't save the member; continuing", e);
+      }
+      if (before?.stripeSubscriptionId !== sub.id) {
         const value = plan === "monthly" ? 12 : sub.metadata.offer === "gift" ? 59.99 : 99;
         // Same event id as the browser's StartTrial, so Meta counts it once.
         await sendMetaEvent({ name: "StartTrial", eventId: sub.id, email, fbp: sub.metadata.fbp, fbc: sub.metadata.fbc, value });
         await postSlack(`:airplane: New Trace Points trial: ${email} (${plan}${sub.metadata.offer === "gift" ? ", $59.99 gift" : ""})`);
       }
       const current = await sessionEmail();
-      if (current === email || !before?.state) {
+      if (saved && (current === email || !before?.state)) {
         await setSession(email);
         signedIn = true;
       }
