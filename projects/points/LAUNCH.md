@@ -17,8 +17,8 @@ Use test mode first. Repeat in live mode when the smoke test passes.
    - `customer.subscription.trial_will_end`
 
    Copy the signing secret (`whsec_…`).
-4. **Settings → Billing → Subscriptions and emails:** set **Trial ending events** to **2 days** (checkout promises a reminder two days before billing). Leave Stripe's own trial reminder off; ours is the one with the right timing.
-5. **Settings → Billing → Customer portal:** allow cancel, update payment method, and switching between the two prices. Set the return/business links to `points.tracetravel.co`, `/terms` and `/privacy`.
+4. **Leave account-wide billing settings alone.** The Trace Travel Stripe account has other products, so Points doesn't change the shared customer portal or "Trial ending events": the app creates its own portal configuration through the API, and the reminder uses Stripe's default 3-day timing. Leave Stripe's own trial reminder email off.
+5. **Customer portal:** nothing to do. The app creates a Points-only portal configuration (cancel at period end, update card, switch between $99 yearly and $12 monthly) the first time someone opens Manage billing.
 6. **Settings → Public details:** business name and a statement descriptor like `TRACE POINTS`, so the charge is recognizable (fewer chargebacks).
 7. **Settings → Emails:** turn on successful-payment receipts and failed-payment emails.
 

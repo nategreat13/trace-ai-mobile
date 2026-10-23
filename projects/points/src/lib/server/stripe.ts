@@ -57,3 +57,55 @@ export async function verifyWebhook(payload: string, header: string | null): Pro
   const hex = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
   return sig.includes(hex);
 }
+
+interface PortalConfig {
+  id: string;
+  metadata: Record<string, string>;
+}
+interface Price {
+  id: string;
+  product: string;
+}
+let portalConfigId: string | null = null;
+
+/**
+ * A customer-portal configuration just for Points, so the account-wide
+ * default (shared with Trace's other Stripe products) stays untouched.
+ * Members can cancel at the end of the period, update their card, and
+ * switch between the regular yearly and monthly prices (never onto the
+ * gift price). Found by metadata, created the first time it's needed.
+ */
+export async function portalConfiguration(origin: string): Promise<string> {
+  if (portalConfigId) return portalConfigId;
+  const list = await stripe<{ data: PortalConfig[] }>("GET", "/billing_portal/configurations", { active: true, limit: 100 });
+  const found = list.data.find((c) => c.metadata?.app === "points");
+  if (found) return (portalConfigId = found.id);
+
+  const annual = priceFor("annual");
+  const monthly = priceFor("monthly");
+  if (!annual || !monthly) throw new Error("Stripe prices aren't configured");
+  const { product } = await stripe<Price>("GET", `/prices/${annual}`);
+  const created = await stripe<PortalConfig>("POST", "/billing_portal/configurations", {
+    "metadata[app]": "points",
+    "business_profile[headline]": "Trace Points membership",
+    "business_profile[privacy_policy_url]": `${origin}/privacy`,
+    "business_profile[terms_of_service_url]": `${origin}/terms`,
+    default_return_url: `${origin}/account`,
+    "features[invoice_history][enabled]": true,
+    "features[payment_method_update][enabled]": true,
+    "features[subscription_cancel][enabled]": true,
+    "features[subscription_cancel][mode]": "at_period_end",
+    "features[subscription_cancel][cancellation_reason][enabled]": true,
+    "features[subscription_cancel][cancellation_reason][options][0]": "too_expensive",
+    "features[subscription_cancel][cancellation_reason][options][1]": "unused",
+    "features[subscription_cancel][cancellation_reason][options][2]": "missing_features",
+    "features[subscription_cancel][cancellation_reason][options][3]": "other",
+    "features[subscription_update][enabled]": true,
+    "features[subscription_update][default_allowed_updates][0]": "price",
+    "features[subscription_update][proration_behavior]": "none",
+    "features[subscription_update][products][0][product]": product,
+    "features[subscription_update][products][0][prices][0]": annual,
+    "features[subscription_update][products][0][prices][1]": monthly,
+  });
+  return (portalConfigId = created.id);
+}

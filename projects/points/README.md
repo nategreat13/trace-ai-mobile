@@ -65,7 +65,7 @@ Checkout lives at `/checkout`, with payment on the page: Stripe's Express Checko
 
 The webhook (`/api/stripe/webhook`) keeps `pointsUsers` in step with Stripe:
 
-- `customer.subscription.trial_will_end`: emails the trial reminder (set Stripe's "Trial ending events" to 2 days so it matches checkout). Without email set up, it asks the team in Slack to send it.
+- `customer.subscription.trial_will_end`: emails the trial reminder 3 days before billing (Stripe's default timing, which checkout promises). Without email set up, it asks the team in Slack to send it.
 - `customer.subscription.updated` / `.deleted`: turns access on or off. `trialing`, `active` and `past_due` keep access. Subscriptions without a card (abandoned checkouts) are ignored; a carded one the success page never saw is recorded here.
 
 The success-page verify records the member, sends Meta CAPI `StartTrial` with the subscription id as the event id (the browser sends the same id), and posts the new trial to Slack, once per subscription.

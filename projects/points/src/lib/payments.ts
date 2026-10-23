@@ -10,8 +10,12 @@ import type { Membership } from "./store";
  */
 
 export const TRIAL_DAYS = 7;
-/** The trial-ending reminder goes out this many days before billing starts. */
-export const REMINDER_DAYS_BEFORE = 2;
+/**
+ * The trial-ending reminder goes out this many days before billing starts:
+ * Stripe's default for its trial_will_end event, which is an account-wide
+ * setting we leave alone.
+ */
+export const REMINDER_DAYS_BEFORE = 3;
 
 export type Plan = Membership["plan"];
 

@@ -37,8 +37,8 @@ export async function POST(req: Request) {
   try {
     switch (event.type) {
       case "customer.subscription.trial_will_end": {
-        // Set "Trial ending events" to 2 days in Stripe so this matches the
-        // reminder promised at checkout.
+        // Stripe sends this 3 days before the trial ends (its default), which
+        // is when checkout promises the reminder.
         if (!sub.default_payment_method) break;
         const email = await emailForCustomer(sub.customer);
         if (!email) break;

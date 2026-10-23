@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUser } from "@/lib/server/members";
 import { sessionEmail } from "@/lib/server/session";
-import { stripe, stripeEnabled } from "@/lib/server/stripe";
+import { portalConfiguration, stripe, stripeEnabled } from "@/lib/server/stripe";
 
 /**
  * Stripe's hosted customer portal: update card, switch plan, or cancel in
@@ -15,9 +15,11 @@ export async function POST(req: Request) {
   const customer = (await getUser(email))?.stripeCustomerId;
   if (!customer) return NextResponse.json({ error: "No subscription on this account" }, { status: 404 });
   try {
+    const origin = new URL(req.url).origin;
     const s = await stripe<{ url: string }>("POST", "/billing_portal/sessions", {
       customer,
-      return_url: `${new URL(req.url).origin}/account`,
+      configuration: await portalConfiguration(origin),
+      return_url: `${origin}/account`,
     });
     return NextResponse.json({ url: s.url });
   } catch (e) {
