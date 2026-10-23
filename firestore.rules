@@ -364,10 +364,12 @@ service cloud.firestore {
     match /staging_sandboxEmailWhitelist/{docId} { allow read, write: if false; }
     match /staging_pointsUsers/{docId}         { allow read, write: if false; }
     match /staging_pointsRequests/{docId}      { allow read, write: if false; }
+    match /staging_pointsEvents/{docId}        { allow read, write: if false; }
 
     // Trace Points (web) — server-only; the Next.js API routes use the Admin SDK.
     match /pointsUsers/{docId}    { allow read, write: if false; }
     match /pointsRequests/{docId} { allow read, write: if false; }
+    match /pointsEvents/{docId}   { allow read, write: if false; }
 
     // ──── Deny everything else ────
     match /{document=**} {

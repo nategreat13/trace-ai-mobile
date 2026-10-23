@@ -63,6 +63,9 @@ export const COLLECTION_NAMES = [
   // Trace Points seat checks and trip requests for the team to answer.
   // Server-only; each one is also posted to Slack.
   "pointsRequests",
+  // Trace Points funnel events (anonymous visitor id, step, ad source,
+  // device) for the /admin analytics page. Server-only; no email or IP.
+  "pointsEvents",
 ] as const;
 
 export type CollectionName = (typeof COLLECTION_NAMES)[number];

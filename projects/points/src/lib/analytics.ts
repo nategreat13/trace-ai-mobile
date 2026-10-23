@@ -1,38 +1,14 @@
+import type { PointsEvent } from "./events";
+
+export type { PointsEvent };
+
 /**
- * Funnel analytics. Every event goes to `window.dataLayer`; the key funnel
- * steps also go to the Meta Pixel (loaded in MetaPixel.tsx when
- * NEXT_PUBLIC_META_PIXEL_ID is set). Trial starts are also sent server-side
- * from the Stripe webhook with the same event id.
+ * Funnel analytics. Every event goes to `window.dataLayer` and to
+ * /api/events, which stores it for the /admin page under an anonymous
+ * visitor id. The key funnel steps also go to the Meta Pixel (loaded in
+ * MetaPixel.tsx when NEXT_PUBLIC_META_PIXEL_ID is set). Trial starts are also
+ * sent server-side from the Stripe webhook with the same event id.
  */
-export type PointsEvent =
-  | "landing_view"
-  | "programs_selected"
-  | "balances_entered"
-  | "airport_selected"
-  | "out_of_region_email"
-  | "travelers_set"
-  | "picks_set"
-  | "email_captured"
-  | "results_view"
-  | "swipe_save"
-  | "swipe_skip"
-  | "locked_row_tap"
-  | "paywall_view"
-  | "plan_selected"
-  | "trial_started"
-  | "detail_free_view"
-  | "book_request"
-  | "card_offer_click"
-  | "watch_added"
-  | "plan_search"
-  | "trip_request"
-  | "bonus_banner_tap"
-  | "cash_deal_click"
-  | "contact_sent"
-  | "gift_shown"
-  | "gift_claimed"
-  | "gift_declined"
-  | "funnel_complete";
 
 /** Meta standard events the brief maps onto our funnel. */
 const META: Partial<Record<PointsEvent, string>> = {
@@ -57,10 +33,79 @@ const SERVER_TOO = new Set(["ViewContent", "Lead", "InitiateCheckout"]);
 const newEventId = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+/** A visit ends after 30 minutes without an event. */
+const SESSION_GAP = 30 * 60 * 1000;
+
+interface Attribution {
+  source?: string;
+  campaign?: string;
+  content?: string;
+  referrer?: string;
+}
+
+const read = (k: string) => {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+};
+const write = (k: string, v: string) => {
+  try {
+    localStorage.setItem(k, v);
+  } catch {}
+};
+
+/**
+ * The anonymous ids and ad source attached to every stored event. The ad
+ * source is read from the landing URL's utm tags at the start of each visit,
+ * and again whenever a new ad click brings fresh tags mid-visit.
+ */
+function visit(): { vid: string; sid: string; attr: Attribution } {
+  let vid = read("tp_vid");
+  if (!vid) write("tp_vid", (vid = newEventId()));
+  const now = Date.now();
+  let sid = read("tp_sid");
+  const fresh = !sid || now - Number(read("tp_seen") ?? 0) > SESSION_GAP;
+  if (fresh) write("tp_sid", (sid = newEventId()));
+  write("tp_seen", String(now));
+
+  const q = new URLSearchParams(window.location.search);
+  const tagged = q.get("utm_source") || q.get("utm_content");
+  let attr: Attribution = {};
+  if (fresh || tagged) {
+    let referrer: string | undefined;
+    try {
+      referrer = document.referrer ? new URL(document.referrer).hostname : undefined;
+    } catch {}
+    attr = {
+      source: q.get("utm_source") ?? undefined,
+      campaign: q.get("utm_campaign") ?? undefined,
+      content: q.get("utm_content") ?? undefined,
+      referrer,
+    };
+    write("tp_attr", JSON.stringify(attr));
+  } else {
+    try {
+      attr = JSON.parse(read("tp_attr") ?? "{}") as Attribution;
+    } catch {}
+  }
+  return { vid, sid: sid!, attr };
+}
+
 export function track(event: PointsEvent, props: Props = {}, eventId?: string): void {
   if (typeof window === "undefined") return;
   const w = window as unknown as { dataLayer?: unknown[]; fbq?: (...a: unknown[]) => void };
   (w.dataLayer ??= []).push({ event, ...props, at: Date.now() });
+
+  const { vid, sid, attr } = visit();
+  fetch("/api/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event, props, vid, sid, attr, path: window.location.pathname, at: Date.now() }),
+    keepalive: true,
+  }).catch(() => {});
+
   const meta = META[event];
   if (meta && process.env.NEXT_PUBLIC_META_PIXEL_ID) {
     const id = eventId ?? (SERVER_TOO.has(meta) ? newEventId() : undefined);

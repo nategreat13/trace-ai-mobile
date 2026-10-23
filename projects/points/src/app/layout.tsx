@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { AnalyticsBeacon } from "@/components/AnalyticsBeacon";
 import { MetaPixel } from "@/components/MetaPixel";
 import { AccountProvider } from "@/lib/account";
 import { PointsProvider } from "@/lib/store";
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AccountProvider>
             <div className="app-col">{children}</div>
           </AccountProvider>
+          <AnalyticsBeacon />
         </PointsProvider>
         <MetaPixel />
       </body>

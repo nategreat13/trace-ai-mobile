@@ -71,6 +71,7 @@ A new project, `trace-points`, in the **Trace Travel** team. It's separate from 
    - `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_ANNUAL`, `STRIPE_PRICE_MONTHLY`, `STRIPE_PRICE_ANNUAL_GIFT`, `STRIPE_WEBHOOK_SECRET`
    - `FIREBASE_PROJECT_ID=trace-ai-b9cba`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
    - `POINTS_SESSION_SECRET`: a long random string (`openssl rand -base64 32`)
+   - `POINTS_ADMIN_PASSWORD`: the team password for the `/admin` analytics page
    - `POINTS_SLACK_WEBHOOK_URL`
    - `NEXT_PUBLIC_META_PIXEL_ID`, `META_CAPI_TOKEN`
    - `RESEND_API_KEY`, `POINTS_EMAIL_FROM` (when step 4 is done)
