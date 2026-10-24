@@ -9,7 +9,7 @@ import type { ProgramId, TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
-import { kShort, num, plural } from "@/lib/format";
+import { kShort, money, num, plural } from "@/lib/format";
 import { signInWithGoogle, useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
 import { useBackClose } from "@/lib/useBackClose";
@@ -259,14 +259,18 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
             style={{ background: values.total ? tierFor(milesTotal(effectiveBalances(state))).gradient : "#0F1730" }}
           >
             <span className="flex flex-col leading-tight">
-              <span className="text-[13px] font-semibold text-white/80">Total points</span>
+              <span className="nums text-[13px] font-semibold text-white/80">{num(values.total)} points</span>
               {values.total > 0 && (
                 <span key={tierFor(milesTotal(effectiveBalances(state))).level} className="pop text-[12.5px] font-extrabold">
                   {tierFor(milesTotal(effectiveBalances(state))).label}
                 </span>
               )}
             </span>
-            <span key={Math.round(values.total / 10000)} className="pop nums text-[24px] font-extrabold">{num(values.total)}</span>
+            {/* Dollars lead from here on: the same number shows on results, the paywall and checkout. */}
+            <span className="flex flex-col items-end leading-tight">
+              <span key={Math.round(values.flights / 100)} className="pop nums text-[24px] font-extrabold">{money(values.flights)}</span>
+              <span className="text-[12px] font-semibold text-white/80">in flights</span>
+            </span>
           </div>
           <PrimaryButton
             disabled={!ok}
@@ -440,7 +444,7 @@ function Loading({ onDone }: { onDone: () => void }) {
         <span className="absolute right-0 bottom-6 text-[13px] font-extrabold text-violet">Anywhere</span>
       </div>
       <h1 className="text-[30px] leading-[1.1] font-extrabold tracking-[-0.02em]">
-        Doing the math on <span className="text-gradient nums">{num(values.total)}</span> points…
+        Turning <span className="text-gradient nums">{num(values.total)}</span> points into flights…
       </h1>
       <ul className="flex flex-col gap-3.5" aria-live="polite">
         {lines.map((l, k) => (

@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from "react";
 import { PlanPicker } from "@/components/PlanPicker";
 import { Icon, ICONS, PrimaryButton } from "@/components/ui";
 import { createTrial, paymentsMode, planPrice, REMINDER_DAYS_BEFORE, startTestTrial, TRIAL_DAYS, type PaymentsMode, type PlanPrice } from "@/lib/payments";
-import { usePoints } from "@/lib/store";
+import { money } from "@/lib/format";
+import { usePoints, useDeck } from "@/lib/store";
 
 const day = (offset: number) => {
   const d = new Date();
@@ -46,6 +47,7 @@ export default function CheckoutPage() {
     if (!state.checkoutVisited) update({ checkoutVisited: true });
   }, [ready, state.member, state.email, state.checkoutVisited, router, finishing, update]);
 
+  const { values } = useDeck();
   const price = planPrice(state.plan, state.gift);
   const back = () => (window.history.length > 1 ? router.back() : router.push("/"));
 
@@ -62,6 +64,22 @@ export default function CheckoutPage() {
       </button>
 
       <h1 className="rise pt-4 pb-4 text-[30px] leading-[1.05] font-extrabold tracking-[-0.02em]">Start your free week</h1>
+
+      {/* The trade in one line: what their points book against what Trace costs. */}
+      {values.flights > 0 && (
+        <div className="bg-premium mb-2 flex items-center justify-between rounded-2xl px-4 py-3 text-white">
+          <span className="flex flex-col leading-tight">
+            <span className="text-[12px] font-semibold text-white/60">{state.starter ? "One card bonus" : "Your points"}</span>
+            <span className="text-gradient nums text-[24px] font-extrabold">{money(values.flights)}</span>
+            <span className="text-[12px] text-white/60">in flights</span>
+          </span>
+          <span className="flex flex-col text-right leading-tight">
+            <span className="text-[12px] font-semibold text-white/60">Trace</span>
+            <span className="nums text-[24px] font-extrabold text-gold">{price.month}</span>
+            <span className="text-[12px] text-white/60">a month</span>
+          </span>
+        </div>
+      )}
 
       {/* What they're paying, decided on the paywall: one line, changeable, nothing else to read. */}
       {changing ? (

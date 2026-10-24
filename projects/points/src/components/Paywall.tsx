@@ -51,8 +51,8 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
         ? "Search every deal"
       : saved && reason === "cta"
         ? `Get alerts for your ${plural(saved, "saved trip")}`
-      : reason === "locked"
-        ? `Unlock all ${plural(destinations.length, "destination")}`
+      : values.flights
+        ? `${state.starter ? "One card bonus" : "Your points"} = ${money(values.flights)} in flights`
         : "Book your first free flight";
   const sub =
     reason === "filters"
@@ -60,7 +60,7 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
       : reason === "search"
         ? `Find any city in your ${plural(destinations.length, "destination")} in a second, and request places we don't price yet.`
       : okDest
-        ? `${okDest} trips are within reach${best ? `, like ${best.trip.city}` : ""}. We find the dates with open seats and help you book.`
+        ? `${reason === "locked" ? `Unlock all ${plural(destinations.length, "destination")}. ` : ""}${okDest} trips are within reach${best ? `, like ${best.trip.city}` : ""}. We find the dates with open seats and help you book.`
         : "See exactly how close you are to each one, and how to close the gap.";
 
 
