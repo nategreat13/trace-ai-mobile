@@ -8,7 +8,7 @@ import { track } from "./analytics";
 import { todayIso } from "./format";
 
 export type FunnelStep =
-  | "land" | "progs" | "bal" | "air" | "trav" | "picks" | "load" | "email" | "results" | "pay" | "done";
+  | "land" | "progs" | "bal" | "air" | "trav" | "picks" | "load" | "email" | "results" | "pay" | "reviews" | "done";
 
 /** A trip the user searched for and asked us to watch. */
 export interface PlannedTrip {

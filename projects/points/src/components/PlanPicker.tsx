@@ -3,14 +3,13 @@
 import { track } from "@/lib/analytics";
 import { listWeekly, planPrice, TRIAL_DAYS, yearlyOff } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
-import { GiftReminder } from "./GiftOffer";
 import { cx } from "./ui";
 
 /**
  * Yearly vs monthly. Yearly reads per week against the struck-out $1.62/wk
  * list price ($0.96 with the exit gift) and is the only plan with the free
- * trial; monthly is $7.99, charged today. A gift turned down earlier is
- * offered again underneath.
+ * trial; monthly is $7.99, charged today. It sits on the pay page, so it
+ * never re-offers the gift: that lives on results.
  */
 export function PlanPicker() {
   const { state, update } = usePoints();
@@ -54,7 +53,6 @@ export function PlanPicker() {
           );
         })}
       </div>
-      <GiftReminder variant="inline" />
     </div>
   );
 }

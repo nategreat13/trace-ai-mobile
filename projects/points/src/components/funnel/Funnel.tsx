@@ -12,10 +12,11 @@ import { milesTotal, tierFor } from "@/lib/tiers";
 import { money, num, plural } from "@/lib/format";
 import { useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
+import { shownReviews } from "@/lib/reviews";
 import { useBackClose } from "@/lib/useBackClose";
 import { GiftOffer } from "../GiftOffer";
 import { PasswordCreate, SignInOptions } from "../SignInOptions";
-import { Paywall } from "../Paywall";
+import { Paywall, ReviewsPage } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
 import { TripThumb } from "../TripThumb";
@@ -119,7 +120,10 @@ export function Funnel() {
           }}
         />
       )}
-      {step === "pay" && <Paywall reason={payReason} onClose={() => go("results")} onStart={() => router.push("/checkout")} />}
+      {step === "pay" && (
+        <Paywall reason={payReason} onClose={() => go("results")} onStart={() => (shownReviews().length ? go("reviews") : router.push("/checkout"))} />
+      )}
+      {step === "reviews" && <ReviewsPage onBack={() => go("pay")} onContinue={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
       {exitGift && step === "results" && (
         <GiftOffer

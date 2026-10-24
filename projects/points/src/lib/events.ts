@@ -18,6 +18,7 @@ export const EVENT_NAMES = [
   "swipe_skip",
   "locked_row_tap",
   "paywall_view",
+  "reviews_view",
   "plan_selected",
   "trial_started",
   "detail_free_view",
