@@ -214,7 +214,7 @@ export function PasswordCreate({
         disabled={!long || busy}
         className={cx(
           "flex min-h-[54px] items-center justify-center rounded-2xl text-[16px] font-bold active:scale-[0.98] disabled:opacity-50",
-          dark ? "bg-white text-ink" : "bg-ink text-surface",
+          dark ? "bg-white text-[#0F1730]" : "bg-ink text-surface",
         )}
       >
         {busy ? "Saving…" : cta}

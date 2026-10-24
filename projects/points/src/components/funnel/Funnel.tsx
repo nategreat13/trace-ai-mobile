@@ -10,11 +10,11 @@ import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
 import { money, num, plural } from "@/lib/format";
-import { signInWithGoogle, useAccount } from "@/lib/account";
+import { useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
 import { useBackClose } from "@/lib/useBackClose";
 import { GiftOffer } from "../GiftOffer";
-import { GoogleG, PasswordCreate, SignInOptions } from "../SignInOptions";
+import { PasswordCreate, SignInOptions } from "../SignInOptions";
 import { Paywall } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
@@ -545,23 +545,12 @@ function EditAnswers({ onClose }: { onClose: () => void }) {
 function Done({ onOpen }: { onOpen: () => void }) {
   const { state } = usePoints();
   const { deck } = useDeck();
-  const { email, verified, hasPassword, refresh } = useAccount();
-  // The account step: shown until they set a password or sign in with Google.
+  const { email, verified, hasPassword } = useAccount();
+  // The account step: one password field, shown until they have a password.
   // Checkout signs brand-new accounts in, so the password goes on that session
   // with the email already filled. An existing account isn't signed in by
   // checkout, so it has to prove the email first (Google or the link).
   const [linkSent, setLinkSent] = useState(false);
-  const [googleError, setGoogleError] = useState("");
-  const google = async () => {
-    setGoogleError("");
-    try {
-      await signInWithGoogle();
-      await refresh();
-      onOpen();
-    } catch (e) {
-      setGoogleError((e as Error).message);
-    }
-  };
   const first = deck.find((r) => state.saved.includes(r.trip.id)) ?? deck.find((r) => state.picks.includes(r.trip.city)) ?? deck[0];
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-midnight text-white">
@@ -574,9 +563,7 @@ function Done({ onOpen }: { onOpen: () => void }) {
         </span>
         <h1 className="rise text-[42px] leading-[1.02] font-extrabold tracking-[-0.02em]">You&apos;re in.</h1>
         <p className="rise text-[17px] leading-relaxed text-white/90" style={stagger(2)}>
-          {first
-            ? `${first.trip.city} is first on your list. All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`
-            : `All ${plural(groupDestinations(deck).length, "destination")} are unlocked, with booking steps.`}
+          All {plural(groupDestinations(deck).length, "trip")} unlocked ✈️
         </p>
         {verified || hasPassword ? (
           <>
@@ -587,25 +574,9 @@ function Done({ onOpen }: { onOpen: () => void }) {
           </>
         ) : (
           <div className="rise flex flex-col gap-3 rounded-3xl border border-white/20 bg-black/35 p-5 backdrop-blur-md" style={stagger(3)}>
-            <div className="flex flex-col gap-1">
-              <span className="text-[20px] font-extrabold">Create your account</span>
-              <span className="text-[14px] leading-snug text-white/80">So your trips, points and membership follow you to any device.</span>
-            </div>
+            <span className="text-[20px] font-extrabold">Set your password</span>
             {email ? (
-              <>
-                <PasswordCreate dark email={email} onDone={() => {}} />
-                <div className="flex items-center gap-3 text-[12.5px] font-semibold text-white/60">
-                  <span className="h-px flex-1 bg-white/20" /> or <span className="h-px flex-1 bg-white/20" />
-                </div>
-                <button
-                  type="button"
-                  onClick={google}
-                  className="flex min-h-[54px] items-center justify-center gap-3 rounded-2xl bg-white/12 text-[16px] font-bold text-white ring-1 ring-white/25 active:scale-[0.98]"
-                >
-                  <GoogleG /> Continue with Google
-                </button>
-                {googleError && <p role="alert" className="text-[14px] font-semibold text-[#FFB4B4]">{googleError}</p>}
-              </>
+              <PasswordCreate dark email={email} cta="Save & open Trace" onDone={onOpen} />
             ) : (
               <SignInOptions dark email={state.email || undefined} onSignedIn={onOpen} onLinkSent={() => setLinkSent(true)} />
             )}
