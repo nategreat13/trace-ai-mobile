@@ -7,23 +7,7 @@ import { track } from "@/lib/analytics";
 import type { CashDeal } from "@/lib/cashDeals";
 import { money, num, shortDate } from "@/lib/format";
 import { useDeck, usePoints } from "@/lib/store";
-import { centsPerPoint, cppLabel, cppTone } from "@/lib/value";
 import { Icon, ICONS, ProgramBadge } from "../ui";
-
-/** "9.0¢/pt": what each point is worth on this trip, colored by how good that is. */
-export function ValueChip({ r }: { r: TripResult }) {
-  const c = centsPerPoint(r);
-  const tone = cppTone(c);
-  return (
-    <span
-      className="nums shrink-0 rounded-full px-2 py-0.5 text-[11px] font-extrabold whitespace-nowrap"
-      style={{ background: tone.bg, color: tone.text }}
-      title="Value per point compared with the cash fare"
-    >
-      {cppLabel(c)}/pt
-    </span>
-  );
-}
 
 /**
  * A live transfer bonus on a program they hold, made personal: how many

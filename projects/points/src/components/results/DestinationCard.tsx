@@ -5,7 +5,7 @@ import { REGION_COLOR, type Destination } from "@/lib/destinations";
 import { kShort, money, num } from "@/lib/format";
 import type { CashDeal } from "@/lib/cashDeals";
 import { CardOfferLink } from "../CardOffer";
-import { CashDealStrip, ValueChip } from "./Insights";
+import { CashDealStrip } from "./Insights";
 import { TripThumb } from "../TripThumb";
 import { CabinBadge, cx, HeartIcon, Icon, ICONS, LockIcon, StatusPill, stagger } from "../ui";
 
@@ -75,7 +75,7 @@ export function DestinationCard({
               <LockIcon size={12} /> Locked
             </span>
           ) : (
-            !showHeart && <StatusPill ok={d.ok} className="bg-surface">{d.ok ? "Can book now" : `${kShort(d.gap)} away`}</StatusPill>
+            !showHeart && <StatusPill ok={d.ok} className="bg-surface">{d.ok ? "✓ You have enough" : `${kShort(d.gap)} pts short`}</StatusPill>
           )}
         </span>
         {showHeart && (
@@ -112,20 +112,17 @@ export function DestinationCard({
                 <CabinBadge business={o.isBusiness} label={cabinLabel(o)} />
                 <span className="text-[13px] font-semibold whitespace-nowrap text-muted">{o.trip.route}</span>
               </span>
-              <span className="flex min-w-0 items-center gap-1.5">
-                <ValueChip r={o} />
-                {/* Locked: the value stays readable (the reason to unlock), the "how" doesn't. */}
-                <span className="truncate text-[12.5px] text-muted">
-                  <span className={cx(locked && "font-bold text-ink")}>{money(o.cashTotal)} fare</span>
-                  <span className={cx(locked && "blur-[3px] select-none")}> · via {o.best.partner.short}</span>
-                </span>
+              {/* Locked: the value stays readable (the reason to unlock), the "how" doesn't. */}
+              <span className="truncate text-[12.5px] text-muted">
+                <span className="font-bold text-ink">Skip a {money(o.cashTotal)} fare</span>
+                <span className={cx(locked && "blur-[3px] select-none")}> · use {o.best.partner.short}</span>
               </span>
             </span>
             <span className="flex shrink-0 flex-col items-end gap-0.5">
-              <span className={cx("nums text-[17px] font-extrabold", blur)}>{num(o.need)}</span>
+              <span className={cx("nums text-[17px] font-extrabold", blur)}>{num(o.need)} pts</span>
               <span className={cx("flex items-center gap-1 text-[12px] font-bold", o.ok ? "text-ok" : "text-near")}>
                 {locked && <LockIcon size={11} />}
-                {o.ok ? "Can book" : `${num(o.gap)} short`}
+                {o.ok ? "You have it" : `Need ${kShort(o.gap)} more`}
               </span>
             </span>
             <span className="text-muted/50"><Icon d={ICONS.chevron} size={16} stroke={2.4} /></span>

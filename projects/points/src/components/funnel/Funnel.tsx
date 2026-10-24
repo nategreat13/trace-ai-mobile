@@ -259,7 +259,7 @@ function Programs({ onNext, onStarter }: { onNext: () => void; onStarter: () => 
 function BalancesStep({ onNext }: { onNext: () => void }) {
   const { state, update } = usePoints();
   const { values } = useDeck();
-  // Start every program at a typical balance, so Continue works straight away
+  // Start every program at the 20k guess, so Continue works straight away
   // and nobody has to leave to look a number up. Typing one replaces it.
   useEffect(() => {
     const missing = state.progs.filter((id) => !state.estimated[id] && !((Number(state.balances[id]) || 0) > 0));
@@ -351,8 +351,8 @@ function AirportStep({ onNext }: { onNext: () => void }) {
 }
 
 /**
- * One tap on a kind of trip, and results lead with it. Six photo tiles fill
- * one screen with no scrolling; "Surprise me" leaves the ranking to value.
+ * Tap any kinds of trip, and results lead with them. Six photo tiles fill one
+ * screen with no scrolling; "Surprise me" leaves the ranking to value.
  */
 const VIBES: { id: string; label: string; photo: string; match?: (t: TripResult["trip"]) => boolean }[] = [
   { id: "beach", label: "Beaches", photo: "Maui", match: (t) => t.kind === "beach" },
@@ -366,35 +366,58 @@ const VIBES: { id: string; label: string; photo: string; match?: (t: TripResult[
 function Picks({ onNext }: { onNext: () => void }) {
   const { update } = usePoints();
   const { input } = useDeck();
-  const [chosen, setChosen] = useState<string | null>(null);
-  const pick = (v: (typeof VIBES)[number]) => {
-    // The vibe's trips they can book come first, then the closest ones; five is plenty to lead the list.
-    const trips = v.match ? evalAll(input).filter((r) => v.match!(r.trip)).sort((a, b) => Number(b.ok) - Number(a.ok) || a.gap - b.gap) : [];
-    const picks = [...new Set(trips.map((r) => r.trip.city))].slice(0, 5);
-    setChosen(v.id);
+  const [chosen, setChosen] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setChosen((c) => (id === "any" ? (c.includes("any") ? [] : ["any"]) : c.includes(id) ? c.filter((x) => x !== id) : [...c.filter((x) => x !== "any"), id]));
+  const go = () => {
+    // Each vibe's trips they can book come first, then the closest ones. Taking
+    // them in turn keeps every vibe in the top five, which is plenty to lead the list.
+    const all = evalAll(input).sort((a, b) => Number(b.ok) - Number(a.ok) || a.gap - b.gap);
+    const lists = VIBES.filter((v) => v.match && chosen.includes(v.id)).map((v) => all.filter((r) => v.match!(r.trip)).map((r) => r.trip.city));
+    const picks: string[] = [];
+    for (let k = 0; picks.length < 5 && lists.some((l) => k < l.length); k++) {
+      for (const l of lists) if (l[k] && !picks.includes(l[k]) && picks.length < 5) picks.push(l[k]);
+    }
     update({ picks });
-    track("picks_set", { vibe: v.id, picks: picks.join(","), count: picks.length });
-    window.setTimeout(onNext, 260);
+    track("picks_set", { vibe: chosen.join(","), picks: picks.join(","), count: picks.length });
+    onNext();
   };
   return (
-    <Screen title="What sounds good?" footer={null}>
-      <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-2.5 pb-safe max-h-[calc(100dvh-190px)]">
-        {VIBES.map((v, i) => (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => pick(v)}
-            style={stagger(i, 45)}
-            className={cx(
-              "rise relative min-h-[120px] overflow-hidden rounded-3xl text-left text-white transition-transform duration-200 active:scale-95",
-              chosen === v.id && "ring-[3px] ring-trace-pink ring-offset-2",
-            )}
-          >
-            <TripThumb city={v.photo} code="" className="absolute inset-0" showCode={false} />
-            <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-            <span className="absolute inset-x-0 bottom-0 p-3 text-[19px] leading-tight font-extrabold">{v.label}</span>
-          </button>
-        ))}
+    <Screen
+      title="What sounds good?"
+      sub="Pick as many as you like."
+      footer={
+        <PrimaryButton disabled={!chosen.length} onClick={go}>
+          Continue
+        </PrimaryButton>
+      }
+    >
+      <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-2.5 max-h-[calc(100dvh-290px)]">
+        {VIBES.map((v, i) => {
+          const on = chosen.includes(v.id);
+          return (
+            <button
+              key={v.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(v.id)}
+              style={stagger(i, 45)}
+              className={cx(
+                "rise relative min-h-[96px] overflow-hidden rounded-3xl text-left text-white transition-transform duration-200 active:scale-95",
+                on && "ring-[3px] ring-trace-pink ring-offset-2",
+              )}
+            >
+              <TripThumb city={v.photo} code="" className="absolute inset-0" showCode={false} />
+              <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+              {on && (
+                <span className="pop bg-trace absolute top-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-full text-white">
+                  <Icon d="M5 12.5l4.5 4.5L19 7.5" size={15} stroke={3} />
+                </span>
+              )}
+              <span className="absolute inset-x-0 bottom-0 p-3 text-[19px] leading-tight font-extrabold">{v.label}</span>
+            </button>
+          );
+        })}
       </div>
     </Screen>
   );

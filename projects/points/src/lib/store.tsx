@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { OFFERED_IDS, PROGRAMS } from "@/engine/data";
+import { OFFERED_IDS } from "@/engine/data";
 import { buildDeck, pointValues } from "@/engine/engine";
 import type { Balances, PointsInput, ProgramId, TripResult } from "@/engine/types";
 import { track } from "./analytics";
@@ -194,11 +194,17 @@ export function usePoints() {
   return c;
 }
 
-/** Balances the engine sees: estimates swapped in for "Not sure". */
+/**
+ * What "Not sure" counts as, and where every balance starts in the funnel. Low
+ * on purpose: most people have at least this, so results don't oversell.
+ */
+export const GUESS = 20_000;
+
+/** Balances the engine sees: the guess swapped in for "Not sure". */
 export function effectiveBalances(s: PointsState): Balances {
   const out: Balances = {};
   for (const id of s.progs) {
-    out[id] = s.estimated[id] ? PROGRAMS[id].typical : Number(s.balances[id]) || 0;
+    out[id] = s.estimated[id] ? GUESS : Number(s.balances[id]) || 0;
   }
   return out;
 }

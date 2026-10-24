@@ -3,7 +3,7 @@
 import { PROGRAMS } from "@/engine/data";
 import type { ProgramId } from "@/engine/types";
 import { num } from "@/lib/format";
-import { usePoints } from "@/lib/store";
+import { GUESS, usePoints } from "@/lib/store";
 import { milesFor, tierFor } from "@/lib/tiers";
 import { cx, ProgramBadge } from "../ui";
 
@@ -21,6 +21,8 @@ const toPoints = (pos: number, max: number) => {
   const ramp = ((t - SPLIT) / (1 - SPLIT)) ** 2;
   return Math.round((EASY + ramp * (max - EASY)) / 5000) * 5000;
 };
+/** One tap instead of dragging, for people who only know roughly. */
+const QUICK = [10_000, 20_000, 50_000, 100_000];
 const toPos = (points: number, max: number) => {
   const v = Math.min(points, max);
   if (max <= EASY) return (v / max) * STEPS;
@@ -29,7 +31,7 @@ const toPos = (points: number, max: number) => {
 };
 
 /**
- * Number input plus a slider that starts at 0, with a "Not sure" estimate.
+ * Number input, a slider and quick amounts, with a "Not sure" guess.
  * Controlled, so the funnel can write straight to the store while Account
  * edits a draft and saves on purpose. The card warms up as the balance grows.
  */
@@ -47,7 +49,7 @@ export function BalanceCard({
   onEstimated: (on: boolean) => void;
 }) {
   const p = PROGRAMS[id];
-  const shown = estimated ? p.typical : value;
+  const shown = estimated ? GUESS : value;
   const numeric = Number(shown) || 0;
   const unit = p.kind === "airline" ? "miles" : "points";
   const tier = tierFor(milesFor(id, numeric));
@@ -99,8 +101,24 @@ export function BalanceCard({
         onChange={(e) => set(String(toPoints(Number(e.target.value), p.sliderMax)))}
         style={{ accentColor: numeric ? tier.color : undefined }}
       />
+      <div className="grid grid-cols-4 gap-1.5">
+        {QUICK.map((q) => {
+          const on = !estimated && numeric === q;
+          return (
+            <button
+              key={q}
+              type="button"
+              aria-pressed={on}
+              onClick={() => set(String(q))}
+              className={cx("nums min-h-[38px] rounded-xl text-[13.5px] font-extrabold active:scale-95", on ? "bg-ink text-surface" : "bg-soft text-ink")}
+            >
+              {q / 1000}k{q === QUICK[QUICK.length - 1] ? "+" : ""}
+            </button>
+          );
+        })}
+      </div>
       <div className="flex items-center justify-between gap-2 text-[12.5px] text-muted">
-        <span className="truncate">{estimated ? `Using a typical ${num(p.typical)} for now` : `Find it in your ${p.short} app`}</span>
+        <span className="truncate">{estimated ? `Our guess: ${num(GUESS)}. Tap to change.` : `Exact number is in your ${p.short} app`}</span>
         {numeric > 0 && (
           <span key={tier.level} className="pop shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-extrabold text-white" style={{ background: tier.gradient }}>
             {tier.label}

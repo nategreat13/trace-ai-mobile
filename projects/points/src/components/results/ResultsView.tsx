@@ -112,15 +112,15 @@ export function ResultsView({
         <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
         <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
         <div className="relative flex flex-col gap-1">
-          <Eyebrow className="text-trace-pink">{state.starter ? "One card bonus =" : "Your points ="}</Eyebrow>
+          <Eyebrow className="text-trace-pink">{state.starter ? "One card bonus can cover" : "Your points can cover"}</Eyebrow>
           <div className="flex items-baseline gap-2">
             <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
-            <span className="text-[15px] font-bold text-muted">in flights*</span>
+            <span className="text-[15px] font-bold text-muted">of flights*</span>
           </div>
           <p className="pt-2 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
             {allOk
-              ? <><span className="text-ok">{allOk} trips</span> ready to book ✈️</>
-              : <><span className="text-near">{allNear} trips</span> almost in reach</>}
+              ? <>You can fly free to <span className="text-ok">{plural(allOk, "place")}</span> ✈️</>
+              : <><span className="text-near">{plural(allNear, "trip")}</span> need just a few more points</>}
           </p>
           <p className="text-[12px] text-muted">
             {state.starter ? `*With a ${STARTER.card} bonus (${num(STARTER.points)} points). ` : "*"}Estimates, {state.travelers === 1 ? "per ticket" : `for ${plural(state.travelers, "traveler")}`}.
@@ -227,14 +227,14 @@ export function ResultsView({
           ) : (
             <>
               {!query && <BonusBanner onOpen={open} />}
-              {okDest.length > 0 && <SectionHead ok label="Ready to book" count={okDest.length} />}
+              {okDest.length > 0 && <SectionHead ok label="You have enough points" count={okDest.length} />}
               {okDest.map((d, i) => (
                 <Fragment key={d.city}>
                   {card(d, i)}
                   {mode === "free" && i === 1 && <EmailListCard />}
                 </Fragment>
               ))}
-              {nearDest.length > 0 && <SectionHead ok={false} label="Almost there" count={nearDest.length} />}
+              {nearDest.length > 0 && <SectionHead ok={false} label="Need a few more points" count={nearDest.length} />}
               {nearDest.map((d, i) => card(d, i + okDest.length))}
             </>
           )}
