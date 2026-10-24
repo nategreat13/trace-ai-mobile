@@ -125,11 +125,9 @@ export function ReviewsPage({ onBack, onContinue }: { onBack: () => void; onCont
       <ul className="flex flex-col gap-3 px-5 pb-6">
         {reviews.map((r, i) => (
           <li key={r.name} className="rise flex flex-col gap-2 rounded-3xl bg-soft p-4" style={stagger(Math.min(i, 6), 50)}>
-            <div className="flex items-center justify-between gap-2">
-              <Stars size={15} />
-              {r.trip && <span className="truncate rounded-full bg-surface px-2.5 py-0.5 text-[11.5px] font-bold text-muted">✈️ {r.trip}</span>}
-            </div>
-            <p className="text-[15px] leading-snug font-medium">&ldquo;{r.text}&rdquo;</p>
+            <Stars size={15} count={r.stars} />
+            <span className="text-[16px] leading-tight font-extrabold">{r.title}</span>
+            <p className="text-[15px] leading-snug font-medium">{r.text}</p>
             <span className="text-[13px] font-bold text-muted">
               {r.name}
               {r.sample && <span className="ml-2 rounded bg-[#FBBF24] px-1.5 py-0.5 text-[10px] font-extrabold text-black">SAMPLE · DEV ONLY</span>}
@@ -144,8 +142,9 @@ export function ReviewsPage({ onBack, onContinue }: { onBack: () => void; onCont
   );
 }
 
-const Stars = ({ size }: { size: number }) => (
-  <span className="flex gap-0.5 text-[#FBBF24]" aria-label="5 stars" style={{ fontSize: size, lineHeight: 1 }}>
-    {"★★★★★"}
+const Stars = ({ size, count = 5 }: { size: number; count?: number }) => (
+  <span className="flex gap-0.5" aria-label={`${count} stars`} style={{ fontSize: size, lineHeight: 1 }}>
+    <span className="text-[#FBBF24]">{"★".repeat(count)}</span>
+    <span className="text-line">{"★".repeat(5 - count)}</span>
   </span>
 );
