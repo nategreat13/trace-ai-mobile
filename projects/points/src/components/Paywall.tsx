@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
-import { money } from "@/lib/format";
+import { money, plural } from "@/lib/format";
 import { shownReviews } from "@/lib/reviews";
 import { useDeck, usePoints } from "@/lib/store";
 import type { PayReason } from "./results/ResultsView";
@@ -20,6 +20,8 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
   const destinations = groupDestinations(deck);
   const mosaic = destinations.slice(0, 4);
   const saved = state.saved.length;
+  // Their own count, so the first line is always true for them.
+  const bookable = destinations.filter((d) => d.ok).length;
 
   useEffect(() => {
     track("paywall_view", { trips: deck.length, saved });
@@ -39,7 +41,7 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <div className="relative h-[min(300px,36dvh)] shrink-0 overflow-hidden text-white">
+      <div className="relative h-[min(300px,30dvh)] shrink-0 overflow-hidden text-white">
         <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-0.5">
           {mosaic.map((d) => (
             <div key={d.city} className="relative overflow-hidden">
@@ -59,9 +61,11 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
         <ul className="flex flex-col gap-2.5 self-center">
           {[
+            ...(bookable ? [["✈️", `${plural(bookable, "trip")} you can book`]] : []),
             ["📅", "Exact dates with open seats"],
             ["🔔", "Alerts when seats open"],
             ["💸", "Transfer bonus alerts"],
+            ["💳", "Card picks to unlock more trips"],
             ["🙋", "We help you book"],
           ].map(([emoji, t], i) => (
             <li key={t} className="rise flex items-center gap-3 text-[16px] font-bold" style={stagger(i + 1, 60)}>
