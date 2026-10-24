@@ -6,6 +6,7 @@ import { groupDestinations } from "@/lib/destinations";
 import { money, plural } from "@/lib/format";
 import { shownReviews } from "@/lib/reviews";
 import { useDeck, usePoints } from "@/lib/store";
+import { GiftPill } from "./GiftOffer";
 import type { PayReason } from "./results/ResultsView";
 import { TripThumb } from "./TripThumb";
 import { Icon, ICONS, PrimaryButton, stagger } from "./ui";
@@ -57,6 +58,7 @@ export function Paywall({ reason = "cta", onClose, onStart }: { reason?: PayReas
 
       <div className="-mt-12 flex flex-1 flex-col gap-4 px-5 pb-safe">
         <SocialProof />
+        <GiftPill />
         <h1 className="rise text-center text-[29px] leading-[1.06] font-extrabold tracking-[-0.02em]">{head}</h1>
 
         <ul className="flex flex-col gap-2.5 self-center">

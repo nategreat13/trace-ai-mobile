@@ -14,7 +14,7 @@ import { useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
 import { shownReviews } from "@/lib/reviews";
 import { useBackClose } from "@/lib/useBackClose";
-import { GiftOffer } from "../GiftOffer";
+import { GiftButton, GiftOffer } from "../GiftOffer";
 import { PasswordCreate, SignInOptions } from "../SignInOptions";
 import { Paywall, ReviewsPage } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
@@ -125,6 +125,14 @@ export function Funnel() {
       )}
       {step === "reviews" && <ReviewsPage onBack={() => go("pay")} onContinue={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
+      {step === "results" && !exitGift && (
+        <GiftButton
+          onPaywall={() => {
+            setPayReason("cta");
+            go("pay");
+          }}
+        />
+      )}
       {exitGift && step === "results" && (
         <GiftOffer
           where="paywall"

@@ -32,6 +32,7 @@ export const EVENT_NAMES = [
   "contact_sent",
   "gift_shown",
   "gift_opened",
+  "gift_button_tap",
   "gift_claimed",
   "gift_declined",
   "funnel_complete",

@@ -1,25 +1,35 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
-import { listWeekly, planPrice, TRIAL_DAYS, yearlyOff } from "@/lib/payments";
+import { yearlyOff } from "@/lib/payments";
 import { useDeck, usePoints } from "@/lib/store";
 import { TripThumb } from "./TripThumb";
-import { Confetti, cx, Icon, ICONS, PrimaryButton } from "./ui";
+import { Confetti, Icon, ICONS, PrimaryButton } from "./ui";
 
 /**
  * The one-time gift for people who close the paywall, built for people who
  * don't read: a wiggling present to tap, then a picture of the app, the
  * discount, and Continue (back to the paywall with the gift price applied:
  * $49.99 a year, 40% off the $84 list price, same 3-day trial). The popup
- * shows once; after "No thanks" the offer stays reachable through
- * GiftReminder. The payment page never shows it.
+ * pops up once on its own; after that GiftButton (floating on results) and
+ * the paywall's GiftPill bring it back. The payment page never shows it.
+ * Reopened from GiftButton it starts already unwrapped.
  */
-export function GiftOffer({ where, onClaim, onDecline }: { where: "paywall"; onClaim: () => void; onDecline: () => void }) {
+export function GiftOffer({
+  where,
+  startOpen = false,
+  onClaim,
+  onDecline,
+}: {
+  where: "paywall" | "results_button";
+  startOpen?: boolean;
+  onClaim: () => void;
+  onDecline: () => void;
+}) {
   const { update } = usePoints();
   const { deck } = useDeck();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const top = deck.find((r) => r.ok) ?? deck[0];
   useEffect(() => {
     track("gift_shown", { where });
@@ -90,68 +100,70 @@ export function GiftOffer({ where, onClaim, onDecline }: { where: "paywall"; onC
 }
 
 /**
- * The gift after its popup was turned down, so it's never lost. "banner" sits
- * on the free results and goes to checkout with the gift applied; "inline"
- * sits under the plan picker and applies it in place.
+ * The gift, never lost once it's been offered: a round present floating over
+ * results that wiggles now and then. Unclaimed, it reopens the offer (already
+ * unwrapped); claimed, it goes straight to the paywall with the price on.
  */
-export function GiftReminder({ variant }: { variant: "banner" | "inline" }) {
-  const { state, update, ready } = usePoints();
-  const router = useRouter();
-  if (!ready || state.member) return null;
-  // Already claimed (from the popup or the ad link): the banner says so and goes straight to checkout.
-  if (state.gift && variant === "banner") return <GiftApplied onClick={() => router.push("/checkout")} />;
-  if (!state.giftOffered || state.gift) return null;
-  const gift = planPrice("annual", true);
-  const claim = () => {
-    track("gift_claimed", { where: variant === "banner" ? "results_banner" : "plan_picker" });
-    update({ gift: true, plan: "annual" });
-    if (variant === "banner") router.push("/checkout");
-  };
+export function GiftButton({ onPaywall }: { onPaywall: () => void }) {
+  const { state, ready } = usePoints();
+  const [sheet, setSheet] = useState(false);
+  if (!ready || !state.giftOffered || state.member) return null;
   return (
-    <button
-      type="button"
-      onClick={claim}
-      className={cx(
-        "flex w-full items-center gap-3 rounded-2xl text-left active:scale-[0.98]",
-        variant === "banner" ? "bg-trace px-4 py-3 text-white shadow-[0_10px_24px_rgba(253,41,123,0.25)]" : "border-2 border-dashed border-trace-pink/50 bg-trace-pink/5 px-3.5 py-2.5",
-      )}
-    >
-      <span className={cx("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", variant === "banner" ? "bg-white/20" : "bg-trace text-white")}>
-        <Icon d={ICONS.gift} size={18} stroke={2} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className="text-[14.5px] font-extrabold">Your gift is still here</span>
-        <span className={cx("text-[12.5px]", variant === "banner" ? "text-white/85" : "text-muted")}>
-          Just {gift.each}/wk <span className="line-through">{listWeekly()}</span> · {TRIAL_DAYS} days free
+    <>
+      <button
+        type="button"
+        aria-label={state.gift ? "Your 40% off gift is applied" : "Open your 40% off gift"}
+        onClick={() => {
+          track("gift_button_tap", { claimed: state.gift });
+          if (state.gift) onPaywall();
+          else setSheet(true);
+        }}
+        className="wiggle bg-trace fixed right-4 bottom-[118px] z-30 flex h-16 w-16 items-center justify-center rounded-[22px] text-white shadow-[0_12px_30px_rgba(253,41,123,0.45)] active:scale-95 min-[480px]:right-[calc(50%-224px)]"
+      >
+        <Icon d={ICONS.gift} size={30} stroke={2} />
+        <span className="absolute -top-2 -left-2 rounded-full bg-trace-green px-1.5 py-0.5 text-[11px] font-black text-white shadow">
+          {yearlyOff(true)}%
         </span>
-        <span className={cx("text-[11px]", variant === "banner" ? "text-white/70" : "text-muted/80")}>{gift.amount} billed yearly</span>
-      </span>
-      <span className={cx("shrink-0 rounded-full px-3 py-1.5 text-[13px] font-extrabold", variant === "banner" ? "bg-white text-trace-pink" : "bg-trace text-white")}>
-        {variant === "banner" ? "Claim" : "Use it"}
-      </span>
-    </button>
+      </button>
+      {sheet && (
+        <GiftOffer
+          where="results_button"
+          startOpen
+          onClaim={() => {
+            setSheet(false);
+            onPaywall();
+          }}
+          onDecline={() => setSheet(false)}
+        />
+      )}
+    </>
   );
 }
 
-/** The gift is on: a reminder of the price with one tap to checkout. */
-export function GiftApplied({ onClick }: { onClick?: () => void }) {
+/**
+ * The gift on paywall page 1: "40% off applied" once claimed, or one tap to
+ * claim it if they passed on the popup. Nothing before it's been offered.
+ */
+export function GiftPill() {
+  const { state, update, ready } = usePoints();
+  if (!ready || !state.giftOffered || state.member) return null;
+  if (state.gift) {
+    return (
+      <span className="pop flex items-center gap-1.5 self-center rounded-full bg-trace-green px-3 py-1 text-[13px] font-extrabold text-white">
+        <Icon d={ICONS.gift} size={14} stroke={2.4} /> {yearlyOff(true)}% off applied
+      </span>
+    );
+  }
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-2xl bg-trace px-4 py-3 text-left text-white shadow-[0_10px_24px_rgba(253,41,123,0.25)] active:scale-[0.98]"
+      onClick={() => {
+        track("gift_claimed", { where: "paywall_pill" });
+        update({ gift: true, plan: "annual" });
+      }}
+      className="wiggle bg-trace flex items-center gap-1.5 self-center rounded-full px-3.5 py-1.5 text-[13.5px] font-extrabold text-white shadow-[0_8px_20px_rgba(253,41,123,0.35)] active:scale-95"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
-        <Icon d={ICONS.gift} size={18} stroke={2} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className="text-[14.5px] font-extrabold">Your gift is applied</span>
-        <span className="text-[12.5px] text-white/85">
-          Trace for {planPrice("annual", true).each}/wk <span className="line-through">{listWeekly()}</span> · {TRIAL_DAYS} days free
-        </span>
-        <span className="text-[11px] text-white/70">{planPrice("annual", true).amount} billed yearly</span>
-      </span>
-      {onClick && <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[13px] font-extrabold text-trace-pink">Start</span>}
+      <Icon d={ICONS.gift} size={15} stroke={2.4} /> Tap for {yearlyOff(true)}% off
     </button>
   );
 }

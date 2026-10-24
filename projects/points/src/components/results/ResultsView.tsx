@@ -11,7 +11,7 @@ import { STARTER, usePoints, useDeck } from "@/lib/store";
 import { useBackClose } from "@/lib/useBackClose";
 import { Check, Chip, cx, Eyebrow, Icon, ICONS, LockIcon } from "../ui";
 import { useCashDeals } from "@/lib/cashDeals";
-import { GiftReminder } from "../GiftOffer";
+import { yearlyOff } from "@/lib/payments";
 import { DestinationCard } from "./DestinationCard";
 import { BonusBanner } from "./Insights";
 import { FILTERS, SORTS, filterDestinations, sortDestinations, type FilterId, type SortId } from "./filters";
@@ -125,11 +125,6 @@ export function ResultsView({
           <p className="text-[12px] text-muted">
             {state.starter ? `*With a ${STARTER.card} bonus (${num(STARTER.points)} points). ` : "*"}Estimates, {state.travelers === 1 ? "per ticket" : `for ${plural(state.travelers, "traveler")}`}.
           </p>
-          {mode === "free" && (
-            <div className="pt-3">
-              <GiftReminder variant="banner" />
-            </div>
-          )}
         </div>
         <div role="tablist" aria-label="View" className="relative mt-4 grid grid-cols-2 rounded-2xl bg-soft p-1">
           <span
@@ -272,7 +267,9 @@ export function ResultsView({
             onClick={() => onPaywall("cta")}
             className="bg-trace shimmer min-h-[58px] w-full rounded-2xl px-4 text-[16.5px] font-extrabold text-white shadow-[0_10px_28px_rgba(253,41,123,0.32)] active:scale-[0.98]"
           >
-            Unlock dates {savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(all.length, "destination")}`}
+            {state.gift && !state.member
+              ? `Unlock with ${yearlyOff(true)}% off 🎁`
+              : `Unlock dates ${savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(all.length, "destination")}`}`}
           </button>
           <div className="pt-2 text-center text-[12.5px] font-medium text-muted">Exact dates · Seat alerts · Booking help</div>
         </div>
