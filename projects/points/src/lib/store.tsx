@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { OFFERED_IDS, PROGRAMS } from "@/engine/data";
 import { buildDeck, pointValues } from "@/engine/engine";
 import type { Balances, PointsInput, ProgramId, TripResult } from "@/engine/types";
+import { track } from "./analytics";
 import { todayIso } from "./format";
 
 export type FunnelStep =
@@ -154,6 +155,17 @@ export function PointsProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {
       // Private mode or corrupt data: start fresh.
+    }
+    // The retargeting ad links to ?offer=gift: the $5/mo gift is on from the first screen.
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("offer") === "gift") {
+      setState((s) => {
+        if (s.member) return s;
+        if (!s.gift) track("gift_claimed", { where: "ad_link" });
+        return { ...s, gift: true, plan: "annual", giftOffered: true };
+      });
+      url.searchParams.delete("offer");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
     }
     setReady(true);
   }, []);

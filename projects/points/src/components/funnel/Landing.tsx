@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
 import { creditFor, photoFor } from "@/lib/images";
+import { giftMonthly } from "@/lib/payments";
+import { usePoints } from "@/lib/store";
 import { cx, Icon, ICONS, Logo, PrimaryButton } from "../ui";
 
 /** Each slide pairs a place with what points typically book there, one way. */
@@ -23,6 +25,8 @@ const INTERVAL = 4500;
  */
 export function Landing({ onStart }: { onStart: () => void }) {
   const [i, setI] = useState(0);
+  const { state } = usePoints();
+  const gift = state.gift && !state.member;
   useEffect(() => {
     track("landing_view");
     const t = window.setInterval(() => setI((x) => (x + 1) % SLIDES.length), INTERVAL);
@@ -35,7 +39,13 @@ export function Landing({ onStart }: { onStart: () => void }) {
     <div className="trace-wash flex min-h-dvh flex-col px-5 pt-5">
       <div className="flex items-center justify-between">
         <Logo className="h-[22px]" />
-        <span className="rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-muted shadow-sm">For your points and miles</span>
+        {gift ? (
+          <span className="flex items-center gap-1.5 rounded-full bg-trace px-3 py-1 text-[12px] font-extrabold text-white shadow-sm">
+            <Icon d={ICONS.gift} size={13} stroke={2.4} /> Gift applied: {giftMonthly().gift}/mo
+          </span>
+        ) : (
+          <span className="rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-muted shadow-sm">For your points and miles</span>
+        )}
       </div>
 
       <div className="relative mt-5 flex max-h-[440px] min-h-[190px] flex-1 flex-col">

@@ -117,7 +117,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const local = stateRef.current;
-      if (me.state) update({ ...me.state, email: me.email });
+      // A gift claimed on this device (popup or ad link) is yearly; a saved plan doesn't undo it.
+      if (me.state) update({ ...me.state, email: me.email, ...(local.gift ? { plan: "annual" as const } : {}) });
       else {
         update({ email: me.email });
         await save({ ...local, email: me.email });

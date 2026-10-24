@@ -76,7 +76,10 @@ export function GiftOffer({ where, onClaim, onDecline }: { where: "paywall"; onC
 export function GiftReminder({ variant }: { variant: "banner" | "inline" }) {
   const { state, update, ready } = usePoints();
   const router = useRouter();
-  if (!ready || !state.giftOffered || state.gift || state.member) return null;
+  if (!ready || state.member) return null;
+  // Already claimed (from the popup or the ad link): the banner says so and goes straight to checkout.
+  if (state.gift && variant === "banner") return <GiftApplied onClick={() => router.push("/checkout")} />;
+  if (!state.giftOffered || state.gift) return null;
   const gift = planPrice("annual", true);
   const claim = () => {
     track("gift_claimed", { where: variant === "banner" ? "results_banner" : "plan_picker" });
@@ -105,6 +108,29 @@ export function GiftReminder({ variant }: { variant: "banner" | "inline" }) {
       <span className={cx("shrink-0 rounded-full px-3 py-1.5 text-[13px] font-extrabold", variant === "banner" ? "bg-white text-trace-pink" : "bg-trace text-white")}>
         {variant === "banner" ? "Claim" : "Use it"}
       </span>
+    </button>
+  );
+}
+
+/** The gift is on: a reminder of the price with one tap to checkout. */
+export function GiftApplied({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 rounded-2xl bg-trace px-4 py-3 text-left text-white shadow-[0_10px_24px_rgba(253,41,123,0.25)] active:scale-[0.98]"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20">
+        <Icon d={ICONS.gift} size={18} stroke={2} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="text-[14.5px] font-extrabold">Your gift is applied</span>
+        <span className="text-[12.5px] text-white/85">
+          Trace for {giftMonthly().gift}/mo <span className="line-through">{giftMonthly().regular}</span>, free for {TRIAL_DAYS} days
+        </span>
+        <span className="text-[11px] text-white/70">Billed yearly at {planPrice("annual", true).amount}</span>
+      </span>
+      {onClick && <span className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[13px] font-extrabold text-trace-pink">Start</span>}
     </button>
   );
 }
