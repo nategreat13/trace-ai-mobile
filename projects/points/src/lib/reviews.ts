@@ -28,5 +28,10 @@ export const REVIEWS: Review[] = [
   { sample: true, name: "Sample J.", trip: "Los Cabos", text: "Simple, fast, and it actually works. Paid for itself on the first trip." },
 ];
 
-/** The reviews this build can show: real ones, plus samples on a local dev server only. */
-export const shownReviews = () => REVIEWS.filter((r) => !r.sample || process.env.NODE_ENV === "development");
+/**
+ * The reviews this build can show: real ones, plus samples on a local dev
+ * server or a private preview built with NEXT_PUBLIC_SHOW_SAMPLE_REVIEWS=1
+ * (set only on the build command, never in Vercel's settings).
+ */
+export const shownReviews = () =>
+  REVIEWS.filter((r) => !r.sample || process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_SHOW_SAMPLE_REVIEWS === "1");
