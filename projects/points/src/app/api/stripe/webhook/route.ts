@@ -37,17 +37,17 @@ export async function POST(req: Request) {
   try {
     switch (event.type) {
       case "customer.subscription.trial_will_end": {
-        // Stripe sends this 3 days before the trial ends (its default), which
-        // is when checkout promises the reminder.
+        // Stripe sends this 3 days before the trial ends (its default); with
+        // the 3-day trial that's right after it starts.
         if (!sub.default_payment_method) break;
         const email = await emailForCustomer(sub.customer);
         if (!email) break;
         const ends = new Date((sub.trial_end ?? Date.now() / 1000) * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "America/Denver" });
-        const price = sub.metadata?.plan === "monthly" ? "$12 for the month" : sub.metadata?.offer === "gift" ? "$59.99 for the year" : "$99 for the year";
+        const price = sub.metadata?.offer === "gift" ? "$49.99 for the year" : "$64 for the year";
         const sent = await sendEmail(
           email,
           `Your Trace Points trial ends ${ends}`,
-          `Hi,\n\nYour free week of Trace Points ends on ${ends}. If you keep it, your card is charged ${price} that day.\n\nNot for you? Cancel in two taps before then: open Trace Points, go to Account, and tap Cancel free trial. You won't be charged.\n\nThanks for trying Trace.\n`,
+          `Hi,\n\nYour 3-day Trace Points trial ends on ${ends}. If you keep it, your card is charged ${price} that day.\n\nNot for you? Cancel in two taps before then: open Trace Points, go to Account, and tap Cancel free trial. You won't be charged.\n\nThanks for trying Trace.\n`,
         );
         if (!sent) await postSlack(`:alarm_clock: Send a trial reminder by hand: ${email}'s trial ends ${ends} (${price}). Email isn't connected yet.`);
         break;

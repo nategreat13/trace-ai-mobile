@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AIRLINE_IDS, BANK_IDS, HOTEL_IDS, PROGRAMS, hopFor } from "@/engine/data";
-import { cityStatuses } from "@/engine/engine";
+import { evalAll } from "@/engine/engine";
 import type { ProgramId, TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
 import { groupDestinations } from "@/lib/destinations";
 import { milesTotal, tierFor } from "@/lib/tiers";
-import { kShort, money, num, plural } from "@/lib/format";
+import { money, num, plural } from "@/lib/format";
 import { signInWithGoogle, useAccount } from "@/lib/account";
 import { effectiveBalances, type FunnelStep, STARTER, usePoints, useDeck } from "@/lib/store";
 import { useBackClose } from "@/lib/useBackClose";
@@ -19,7 +19,7 @@ import { Paywall } from "../Paywall";
 import { ResultsView, type PayReason } from "../results/ResultsView";
 import { TripDetail } from "../TripDetail";
 import { TripThumb } from "../TripThumb";
-import { Check, Confetti, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, SecondaryButton, stagger } from "../ui";
+import { Check, Confetti, cx, Eyebrow, Icon, ICONS, Logo, PrimaryButton, ProgramBadge, stagger } from "../ui";
 import { AirportSearch } from "./AirportSearch";
 import { StoreBalanceCard } from "./BalanceCard";
 import { Landing } from "./Landing";
@@ -122,7 +122,14 @@ export function Funnel() {
       {step === "pay" && <Paywall reason={payReason} onClose={() => go("results")} onStart={() => router.push("/checkout")} />}
       {step === "done" && <Done onOpen={() => router.push("/discover")} />}
       {exitGift && step === "results" && (
-        <GiftOffer where="paywall" onClaim={() => router.push("/checkout")} onDecline={() => setExitGift(false)} />
+        <GiftOffer
+          where="paywall"
+          onClaim={() => {
+            setExitGift(false);
+            go("pay");
+          }}
+          onDecline={() => setExitGift(false)}
+        />
       )}
     </div>
   );
@@ -165,17 +172,17 @@ function ProgramTile({ id, i }: { id: ProgramId; i: number }) {
       onClick={() => update((s) => ({ progs: on ? s.progs.filter((x) => x !== id) : [...s.progs, id] }))}
       style={stagger(i)}
       className={cx(
-        "rise relative flex min-h-[112px] flex-col items-center justify-center gap-2.5 rounded-3xl px-1.5 py-3 text-center transition-all duration-200 active:scale-95",
+        "rise relative flex min-h-[80px] flex-col items-center justify-center gap-1.5 rounded-2xl px-0.5 py-2 text-center transition-all duration-200 active:scale-95",
         on ? "bg-surface shadow-[0_0_0_2.5px_#FD297B,0_10px_24px_rgba(253,41,123,0.18)]" : "bg-soft",
       )}
     >
       <span className={cx("transition-transform duration-200", on && "scale-110")}>
-        <ProgramBadge id={id} size={48} />
+        <ProgramBadge id={id} size={36} />
       </span>
-      <span className="text-[13.5px] leading-tight font-bold">{PROGRAMS[id].short}</span>
+      <span className="text-[11px] leading-tight font-bold">{PROGRAMS[id].short}</span>
       {on && (
-        <span className="check-in bg-trace absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full text-white">
-          <Check size={12} />
+        <span className="check-in bg-trace absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full text-white">
+          <Check size={10} />
         </span>
       )}
     </button>
@@ -193,7 +200,7 @@ function Programs({ onNext, onStarter }: { onNext: () => void; onStarter: () => 
   return (
     <Screen
       title="Which points do you have?"
-      sub="Pick every card and airline. We'll combine them."
+      sub="Tap all that apply."
       footer={
         <>
           <PrimaryButton
@@ -203,7 +210,7 @@ function Programs({ onNext, onStarter }: { onNext: () => void; onStarter: () => 
               onNext();
             }}
           >
-            {n ? `Continue with ${plural(n, "program")}` : "Pick at least one"}
+            {n ? "Continue" : "Tap at least one"}
           </PrimaryButton>
           {!n && (
             <button
@@ -221,14 +228,14 @@ function Programs({ onNext, onStarter }: { onNext: () => void; onStarter: () => 
         </>
       }
     >
-      <Eyebrow className="pb-3">Credit card points</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">{BANK_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i} />)}</div>
-      <Eyebrow className="pt-6 pb-3">Airline miles</Eyebrow>
-      <div className="grid grid-cols-3 gap-2.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length} />)}</div>
+      <Eyebrow className="pb-2">Credit cards</Eyebrow>
+      <div className="grid grid-cols-5 gap-1.5">{BANK_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i} />)}</div>
+      <Eyebrow className="pt-4 pb-2">Airlines</Eyebrow>
+      <div className="grid grid-cols-5 gap-1.5">{AIRLINE_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length} />)}</div>
       {HOTEL_IDS.length > 0 && (
         <>
-          <Eyebrow className="pt-6 pb-3">Hotel points</Eyebrow>
-          <div className="grid grid-cols-3 gap-2.5">
+          <Eyebrow className="pt-4 pb-2">Hotels</Eyebrow>
+          <div className="grid grid-cols-5 gap-1.5">
             {HOTEL_IDS.map((id, i) => <ProgramTile key={id} id={id} i={i + BANK_IDS.length + AIRLINE_IDS.length} />)}
           </div>
         </>
@@ -250,8 +257,8 @@ function BalancesStep({ onNext }: { onNext: () => void }) {
   const ok = state.progs.length > 0 && state.progs.every((id) => state.estimated[id] || (Number(state.balances[id]) || 0) > 0);
   return (
     <Screen
-      title="How many do you have?"
-      sub="We filled in typical balances. Type yours for exact results, or just continue."
+      title="How many points?"
+      sub="A rough guess works."
       footer={
         <>
           <div
@@ -311,7 +318,7 @@ function AirportStep({ onNext }: { onNext: () => void }) {
     window.setTimeout(onNext, 220);
   };
   return (
-    <Screen title="Where do you fly from?" sub="Search your city, state, zip or airport." footer={null}>
+    <Screen title="Where do you fly from?" sub="City, zip or airport." footer={null}>
       {near && (
         <button
           type="button"
@@ -321,7 +328,7 @@ function AirportStep({ onNext }: { onNext: () => void }) {
           <span className="bg-trace flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[13px] font-extrabold text-white">{near.code}</span>
           <span className="flex min-w-0 flex-1 flex-col leading-tight">
             <span className="text-[17px] font-extrabold">Flying from {near.city}?</span>
-            <span className="text-[13px] text-muted">Tap to use {near.code}, or search below</span>
+            <span className="text-[13px] text-muted">Tap to use {near.code}</span>
           </span>
           <Icon d={ICONS.chevron} size={18} stroke={2.4} className="text-trace-pink" />
         </button>
@@ -331,75 +338,51 @@ function AirportStep({ onNext }: { onNext: () => void }) {
   );
 }
 
-/** The cities shown on the picks screen: the brief's list, two more favorites, and the weekend hop. */
-const FEATURED = ["Tokyo", "Paris", "Rome", "Maui", "Honolulu", "Cancún", "Los Cabos", "Costa Rica", "New York", "Seoul", "Sydney", "Bali", "London", "Santorini"];
+/**
+ * One tap on a kind of trip, and results lead with it. Six photo tiles fill
+ * one screen with no scrolling; "Surprise me" leaves the ranking to value.
+ */
+const VIBES: { id: string; label: string; photo: string; match?: (t: TripResult["trip"]) => boolean }[] = [
+  { id: "beach", label: "Beaches", photo: "Maui", match: (t) => t.kind === "beach" },
+  { id: "europe", label: "Europe", photo: "Paris", match: (t) => t.region === "Europe" },
+  { id: "asia", label: "Asia", photo: "Tokyo", match: (t) => t.region === "Asia" },
+  { id: "city", label: "Big cities", photo: "New York", match: (t) => t.kind === "city" && !t.international },
+  { id: "nature", label: "Mountains", photo: "Banff", match: (t) => t.kind === "nature" },
+  { id: "any", label: "Surprise me", photo: "Santorini" },
+];
 
 function Picks({ onNext }: { onNext: () => void }) {
-  const { state, update } = usePoints();
+  const { update } = usePoints();
   const { input } = useDeck();
-  const all = cityStatuses(input);
-  const hop = hopFor(input.origin).city;
-  const tiles = [...FEATURED, hop].map((c) => all.find((x) => x.city === c)).filter((x): x is NonNullable<typeof x> => !!x);
-  const picks = state.picks;
-  const finish = (p: string[]) => {
-    update({ picks: p });
-    track("picks_set", { picks: p.join(","), count: p.length });
-    onNext();
+  const [chosen, setChosen] = useState<string | null>(null);
+  const pick = (v: (typeof VIBES)[number]) => {
+    // The vibe's trips they can book come first, then the closest ones; five is plenty to lead the list.
+    const trips = v.match ? evalAll(input).filter((r) => v.match!(r.trip)).sort((a, b) => Number(b.ok) - Number(a.ok) || a.gap - b.gap) : [];
+    const picks = [...new Set(trips.map((r) => r.trip.city))].slice(0, 5);
+    setChosen(v.id);
+    update({ picks });
+    track("picks_set", { vibe: v.id, picks: picks.join(","), count: picks.length });
+    window.setTimeout(onNext, 260);
   };
   return (
-    <Screen
-      title="Any trips in mind?"
-      sub="Pick up to 3 and we'll put them first."
-      footer={
-        <>
-          <PrimaryButton disabled={!picks.length} onClick={() => finish(picks)}>
-            {picks.length ? `Find my trips (${picks.length})` : "Pick up to 3"}
-          </PrimaryButton>
-          <SecondaryButton onClick={() => finish([])}>I&apos;m flexible, show me everything</SecondaryButton>
-        </>
-      }
-    >
-      <div className="flex items-center gap-4 pb-3 text-[12.5px] font-semibold text-muted">
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-trace-green" /> Your points cover it</span>
-        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#FBBF24]" /> Points short</span>
-      </div>
-      <div className="grid grid-cols-3 gap-2.5">
-        {tiles.map((c, i) => {
-          const on = picks.includes(c.city);
-          return (
-            <button
-              key={c.city}
-              type="button"
-              aria-pressed={on}
-              aria-label={`${c.city}, ${c.ok ? "can book" : `${kShort(c.gap)} short`}`}
-              onClick={() =>
-                update((s) => ({
-                  picks: on ? s.picks.filter((x) => x !== c.city) : s.picks.length >= 3 ? s.picks : [...s.picks, c.city],
-                }))
-              }
-              style={stagger(i, 35)}
-              className={cx(
-                "rise relative aspect-[3/4] overflow-hidden rounded-3xl text-left text-white transition-transform duration-200 active:scale-95",
-                on && "ring-[3px] ring-trace-pink ring-offset-2",
-              )}
-            >
-              <TripThumb city={c.city} code={c.code} className={cx("absolute inset-0 transition-transform duration-500", on && "scale-110")} showCode={false} />
-              <span className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-              <span className="absolute inset-x-0 bottom-0 flex flex-col gap-1 p-2.5">
-                <span className="text-[15px] leading-tight font-extrabold">{c.city}</span>
-                <span className="flex items-center gap-1.5 text-[11px] font-bold">
-                  <span className={cx("h-2 w-2 rounded-full", c.ok ? "bg-trace-green" : "bg-[#FBBF24]")} />
-                  {c.ok ? "Can book" : `${kShort(c.gap)} short`}
-                </span>
-              </span>
-              {on && (
-                <span className="check-in bg-trace absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full">
-                  <Check size={12} />
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <Screen title="What sounds good?" footer={null}>
+      <div className="grid flex-1 grid-cols-2 grid-rows-3 gap-2.5 pb-safe max-h-[calc(100dvh-190px)]">
+        {VIBES.map((v, i) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => pick(v)}
+            style={stagger(i, 45)}
+            className={cx(
+              "rise relative min-h-[120px] overflow-hidden rounded-3xl text-left text-white transition-transform duration-200 active:scale-95",
+              chosen === v.id && "ring-[3px] ring-trace-pink ring-offset-2",
+            )}
+          >
+            <TripThumb city={v.photo} code="" className="absolute inset-0" showCode={false} />
+            <span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+            <span className="absolute inset-x-0 bottom-0 p-3 text-[19px] leading-tight font-extrabold">{v.label}</span>
+          </button>
+        ))}
       </div>
     </Screen>
   );
@@ -412,19 +395,13 @@ function Loading({ onDone }: { onDone: () => void }) {
   const done = useRef(onDone);
   done.current = onDone;
   useEffect(() => {
-    const timers = [1, 2, 3, 4, 5].map((k) => window.setTimeout(() => setI(k), k * 600));
-    timers.push(window.setTimeout(() => done.current(), 3500));
+    const timers = [1, 2, 3].map((k) => window.setTimeout(() => setI(k), k * 700));
+    timers.push(window.setTimeout(() => done.current(), 2700));
     return () => timers.forEach(clearTimeout);
   }, []);
   const banks = state.progs.filter((p) => PROGRAMS[p].kind === "bank").map((p) => PROGRAMS[p].short);
   const holders = (banks.length ? banks : state.progs.map((p) => PROGRAMS[p].short)).slice(0, 2);
-  const lines = [
-    `Reading ${holders.join(" and ")} transfer partners`,
-    "Checking 11 airline programs",
-    "Applying live transfer bonuses",
-    `Pricing every trip from ${state.airport}`,
-    "Finding the cheapest way to book each one",
-  ];
+  const lines = [`Checking ${holders.join(" + ")} partners`, "Adding transfer bonuses", `Pricing trips from ${state.airport}`];
   const path = "M 24 150 C 110 20, 250 20, 336 120";
   return (
     <div className="trace-wash flex min-h-dvh flex-col justify-center gap-7 px-7">
@@ -486,7 +463,7 @@ function FreeResults({ onPaywall }: { onPaywall: (reason: PayReason) => void }) 
   return (
     <div className="flex min-h-dvh flex-col">
       {first && <Confetti />}
-      <div className="flex items-center justify-between px-5 pt-4">
+      <div className="flex items-center justify-between px-5 pt-5 pb-1">
         <Logo className="h-5" />
         <button
           type="button"
@@ -521,7 +498,7 @@ function EditAnswers({ onClose }: { onClose: () => void }) {
   const rows: { step: FunnelStep; label: string; now: string; icon: string }[] = [
     { step: "progs", label: "Change my points", now: `${num(values.total)} points across ${plural(state.progs.length, "program")}`, icon: ICONS.wallet },
     { step: "air", label: "Change my airport", now: `Flying from ${state.airport}`, icon: ICONS.pin },
-    { step: "picks", label: "Change my trip picks", now: state.picks.length ? state.picks.join(", ") : "Flexible, showing everything", icon: ICONS.heart },
+    { step: "picks", label: "Change my trip style", now: state.picks.length ? state.picks.slice(0, 3).join(", ") : "Surprise me", icon: ICONS.heart },
   ];
   return (
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[480px] flex-col justify-end" role="dialog" aria-modal="true" aria-label="Edit your answers">

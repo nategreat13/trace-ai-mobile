@@ -162,7 +162,7 @@ export function SwipeDeck({
                   <span className="text-[15px] font-semibold text-white/85">
                     {restOk ? `Including ${restOk} you can book today` : "Including trips you're close to"}
                   </span>
-                  <span className="bg-trace shimmer mt-1 rounded-2xl px-6 py-3.5 text-[15px] font-extrabold">Unlock dates free for 7 days</span>
+                  <span className="bg-trace shimmer mt-1 rounded-2xl px-6 py-3.5 text-[15px] font-extrabold">Unlock all dates</span>
                 </button>
               )}
             </div>

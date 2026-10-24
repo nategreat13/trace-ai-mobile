@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { REFRESH_SCHEDULE } from "@/engine/data";
 import { fuzzyIncludes } from "@/lib/fuzzy";
 import type { TripResult } from "@/engine/types";
 import { track } from "@/lib/analytics";
@@ -113,23 +112,19 @@ export function ResultsView({
         <div aria-hidden="true" className="absolute -top-24 -right-20 h-64 w-64 rounded-full bg-trace-pink/15 blur-3xl" />
         <div aria-hidden="true" className="absolute -top-10 -left-24 h-56 w-56 rounded-full bg-sky/15 blur-3xl" />
         <div className="relative flex flex-col gap-1">
-          <Eyebrow className="text-trace-pink">{state.starter ? "What one card bonus books" : "Hidden in your points"}</Eyebrow>
+          <Eyebrow className="text-trace-pink">{state.starter ? "One card bonus =" : "Your points ="}</Eyebrow>
           <div className="flex items-baseline gap-2">
             <span className="text-gradient nums text-[54px] leading-none font-extrabold tracking-[-0.03em]">{money(countUp ? shown : values.flights)}</span>
-            <span className="text-[15px] font-bold text-muted">in flights</span>
+            <span className="text-[15px] font-bold text-muted">in flights*</span>
           </div>
           <p className="pt-2 text-[19px] leading-snug font-extrabold tracking-[-0.01em]">
             {allOk
-              ? <>You can book <span className="text-ok">{plural(allOk, "destination")}</span> right now{allNear ? <>, and you&apos;re close to <span className="text-near">{allNear} more</span>.</> : "."}</>
-              : <>You&apos;re close to <span className="text-near">{plural(allNear, "destination")}</span>.</>}
+              ? <><span className="text-ok">{allOk} trips</span> ready to book ✈️</>
+              : <><span className="text-near">{allNear} trips</span> almost in reach</>}
           </p>
-          <p className="text-[13.5px] leading-snug text-muted">
-            {state.starter
-              ? `Starting from zero: this is what the ${STARTER.card}'s ${num(STARTER.points)}-point sign-up bonus books from ${state.airport}. Trace shows you exactly how. `
-              : `Trips most people never find. We checked 11 airline programs from ${state.airport}. `}
-            {state.travelers === 1 ? "Points are per ticket." : `Priced for ${plural(state.travelers, "traveler")}.`} Values are estimates.
+          <p className="text-[12px] text-muted">
+            {state.starter ? `*With a ${STARTER.card} bonus (${num(STARTER.points)} points). ` : "*"}Estimates, {state.travelers === 1 ? "per ticket" : `for ${plural(state.travelers, "traveler")}`}.
           </p>
-          <Freshness />
           {mode === "free" && (
             <div className="pt-3">
               <GiftReminder variant="banner" />
@@ -279,7 +274,7 @@ export function ResultsView({
           >
             Unlock dates {savedCount ? `for my ${plural(savedCount, "saved trip")}` : `for all ${plural(all.length, "destination")}`}
           </button>
-          <div className="pt-2 text-center text-[12.5px] font-medium text-muted">Free for 7 days · Exact dates, seat alerts, booking steps</div>
+          <div className="pt-2 text-center text-[12.5px] font-medium text-muted">Exact dates · Seat alerts · Booking help</div>
         </div>
       )}
 
@@ -328,8 +323,7 @@ function EmailListCard() {
               <Icon d={ICONS.bell} size={19} stroke={2.2} />
             </span>
             <div>
-              <div className="text-[17px] leading-tight font-extrabold">Want this list in your inbox?</div>
-              <div className="pt-0.5 text-[13.5px] leading-snug text-muted">We&apos;ll send it, plus a heads-up when a bonus makes one of these cheaper.</div>
+              <div className="text-[17px] leading-tight font-extrabold">Email me this list 📬</div>
             </div>
           </div>
           <form
@@ -384,28 +378,6 @@ function matchesQuery(d: Destination, query: string): boolean {
     .replace(/[\u0300-\u036f]/g, "")
     .split(/\s+/)
     .every((w) => fuzzyIncludes(tokens, w));
-}
-
-/**
- * Shows the list is alive. What really happens in real time is the math: every
- * visit reprices every trip against the user's balances and today's transfer
- * bonuses. Prices themselves are typical saver estimates until a refresh job
- * runs; once REFRESH_SCHEDULE is "daily" the label says so too. Never claim
- * live prices before they are.
- */
-function Freshness() {
-  const schedule = REFRESH_SCHEDULE === "daily" ? " Prices refresh every day." : "";
-  return (
-    <div className="mt-3 flex items-center gap-2.5 self-start rounded-full bg-ok-bg py-1.5 pr-3.5 pl-2.5">
-      <span className="relative flex h-2.5 w-2.5 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-trace-green opacity-60" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-trace-green" />
-      </span>
-      <span className="text-[12.5px] leading-tight font-bold text-ok">
-        Live · Recalculated in real time with today&apos;s transfer bonuses and your balances.{schedule}
-      </span>
-    </div>
-  );
 }
 
 function SectionHead({ ok, label, count }: { ok: boolean; label: string; count: number }) {

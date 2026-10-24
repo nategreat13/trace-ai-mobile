@@ -72,7 +72,7 @@ const minNeed = (d: Destination) => Math.min(...d.options.filter((o) => o.ok).ma
 
 /**
  * The default order. It opens with the most valuable trip they can book today
- * (the wow), then their picks, then everything else weighted toward the
+ * (the wow; among their picks when they have any bookable), then their picks, then everything else weighted toward the
  * regions and kinds of trip they've picked or saved. Trips they can book come
  * before trips they're short on; short picks lead the "almost there" group.
  */
@@ -99,8 +99,10 @@ export function rankDestinations(list: Destination[], prefs: Preferences): Desti
   const near = list.filter((d) => !d.ok);
   // Opens with the most impressive trip they can book right now (a lie-flat
   // to Europe beats a $160 domestic hop): it's the first thing an ad visitor
-  // sees, and one of the free ones.
-  const showpiece = [...ok].sort((a, b) => okValue(b) - okValue(a) || minNeed(a) - minNeed(b))[0];
+  // sees, and one of the free ones. With a kind of trip picked (beaches,
+  // Europe...), it's the most impressive one of those they can book.
+  const okPicks = ok.filter(isPick);
+  const showpiece = [...(okPicks.length ? okPicks : ok)].sort((a, b) => okValue(b) - okValue(a) || minNeed(a) - minNeed(b))[0];
 
   const restOk = ok
     .filter((d) => d !== showpiece)

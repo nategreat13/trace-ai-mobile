@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { track } from "@/lib/analytics";
 import { creditFor, photoFor } from "@/lib/images";
-import { giftMonthly } from "@/lib/payments";
+import { planPrice } from "@/lib/payments";
 import { usePoints } from "@/lib/store";
 import { cx, Icon, ICONS, Logo, PrimaryButton } from "../ui";
 
@@ -41,11 +41,9 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <Logo className="h-[22px]" />
         {gift ? (
           <span className="flex items-center gap-1.5 rounded-full bg-trace px-3 py-1 text-[12px] font-extrabold text-white shadow-sm">
-            <Icon d={ICONS.gift} size={13} stroke={2.4} /> Gift applied: {giftMonthly().gift}/mo
+            <Icon d={ICONS.gift} size={13} stroke={2.4} /> Gift applied: {planPrice("annual", true).each}/wk
           </span>
-        ) : (
-          <span className="rounded-full bg-surface px-3 py-1 text-[12px] font-bold text-muted shadow-sm">For your points and miles</span>
-        )}
+        ) : null}
       </div>
 
       <div className="relative mt-5 flex max-h-[440px] min-h-[190px] flex-1 flex-col">
@@ -95,10 +93,6 @@ export function Landing({ onStart }: { onStart: () => void }) {
             <span className="nums text-[19px] font-extrabold">{s.points} points</span>
             <span className="truncate text-[13.5px] font-medium text-muted">{s.what}</span>
           </span>
-          <span className="flex shrink-0 flex-col items-center gap-0.5">
-            <span className="nums rounded-lg bg-soft px-2 py-1 text-[12px] font-extrabold text-muted">{s.code}</span>
-            <span className="text-[10px] font-semibold text-muted">one way</span>
-          </span>
         </div>
       </div>
 
@@ -106,20 +100,12 @@ export function Landing({ onStart }: { onStart: () => void }) {
         <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.025em]">
           You&apos;re sitting on a <span className="text-gradient">free flight.</span>
         </h1>
-        <p className="text-[16.5px] leading-snug font-medium text-muted">
-          Your points already book trips most people never find. We&apos;ll show you which ones, from your airport.
-        </p>
+        <p className="text-[17px] leading-snug font-medium text-muted">See where your points can take you.</p>
       </div>
 
       <div className="flex flex-col gap-2.5 pt-5 pb-safe">
-        <PrimaryButton onClick={onStart}>See what my points can book</PrimaryButton>
-        <div className="flex items-center justify-center gap-3 text-[13px] font-medium text-muted">
-          <span>60 seconds</span>
-          <span className="h-1 w-1 rounded-full bg-muted/60" />
-          <span>No card needed</span>
-          <span className="h-1 w-1 rounded-full bg-muted/60" />
-          <span>No logins</span>
-        </div>
+        <PrimaryButton onClick={onStart}>See my free flights</PrimaryButton>
+        <div className="text-center text-[13px] font-medium text-muted">Takes 60 seconds</div>
         <div className="flex items-center justify-between pt-0.5 text-[12.5px] text-muted">
           <span>
             Already a member?{" "}

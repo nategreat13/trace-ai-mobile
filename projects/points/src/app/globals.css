@@ -137,6 +137,15 @@ input[type="range"] { accent-color: #FD297B; }
   50% { transform: translateY(-6px); }
 }
 .float { animation: float 3.2s ease-in-out infinite; }
+/* The unopened gift: a shake every couple of seconds, asking to be tapped. */
+@keyframes wiggle {
+  0%, 70%, 100% { transform: rotate(0) scale(1); }
+  75% { transform: rotate(-9deg) scale(1.06); }
+  80% { transform: rotate(8deg) scale(1.06); }
+  85% { transform: rotate(-6deg) scale(1.04); }
+  90% { transform: rotate(4deg) scale(1.02); }
+}
+.wiggle { animation: wiggle 1.8s ease-in-out infinite; }
 
 @keyframes shimmer {
   from { transform: translateX(-120%) skewX(-20deg); }

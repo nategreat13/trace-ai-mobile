@@ -8,7 +8,7 @@ const API = "https://api.stripe.com/v1";
 /** Real payments need both keys: the secret one here and the publishable one for the card fields. */
 export const stripeEnabled = () => !!(process.env.STRIPE_SECRET_KEY && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
-/** The exit gift is annual at $59.99 (its own Stripe price), still with the free week. */
+/** The exit gift is yearly at $49.99 (its own Stripe price), still with the 3-day trial. */
 export const priceFor = (plan: "annual" | "monthly", offer?: string) =>
   plan === "monthly"
     ? process.env.STRIPE_PRICE_MONTHLY

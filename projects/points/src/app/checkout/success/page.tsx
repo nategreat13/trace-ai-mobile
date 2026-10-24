@@ -56,7 +56,7 @@ function Confirm() {
       ) : (
         <>
           <span className="pulse-soft text-trace-pink"><Icon d={ICONS.plane} size={44} stroke={1.6} /></span>
-          <h1 className="text-[24px] font-extrabold">Confirming your free week…</h1>
+          <h1 className="text-[24px] font-extrabold">Confirming your membership…</h1>
         </>
       )}
     </div>

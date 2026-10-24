@@ -380,7 +380,7 @@ export function TripDetail({
             className="bg-trace shimmer flex min-h-[62px] flex-col items-center justify-center rounded-2xl px-4 py-3 text-white shadow-[0_10px_28px_rgba(253,41,123,0.32)]"
           >
             <span className="text-[17px] font-extrabold">Unlock dates for {r.trip.city}</span>
-            <span className="text-[13px] font-semibold opacity-90">First 7 days free</span>
+            <span className="text-[13px] font-semibold opacity-90">First 3 days free</span>
           </button>
         )}
 

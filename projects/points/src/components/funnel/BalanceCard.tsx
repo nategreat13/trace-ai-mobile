@@ -8,6 +8,27 @@ import { milesFor, tierFor } from "@/lib/tiers";
 import { cx, ProgramBadge } from "../ui";
 
 /**
+ * The slider spends most of its track on everyday balances: the first 60%
+ * covers 0 to 50,000 in 1,000s, then it ramps quickly up to the program's max.
+ */
+const EASY = 50_000;
+const SPLIT = 0.6;
+const STEPS = 1000;
+const toPoints = (pos: number, max: number) => {
+  const t = pos / STEPS;
+  if (max <= EASY) return Math.round((t * max) / 1000) * 1000;
+  if (t <= SPLIT) return Math.round(((t / SPLIT) * EASY) / 1000) * 1000;
+  const ramp = ((t - SPLIT) / (1 - SPLIT)) ** 2;
+  return Math.round((EASY + ramp * (max - EASY)) / 5000) * 5000;
+};
+const toPos = (points: number, max: number) => {
+  const v = Math.min(points, max);
+  if (max <= EASY) return (v / max) * STEPS;
+  if (v <= EASY) return (v / EASY) * SPLIT * STEPS;
+  return (SPLIT + Math.sqrt((v - EASY) / (max - EASY)) * (1 - SPLIT)) * STEPS;
+};
+
+/**
  * Number input plus a slider that starts at 0, with a "Not sure" estimate.
  * Controlled, so the funnel can write straight to the store while Account
  * edits a draft and saves on purpose. The card warms up as the balance grows.
@@ -72,10 +93,10 @@ export function BalanceCard({
         type="range"
         aria-label={`${p.name} slider`}
         min={0}
-        max={p.sliderMax}
-        step={1000}
-        value={Math.min(numeric, p.sliderMax)}
-        onChange={(e) => set(e.target.value)}
+        max={STEPS}
+        step={1}
+        value={toPos(numeric, p.sliderMax)}
+        onChange={(e) => set(String(toPoints(Number(e.target.value), p.sliderMax)))}
         style={{ accentColor: numeric ? tier.color : undefined }}
       />
       <div className="flex items-center justify-between gap-2 text-[12.5px] text-muted">

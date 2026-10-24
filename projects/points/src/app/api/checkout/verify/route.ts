@@ -52,10 +52,10 @@ export async function GET(req: Request) {
         console.error("[checkout/verify] couldn't save the member; continuing", e);
       }
       if (before?.stripeSubscriptionId !== sub.id) {
-        const value = plan === "monthly" ? 12 : sub.metadata.offer === "gift" ? 59.99 : 99;
+        const value = plan === "monthly" ? 7.99 : sub.metadata.offer === "gift" ? 49.99 : 64;
         // Same event id as the browser's StartTrial, so Meta counts it once.
         await sendMetaEvent({ name: "StartTrial", eventId: sub.id, email, fbp: sub.metadata.fbp, fbc: sub.metadata.fbc, value });
-        await postSlack(`:airplane: New Trace Points trial: ${email} (${plan}${sub.metadata.offer === "gift" ? ", $59.99 gift" : ""})`);
+        await postSlack(`:airplane: New Trace Points ${plan === "monthly" ? "member" : "trial"}: ${email} (${plan}${sub.metadata.offer === "gift" ? ", $49.99 gift" : ""})`);
       }
       const current = await sessionEmail();
       if (saved && (current === email || !before?.state)) {

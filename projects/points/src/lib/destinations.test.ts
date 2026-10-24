@@ -21,11 +21,11 @@ test("opens with the most valuable trip they can book", () => {
   assert.equal(okValue(ranked[0]), Math.max(...all.filter((d) => d.ok).map(okValue)));
 });
 
-test("picks come right after the opener, bookable ones first", () => {
+test("a bookable pick opens the list, short picks lead the rest", () => {
   // 80k Amex reaches Paris on Flying Blue but not Bali's 120k KrisFlyer.
   const all = groupDestinations(buildDeck(input({ balances: { amex: 80000 }, picks: ["Paris", "Bali"] })));
   const ranked = rankDestinations(all, { picks: ["Paris", "Bali"], saved: [] });
-  assert.equal(ranked[1].city, "Paris");
+  assert.equal(ranked[0].city, "Paris");
   // Bali is short, so it leads the "almost there" group instead.
   const firstNear = ranked.findIndex((d) => !d.ok);
   assert.equal(ranked[firstNear].city, "Bali");

@@ -5,64 +5,70 @@ import type { Membership } from "./store";
 
 /**
  * Payments, one place. With Stripe keys, /checkout shows Stripe's own card,
- * Apple Pay and Google Pay fields on the page and starts a 7-day trial
- * subscription; without them, everything runs in test mode on the device.
+ * Apple Pay and Google Pay fields on the page. Yearly starts with a 3-day
+ * free trial; monthly is charged today. Without keys, everything runs in
+ * test mode on the device.
  */
 
-export const TRIAL_DAYS = 7;
+export const TRIAL_DAYS = 3;
 /**
  * The trial-ending reminder goes out this many days before billing starts:
  * Stripe's default for its trial_will_end event, which is an account-wide
- * setting we leave alone.
+ * setting we leave alone. With a 3-day trial it arrives right away.
  */
 export const REMINDER_DAYS_BEFORE = 3;
 
 export type Plan = Membership["plan"];
 
+/** Only yearly comes with the free trial. */
+export const hasTrial = (plan: Plan) => plan === "annual";
+
 export interface PlanPrice {
   /** Cents, for Apple Pay's recurring-payment sheet. */
   cents: number;
-  /** "$99" */
+  /** "$64" */
   amount: string;
-  /** "$99 a year" */
+  /** "$64 a year" */
   full: string;
-  /** "Yearly · $99" */
+  /** "Yearly · $1.23/wk" */
   label: string;
-  /** "Just $8.25 a month" */
+  /** "$64 billed yearly" */
   sub: string;
-  /** Per month, rounded up to the cent: "$8.25" for $99 a year, "$12" for monthly. */
-  month: string;
+  /** The headline price: per week for yearly plans ("$1.23"), per month for monthly ("$7.99"). */
+  each: string;
+  /** "week" or "month", to go with each. */
+  per: "week" | "month";
   interval: "year" | "month";
 }
 
 const dollars = (cents: number) => `$${cents % 100 ? (cents / 100).toFixed(2) : cents / 100}`;
+const weekly = (yearCents: number) => dollars(Math.round(yearCents / 52));
 
-const price = (cents: number, interval: "year" | "month", label: string, sub?: string): PlanPrice => {
+/**
+ * Both yearly prices are shown as a discount off this list price ($84 a
+ * year, $1.62 a week): $64 is 24% off, the $49.99 gift 40% off.
+ */
+const LIST_YEAR = 8400;
+
+const yearly = (cents: number): PlanPrice => {
   const amount = dollars(cents);
-  const month = interval === "year" ? dollars(Math.ceil(cents / 12)) : amount;
-  return { cents, amount, full: `${amount} a ${interval}`, label: `${label} · ${amount}`, sub: sub ?? `Just ${month} a month`, month, interval };
+  return { cents, amount, full: `${amount} a year`, label: `Yearly · ${weekly(cents)}/wk`, sub: `${amount} billed yearly`, each: weekly(cents), per: "week", interval: "year" };
 };
-
-const GIFT = price(5999, "year", "Yearly");
 
 const PRICES = {
-  annual: price(9900, "year", "Yearly"),
-  // Shown per month so it lines up against Monthly; it's still charged once a year.
-  gift: { ...GIFT, label: `Yearly · ${GIFT.month}/mo`, sub: "Billed yearly at $59.99" },
-  monthly: price(1200, "month", "Monthly", "Cancel anytime"),
+  annual: yearly(6400),
+  gift: yearly(4999),
+  monthly: { cents: 799, amount: "$7.99", full: "$7.99 a month", label: "Monthly · $7.99", sub: "Billed monthly", each: "$7.99", per: "month", interval: "month" } as PlanPrice,
 };
 
-/** The gift as a monthly price ("$5") and the regular yearly one it beats ("$8.25"). */
-export const giftMonthly = () => ({ gift: PRICES.gift.month, regular: PRICES.annual.month });
-
-/** What a plan costs, with the exit gift ($59.99 a year) applied when they claimed it. */
+/** What a plan costs, with the exit gift ($49.99 a year) applied when they claimed it. */
 export const planPrice = (plan: Plan, gift?: boolean): PlanPrice => (plan === "annual" && gift ? PRICES.gift : PRICES[plan]);
 
-/** How much yearly saves over twelve months of monthly, e.g. 31. */
-export const annualSavings = () => Math.round((1 - PRICES.annual.cents / (PRICES.monthly.cents * 12)) * 100);
+/** The struck-out weekly list price yearly is measured against: "$1.62". */
+export const listWeekly = () => weekly(LIST_YEAR);
 
-/** The gift's discount off the regular yearly price: $59.99 vs $99 is 39%. */
-export const giftDiscount = () => Math.floor((1 - PRICES.gift.cents / PRICES.annual.cents) * 100);
+/** Yearly's discount off the $84 list price: 24, or 40 with the gift. */
+export const yearlyOff = (gift?: boolean) => Math.round((1 - planPrice("annual", gift).cents / LIST_YEAR) * 100);
 
 export type PaymentsMode = { mode: "stripe"; publishableKey: string } | { mode: "test" };
 
@@ -79,15 +85,15 @@ export async function paymentsMode(): Promise<PaymentsMode> {
  * Starts the trial subscription and returns the secret the card fields
  * confirm against. Throws with a message fit to show.
  */
-export async function createTrial(plan: Plan, email: string, gift: boolean): Promise<{ clientSecret: string; subscription: string }> {
+export async function createTrial(plan: Plan, email: string, gift: boolean): Promise<{ clientSecret: string; subscription: string; kind: "setup" | "payment" }> {
   const r = await fetch("/api/checkout", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ plan, email, offer: gift ? "gift" : undefined }),
   });
-  const j = (await r.json()) as { clientSecret?: string; subscription?: string; error?: string };
+  const j = (await r.json()) as { clientSecret?: string; subscription?: string; kind?: "setup" | "payment"; error?: string };
   if (!j.clientSecret || !j.subscription) throw new Error(j.error || "Checkout is unavailable right now.");
-  return { clientSecret: j.clientSecret, subscription: j.subscription };
+  return { clientSecret: j.clientSecret, subscription: j.subscription, kind: j.kind ?? "setup" };
 }
 
 /** Test mode (no Stripe keys): the trial starts on this device only. */
@@ -97,7 +103,7 @@ export function startTestTrial(plan: Plan, gift: boolean): Membership {
     plan,
     offer: plan === "annual" && gift ? "gift" : undefined,
     startedAt: now.toISOString(),
-    trialEndsAt: new Date(now.getTime() + TRIAL_DAYS * 86400000).toISOString(),
+    trialEndsAt: new Date(now.getTime() + (hasTrial(plan) ? TRIAL_DAYS * 86400000 : 0)).toISOString(),
     testMode: true,
   };
   onTrialStarted(m);

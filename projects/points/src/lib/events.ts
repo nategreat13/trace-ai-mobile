@@ -30,6 +30,7 @@ export const EVENT_NAMES = [
   "cash_deal_click",
   "contact_sent",
   "gift_shown",
+  "gift_opened",
   "gift_claimed",
   "gift_declined",
   "funnel_complete",
