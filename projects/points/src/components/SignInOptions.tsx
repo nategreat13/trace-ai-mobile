@@ -16,15 +16,18 @@ export const GoogleG = () => (
 /**
  * The two ways in: Google (one tap) or an emailed link. No passwords.
  * `email` prefills the link (the checkout email after a trial starts).
+ * `linkOnly` drops Google, for the one-button step after checkout.
  */
 export function SignInOptions({
   email,
   dark,
   onSignedIn,
   onLinkSent,
+  linkOnly,
 }: {
   email?: string;
   dark?: boolean;
+  linkOnly?: boolean;
   onSignedIn: (email: string, moved: boolean) => void;
   onLinkSent?: (email: string) => void;
 }) {
@@ -82,15 +85,17 @@ export function SignInOptions({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <button
-        type="button"
-        onClick={google}
-        disabled={!!busy}
-        className="flex min-h-[54px] items-center justify-center gap-3 rounded-2xl bg-white text-[16px] font-bold text-[#1F1F1F] shadow-[0_1px_0_rgba(0,0,0,0.06)] ring-1 ring-black/10 active:scale-[0.98] disabled:opacity-60"
-      >
-        <GoogleG />
-        {busy === "google" ? "Connecting…" : "Continue with Google"}
-      </button>
+      {!linkOnly && (
+        <button
+          type="button"
+          onClick={google}
+          disabled={!!busy}
+          className="flex min-h-[54px] items-center justify-center gap-3 rounded-2xl bg-white text-[16px] font-bold text-[#1F1F1F] shadow-[0_1px_0_rgba(0,0,0,0.06)] ring-1 ring-black/10 active:scale-[0.98] disabled:opacity-60"
+        >
+          <GoogleG />
+          {busy === "google" ? "Connecting…" : "Continue with Google"}
+        </button>
+      )}
       {!email && (
         <input
           type="email"

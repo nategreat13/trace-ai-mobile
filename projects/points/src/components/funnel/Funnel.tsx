@@ -574,11 +574,12 @@ function Done({ onOpen }: { onOpen: () => void }) {
           </>
         ) : (
           <div className="rise flex flex-col gap-3 rounded-3xl border border-white/20 bg-black/35 p-5 backdrop-blur-md" style={stagger(3)}>
-            <span className="text-[20px] font-extrabold">Set your password</span>
+            {/* Signed in by checkout (a new account): just a password. Otherwise the email has to be proven first, with one link. */}
+            <span className="text-[20px] font-extrabold">{email ? "Set your password" : "Confirm your email"}</span>
             {email ? (
               <PasswordCreate dark email={email} cta="Save & open Trace" onDone={onOpen} />
             ) : (
-              <SignInOptions dark email={state.email || undefined} onSignedIn={onOpen} onLinkSent={() => setLinkSent(true)} />
+              <SignInOptions dark linkOnly email={state.email || undefined} onSignedIn={onOpen} onLinkSent={() => setLinkSent(true)} />
             )}
             <button type="button" onClick={onOpen} className="min-h-[40px] text-[14px] font-bold text-white/75">
               {linkSent ? "Open Trace" : "Skip for now"}
